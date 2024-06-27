@@ -18,8 +18,9 @@ defaults:
 
 
 project_name: 'Cell_Type_Classification' #project name for WandB
-run_name: 'run_name'  ## what is set for WandB
+run_name: 'test01'  ## what is set for WandB
 work_dir: 'work_dir'  ## set your custom working directory
+entity: 'Heimdall'
 
 seed: 42
 
