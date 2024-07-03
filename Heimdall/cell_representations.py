@@ -6,7 +6,7 @@ The Cell Representation Object for Processing
 import scanpy as sc
 import anndata as ad
 import numpy as np
-# import torch
+import torch
 from Heimdall.utils import get_value
 
 

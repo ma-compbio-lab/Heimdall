@@ -15,7 +15,7 @@ import pickle
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 ## Flash attention Imports
-from transformers import BertConfig
+# from transformers import BertConfig
 from dataclasses import dataclass, field
 
 
@@ -51,6 +51,7 @@ class TransformerConfig:
     hidden_dropout_prob: float = 0.1
     attention_probs_dropout_prob: float = 0.1
     layer_norm_eps: float = 1e-12
+    problem_type: str = "single_label_classification"
 
 
 class Heimdall_Transformer(nn.Module):
@@ -76,6 +77,7 @@ class Heimdall_Transformer(nn.Module):
         self.config = config
         self.conditional_input_types = conditional_input_types
         self.input_type = input_type
+        self.num_labels = config.prediction_dim
 
         # Set up the Input Embedding layers
         if input_type == 'learned':
@@ -94,7 +96,7 @@ class Heimdall_Transformer(nn.Module):
             raise ValueError("config.pos_enc canonly be: BERT")
 
         ## Setting up the conditional embeddings
-        self.conditional_embeddings = {}
+        self.conditional_embeddings = nn.ModuleDict()
         if conditional_input_types is not None:
             for name, spec in conditional_input_types.items():
                 if spec['type'] == 'learned':
@@ -122,7 +124,57 @@ class Heimdall_Transformer(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
 
 
-    def forward(self, inputs, conditional_tokens = None, attention_mask = None):
+    def forward(self, inputs, labels=None, conditional_tokens = None, attention_mask = None):
+        """
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        logits = self.LM_model(inputs, conditional_tokens, attention_mask)
+
+        loss = None
+        if labels is not None:
+            labels = labels.to(logits.device)
+
+            ## instantiating the problem type if it is not specified
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            ## obtaining the loss
+            if self.config.problem_type == "regression":
+                if self.use_huberloss:
+                    loss_fct = HuberLoss()
+                else:
+                    loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+
+        payload = {
+            "loss" : loss,
+            "logits" : logits
+        }
+
+        return payload
+
+        
+
+
+    def LM_model(self, inputs, conditional_tokens = None, attention_mask = None):
         """
         Args:
             inputs (torch tensor): this is either integers if IDs or bf16/fp32 floats for predefined embeddings

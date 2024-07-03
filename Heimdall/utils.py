@@ -1,12 +1,12 @@
 
-
+import torch
 
 
 def get_value(dictionary, key, default=False):
     return dictionary.get(key, default)
 
 
-class PositionalEncoding(nn.Module):
+class PositionalEncoding(torch.nn.Module):
     
     def __init__(self, d_model: int, max_len: int = 5000, dropout: float = 0.0): #, dropout: float = 0.1
         super().__init__()
@@ -29,3 +29,40 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:, :x.size(1)] # Broadcasting to match input shape
         x = self.dropout(x)
         return x
+
+
+
+## Dataset Preparation collation tool
+def heimdall_collate_fn(examples):
+    """
+    This function helps the dataloader prepare the dataset into a consistent format, specifically the dataset is likely 
+    prepared as such:
+
+    ds_train = Dataset.from_dict({"inputs": train_x,'labels':train_y, 'conditional_tokens_1': train_x, 'conditional_tokens_2': train_x})
+
+    where the  `conditional_tokens_*` are optional conditional tokens. This will process the output of a batch to be a dictionary
+    with keys: "inputs, "labels" (these are mandatory), and "conditional_tokens" which is a dictionary of the conditional tokens
+    
+    """
+    batch = {}
+    # Assume all examples have the same keys, use the keys from the first example
+    keys = examples[0].keys()
+    conditional_tokens = {}
+
+    for key in keys:
+        if key in ["inputs", "labels"]:
+            # Check if the data needs to be stacked or just converted to tensor
+            if isinstance(examples[0][key], list):  # or any other condition to decide on stacking
+                # Stack tensors if the data type is appropriate (e.g., lists of numbers)
+                batch[key] = torch.stack([torch.tensor(example[key]) for example in examples])
+            else:
+                # Convert to tensor directly if it's a singular item like labels
+                batch[key] = torch.tensor([example[key] for example in examples])
+
+        else: # if it is not an input or label, it is automatically processed as a conditional token 
+            if isinstance(examples[0][key], list):
+                conditional_tokens[key] = torch.stack([torch.tensor(example[key]) for example in examples])
+            else:
+                conditional_tokens[key] = torch.tensor([example[key] for example in examples])
+    batch["conditional_tokens"] = conditional_tokens
+    return batch

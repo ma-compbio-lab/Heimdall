@@ -14,8 +14,41 @@ cd Heimdall
 conda create --name heimdall_empty python=3.10
 conda activate heimdall
 pip install -r requirements.txt
+pip install torch==2.0.1+cu118 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
 
 ```
+
+# Quickstart
+
+`train.py` provides a clear overview of the inputs needed, how to prepare the data, model, optimizer, and run the trainer.
+
+
+```
+python train.py
+```
+
+
+
+# Heimdall Trainer Documentation
+
+The `Heimdall_Trainer` object now will automatically consider and process the training with Huggingface Accelerate
+
+```
+#####
+    # Initialize the Trainer
+    #####
+    trainer = Heimdall_Trainer(config=config, model=model, optimizer=optimizer,
+                dataloader_train = dataloader_train, 
+                dataloader_val = dataloader_val,
+                dataloader_test = dataloader_test,
+                run_wandb = True)
+
+
+    ### Training
+    trainer.train()
+```
+
 
 
 # Model Documentation
