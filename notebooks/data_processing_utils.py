@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import mygene
@@ -11,6 +11,7 @@ class GeneMappingOutput:
     """Gene mapping results data structure.
 
     Attributes:
+        genes: List of original gene ids.
         mapping_full: Dictionary mapping from query gene id to target ids as
             a list. If the mapping is not available, then this gene id would
             not appear in this mapping. Thus, this dictionary mmight contain
@@ -28,9 +29,23 @@ class GeneMappingOutput:
             elements as the total number of the queried genes.
 
     """
+    genes: List[str]
     mapping_full: Dict[str, List[str]]
-    mapping_combined: Dict[str, str]
-    mapping_reduced: Dict[str, str]
+    mapping_combined: Dict[str, str] = field(init=False)
+    mapping_reduced: Dict[str, str] = field(init=False)
+
+    def __post_init__(self):
+        self.mapping_combined = {}
+        self.mapping_reduced = {}
+        for g in self.genes:
+            if (ensembl := self.mapping_full.get(g)) is None:
+                self.mapping_combined[g] = "N/A"
+                self.mapping_reduced[g] = g
+            else:
+                ensembl = sorted(set(ensembl))
+                self.mapping_full[g] = ensembl
+                self.mapping_reduced[g] = ensembl[0]
+                self.mapping_combined[g] = "|".join(ensembl)
 
 
 def symbol_to_ensembl(
@@ -49,7 +64,7 @@ def symbol_to_ensembl(
     )
 
     # Unpack query results
-    symbol_to_ensembl = {}
+    symbol_to_ensembl_dict = {}
     for res in query_results:
         symbol = res["query"]
         if (ensembl := res.get("ensembl")) is None:
@@ -62,24 +77,36 @@ def symbol_to_ensembl(
         else:
             raise ValueError(f"Unknown ensembl query result type {type(ensembl)}: {ensembl!r}")
 
-        symbol_to_ensembl[symbol] = symbol_to_ensembl.get(symbol, []) + new_ensembl_genes
-
-    # Consolidate
-    symbol_to_ensembl_combined = {}
-    symbol_to_ensembl_reduced = {}
-    for symbol in genes:
-        if (ensembl := symbol_to_ensembl.get(symbol)) is None:
-            symbol_to_ensembl_combined[symbol] = "N/A"
-            symbol_to_ensembl_reduced[symbol] = symbol
-        else:
-            ensembl = sorted(set(ensembl))
-            symbol_to_ensembl[symbol] = ensembl
-            symbol_to_ensembl_reduced[symbol] = ensembl[0]
-            symbol_to_ensembl_combined[symbol] = "|".join(ensembl)
+        symbol_to_ensembl_dict[symbol] = symbol_to_ensembl_dict.get(symbol, []) + new_ensembl_genes
 
     print(
-        f"Successfully mapped {len(symbol_to_ensembl):,} out of "
-        f"{len(genes):,} genes ({len(symbol_to_ensembl) / len(genes):.1%})",
+        f"Successfully mapped {len(symbol_to_ensembl_dict):,} out of "
+        f"{len(genes):,} genes ({len(symbol_to_ensembl_dict) / len(genes):.1%})",
     )
 
-    return GeneMappingOutput(symbol_to_ensembl, symbol_to_ensembl_combined, symbol_to_ensembl_reduced)
+    return GeneMappingOutput(genes, symbol_to_ensembl_dict)
+
+
+if __name__ == "__main__":
+    species = "human"
+    gene_table_symbol_to_ensembl = {
+        "PPIEL": ["ENSG00000243970", "ENSG00000291129"],
+        "PRDM16": ["ENSG00000142611"],
+        "PEX10": ["ENSG00000157911"],
+        "RNA5-8SN5": ["ENSG00000274917"],
+        "DOESNOTEXIST": None,
+    }
+    genes = list(gene_table_symbol_to_ensembl)
+
+    res = symbol_to_ensembl(genes, species=species)
+    print(res.mapping_full)
+    assert res.genes == genes
+    for g in genes:
+        if gene_table_symbol_to_ensembl[g] is None:
+            assert g not in res.mapping_full
+            assert res.mapping_combined[g] == "N/A"
+            assert res.mapping_reduced[g] == g
+        else:
+            assert res.mapping_full[g] == gene_table_symbol_to_ensembl[g]
+            assert res.mapping_combined[g] == "|".join(gene_table_symbol_to_ensembl[g])
+            assert res.mapping_reduced[g] == gene_table_symbol_to_ensembl[g][0]
