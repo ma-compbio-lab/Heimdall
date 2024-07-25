@@ -1,6 +1,7 @@
 def identity_fg(adata_var):
-    """identity_fg is an fg that returns a token id for each gene, effectively
-    each gene is its own word.
+    """Identify gene function.
+
+    Returns a token id for each gene, effectively each gene is its own word.
 
     Args:
         adata_var: takes in the var dataframe, in this case, it expects the

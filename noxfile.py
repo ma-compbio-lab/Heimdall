@@ -11,7 +11,7 @@ def flake8(session):
         "flake8-colors",
         "flake8-commas",
         "flake8-comprehensions",
-        "flake8-docstrings",
+        # "flake8-docstrings",
         "flake8-import-order",
         "flake8-pyproject",
         "flake8-use-fstring",

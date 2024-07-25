@@ -6,12 +6,12 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-try:
-    from flash_attn.models.bert import BertEncoder
-
-    print("FlashAttention Library Successfully Loaded")
-except ImportError:
-    print("Warning: FlashAttention Not Installed, when initializing model make sure to use default Transformers")
+# try:
+#     from flash_attn.models.bert import BertEncoder
+#
+#     print("FlashAttention Library Successfully Loaded")
+# except ImportError:
+#     print("Warning: FlashAttention Not Installed, when initializing model make sure to use default Transformers")
 
 
 @dataclass
@@ -32,22 +32,29 @@ class TransformerConfig:
 class Heimdall_Transformer(nn.Module):
     def __init__(self, config: TransformerConfig, input_type: str, conditional_input_types: Optional[dict] = None):
         super().__init__()
-        """
-        - The config is primarily the transformer config
+        """Heimdall transformer model.
 
-        - input_type: 'learned'or 'predefined'
+        Args:
+            config: The transformer config.
+            input_type: "learned" or "predefined"
+            conditional_input_types: Conditional input types specification.
 
-        - conditional_input_types: {
-            'binned_gene_expression_embeddings' : {
-                'type': 'learned',
-                'vocab_size': 512,
-                }
+        Example ``conditional_input_types``:
 
-            'ESM_embeddings' : {
-                'type': 'predefined',
-                'vocab_size': -1
-                }
-        }
+        .. code-block:: python
+
+            conditional_input_types = {
+                "binned_gene_expression_embeddings" : {
+                    "type": "learned",
+                    "vocab_size": 512,
+                    }
+
+                "ESM_embeddings" : {
+                    "type": "predefined",
+                    "vocab_size": -1
+                    }
+            }
+
         """
         self.config = config
         self.conditional_input_types = conditional_input_types
@@ -98,11 +105,16 @@ class Heimdall_Transformer(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
 
     def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
-        """Labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        """Forward function.
 
-        Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-        config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-        `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Args:
+            inputs: Inputs.
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the sequence classification/regression
+                loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+                If `config.num_labels == 1` a regression loss is computed
+                (Mean-Square loss), If `config.num_labels > 1` a classification
+                loss is computed (Cross-Entropy).
 
         """
         logits = self.LM_model(inputs, conditional_tokens, attention_mask)
@@ -145,7 +157,8 @@ class Heimdall_Transformer(nn.Module):
         return payload
 
     def LM_model(self, inputs, conditional_tokens=None, attention_mask=None):
-        """
+        """LM model.
+
         Args:
             inputs (torch tensor): This is either integers if IDs or bf16/fp32
                 floats for predefined embeddings
@@ -155,7 +168,8 @@ class Heimdall_Transformer(nn.Module):
                 IMPLEMENTED YET. Defaults to None.
 
         Returns:
-            torch.tensor: The predicted outputs before cross entropy loss
+            torch.tensor: The predicted outputs before cross entropy loss.
+
         """
 
         # Embedding layer

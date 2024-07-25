@@ -4,11 +4,14 @@ from tqdm import tqdm
 
 
 def geneformer_fc(fg, adata):
-    """geneformer_fc is a fc that will reprocess each cell by ordering them by
-    their gene expression value, and replace each gene name by their
-    corresponding representation, either token_id or a different vector.
+    """Geneformer cell function.
 
-    right now this only supports token_id
+    Reprocesses each cell by ordering them by their gene expression value, and
+    replace each gene name by their corresponding representation, either
+    ``token_id`` or a different vector.
+
+    Note:
+        Currently, this only supports ``token_id``.
 
     Args:
         fg: dictionary that maps gene names to token ids.

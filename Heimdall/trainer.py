@@ -25,8 +25,8 @@ class Heimdall_Trainer:
     ):
         """Initialize the trainer.
 
-        Parameters:
-        config (dict): Configuration dictionary.
+        Args:
+            config (dict): Configuration dictionary.
 
         """
 
@@ -124,9 +124,9 @@ class Heimdall_Trainer:
 
         for epoch in range(self.config.dataset.task_args.epochs):
             # val first so we can see the randomized performance before the first epoch
-            val_mcc = self.validate_model(self.dataloader_val, dataset_type="valid")
+            self.validate_model(self.dataloader_val, dataset_type="valid")
             # test first so we can see the randomized performance before the first epoch
-            test_mcc = self.validate_model(self.dataloader_test, dataset_type="test")
+            self.validate_model(self.dataloader_test, dataset_type="test")
             self.train_epoch(epoch)
 
         if self.run_wandb and self.accelerator.is_main_process:
@@ -149,8 +149,8 @@ class Heimdall_Trainer:
         model.train()
         # for i, batch in enumerate(tqdm(dataloader_train, disable=not accelerator.is_main_process)):
         with tqdm(dataloader_train, disable=not accelerator.is_main_process) as t:
-            for i, batch in enumerate(t):
-                t0 = time.time()
+            for batch in t:
+                # t0 = time.time()
                 step += 1
                 is_logging = step % log_every == 0
 
@@ -192,7 +192,6 @@ class Heimdall_Trainer:
     def validate_model(self, dataloader_val, dataset_type):
         accelerator = self.accelerator
         model = self.model
-        optimizer = self.optimizer
         config = self.config
         run_wandb = self.run_wandb
 
@@ -213,7 +212,7 @@ class Heimdall_Trainer:
         model.eval()
         loss = 0
         with torch.no_grad():
-            for i, batch in enumerate(tqdm(dataloader_val, disable=not accelerator.is_main_process)):
+            for batch in tqdm(dataloader_val, disable=not accelerator.is_main_process):
                 if len(batch["conditional_tokens"]) > 0:
                     outputs = model(
                         inputs=batch["inputs"],

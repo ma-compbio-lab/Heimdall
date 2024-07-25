@@ -68,7 +68,7 @@ class Cell_Representation:
         print("> Finished Processing Anndata Object")
 
     def prepare_labels(self):
-        """Prepares the self.labels by pulling out the specified class from."""
+        """Pull out the specified class from data to set up label."""
         assert self.adata is not None, "no adata found, Make sure to run preprocess_anndata() first"
 
         df = self.adata.obs
@@ -84,7 +84,9 @@ class Cell_Representation:
         print(f"> Finished extracting labels, self.labels.shape: {self.labels.shape}")
 
     def preprocess_f_g(self, f_g):
-        """Run the f_g, and then preprocess and store it locally the f_g must
+        """Process f_g.
+
+        Run the f_g, and then preprocess and store it locally the f_g must
         return a `gene_mapping` where the keys are the gene ids and the ids are
         the.
 
@@ -125,7 +127,9 @@ class Cell_Representation:
         return
 
     def preprocess_f_c(self, f_c):
-        """Preprocess the cell f_c, this will preprocess the anndata.X into the
+        """Process f_c.
+
+        Preprocess the cell f_c, this will preprocess the anndata.X into the
         actual dataset to the actual tokenizers, you can imagine this as a cell
         tokenizer.
 

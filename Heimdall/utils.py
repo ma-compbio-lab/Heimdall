@@ -23,9 +23,11 @@ class PositionalEncoding(torch.nn.Module):
         self.register_buffer("pe", pe)
 
     def forward(self, x):
-        """
-        Arguments:
+        """Forward function.
+
+        Args:
             x: Tensor, shape ``[batch_size , seq_len, embedding_dim]``
+
         """
         # x = x + self.pe[:x.size(0)]
         x = x + self.pe[:, : x.size(1)]  # Broadcasting to match input shape
@@ -35,7 +37,9 @@ class PositionalEncoding(torch.nn.Module):
 
 # Dataset Preparation collation tool
 def heimdall_collate_fn(examples):
-    """This function helps the dataloader prepare the dataset into a consistent
+    """Heimdall data collate function.
+
+    This function helps the dataloader prepare the dataset into a consistent
     format, specifically the dataset is likely prepared as such:
 
     .. code-block:: python
