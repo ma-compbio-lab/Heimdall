@@ -26,8 +26,7 @@ pip install -U nox pre-commit
 pre-cmomit install
 ```
 
-When changes are made, run `nox` to perform quality checks first
-(**TODO**: need to resolve all current issues first).
+When changes are made, run `nox` to perform quality checks first.
 
 ```bash
 nox
