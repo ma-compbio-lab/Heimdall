@@ -1,13 +1,9 @@
 # Heimdall
 
-
-
-
 # Installation
 
-
 ```
-git clone 
+git clone
 
 cd Heimdall
 
@@ -19,16 +15,38 @@ pip install torch==2.0.1+cu118 torchvision torchaudio --index-url https://downlo
 
 ```
 
+## Sset up for dev
+
+### Install dev tools
+
+```bash
+pip install -U nox pre-commit
+
+# Install pre-commit hooks
+pre-cmomit install
+```
+
+When changes are made, run `nox` to perform quality checks first
+(**TODO**: need to resolve all current issues first).
+
+```bash
+nox
+```
+
+Commit changes once the quality checks are passed, which triggers the pre-commit
+hook to run some final formatting checks and catch any remaining issues. Note
+that the pre-commit hooks could automatically apply fixes to the current
+commit. In that case, you can first review the changes and accept them if they
+are appropriate, or make alternative changes to suppress the error. Afterwards,
+recommit the changes.
+
 # Quickstart
 
 `train.py` provides a clear overview of the inputs needed, how to prepare the data, model, optimizer, and run the trainer.
 
-
 ```
 python train.py
 ```
-
-
 
 # Heimdall Trainer Documentation
 
@@ -39,7 +57,7 @@ The `Heimdall_Trainer` object now will automatically consider and process the tr
     # Initialize the Trainer
     #####
     trainer = Heimdall_Trainer(config=config, model=model, optimizer=optimizer,
-                dataloader_train = dataloader_train, 
+                dataloader_train = dataloader_train,
                 dataloader_val = dataloader_val,
                 dataloader_test = dataloader_test,
                 run_wandb = True)
@@ -49,12 +67,9 @@ The `Heimdall_Trainer` object now will automatically consider and process the tr
     trainer.train()
 ```
 
-
-
 # Model Documentation
 
 The `Heimdall_Transformer` object is a default transformer that is flexible for `learned` embeddings and `predefined` embeddings, as well as conditional tokens that can be `learned` or `predefined` as well. Here is an example:
-
 
 ```
 ## initialize the model
@@ -79,8 +94,6 @@ out = model(inputs = x, conditional_tokens = {"conditional_tokens_1": x_1})
 out.shape
 ```
 
-
-
 # Overall Structure For Cell Representation
 
 The primary object that will prepare the cell_representations is `Heimdall.cell_representations.Cell_Representation`. A minimal example is provided in both `main.py` and `demo.ipynb` that showcases how to use hydra and omegaConf and how to prepare `f_g` and `f_c` accordingly.
@@ -102,11 +115,9 @@ X = CR.cell_representation
 y = CR.labels
 ```
 
-
-
 # Gene Representation: $f_g$
 
-This is quite fluid, but in general, the `f_g` function prepared takes in an `anndata.var` dataframe, and reprocesses the gene names into a dictionary that maps gene names to either (1) integers, (2) lists or (3) numpy arrays. 
+This is quite fluid, but in general, the `f_g` function prepared takes in an `anndata.var` dataframe, and reprocesses the gene names into a dictionary that maps gene names to either (1) integers, (2) lists or (3) numpy arrays.
 
 Here is an example that does it only for integers:
 
@@ -134,15 +145,13 @@ This is activated by passing it through the function:
 CR.preprocess_f_g(identity_fg) ## takes in the identity f_g specified above
 ```
 
-
 # CellxGene Representation: $f_c$
 
-This is a lot more open ended, in general, the `fc` will always take in the `fg` (gene name to integer/vector dictionary) and 
-the anndata object. 
+This is a lot more open ended, in general, the `fc` will always take in the `fg` (gene name to integer/vector dictionary) and
+the anndata object.
 
-The `fc` will return a list, where each entry is a single cell example. In this example below `dataset[0]` is an `n_gene x 1` 
-vector denoting one cell as each entry is a gene id. 
-
+The `fc` will return a list, where each entry is a single cell example. In this example below `dataset[0]` is an `n_gene x 1`
+vector denoting one cell as each entry is a gene id.
 
 ```
 def geneformer_fc(fg, adata):
@@ -176,7 +185,6 @@ def geneformer_fc(fg, adata):
     dataset = np.array(dataset)
     return dataset
 ```
-
 
 This is activated by passing it through the function:
 
