@@ -235,7 +235,8 @@ class HeimdallTrainer:
                 confusion_matrix_metric.update(reshaped_logits, reshaped_labels)
         try:
             loss = accelerator.gather(loss).sum() / (len(dataloader_val))
-        except:  # FIX: E722 do not use bare 'except'
+        # FIX: E722 do not use bare 'except'. Specify specific exception handling.
+        except:  # noqa: E722,B001
             loss = loss / (len(dataloader_val))
         acc = acc_metric.compute() * 100
         precision = precision_metric.compute() * 100
