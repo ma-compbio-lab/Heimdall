@@ -22,7 +22,8 @@ def geneformer_fc(fg, adata):
         - adata: the whole, already processed, anndata object with the CellxGene Matrix
 
     output:
-        - output: dataset, a numpy object that is dimension CellxGene where the position has the token denoting what gene it is
+        - updated adata objec that has the cell_representation processed as a layer
+        - specifically, a numpy object that is dimension CellxGene where the position has the token denoting what gene it is
     """
 
     assert all(isinstance(value, (int)) for value in fg.values()), \
@@ -39,4 +40,6 @@ def geneformer_fc(fg, adata):
         dataset.append(cell_w_gene_ids)
 
     dataset = np.array(dataset)
-    return dataset
+    adata.layers["cell_representation"] = dataset
+    print(f"> Added processed data to adata.layers['cell_representation']")
+    return adata

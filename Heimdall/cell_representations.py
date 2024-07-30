@@ -8,6 +8,7 @@ import anndata as ad
 import numpy as np
 import torch
 from Heimdall.utils import get_value
+from scipy.sparse import issparse, csr_matrix
 
 
 
@@ -87,6 +88,48 @@ class Cell_Representation:
 
 
 
+    def prepare_cell_cell_df(self, interaction_type):
+        interaction_matrix = CR.adata.obsp[interaction_type]
+        cell_expression = CR.adata.layers["cell_representation"]
+
+        # Ensure interaction_matrix is in CSR format for efficient row slicing
+        if not isinstance(interaction_matrix, csr_matrix):
+            interaction_matrix = csr_matrix(interaction_matrix)
+
+        # Initialize lists to store data
+        cell_a_indices = []
+        cell_b_indices = []
+        labels = []
+
+        # Iterate through non-zero elements efficiently
+        for i in tqdm(range(interaction_matrix.shape[0]), desc=f"Processing {interaction_type}", unit="cell"):
+            row = interaction_matrix.getrow(i)
+            non_zero_cols = row.nonzero()[1]
+            non_zero_values = row.data
+
+            cell_a_indices.extend([i] * len(non_zero_cols))
+            cell_b_indices.extend(non_zero_cols)
+            labels.extend(non_zero_values)
+
+        # Create DataFrame with indices
+        df = pd.DataFrame({
+            'CellA_Index': cell_a_indices,
+            'CellB_Index': cell_b_indices,
+            'Interaction_Label': labels
+        })
+        # Add expression data
+        if issparse(cell_expression):
+            df['CellA_Expression'] = [cell_expression[i].toarray().flatten() for i in df['CellA_Index']]
+            df['CellB_Expression'] = [cell_expression[j].toarray().flatten() for j in df['CellB_Index']]
+        else:
+            df['CellA_Expression'] = [cell_expression[i] for i in df['CellA_Index']]
+            df['CellB_Expression'] = [cell_expression[j] for j in df['CellB_Index']]
+
+        self.cell_pair_df = df
+
+
+
+
     def preprocess_f_g(self, f_g):
         """
         run the f_g, and then preprocess and store it locally
@@ -110,7 +153,7 @@ class Cell_Representation:
         'Rgs20':  [0.3, 0.1. 0.2 ...],
         'St18':  [0.3, 0.1. 0.2 ...],
         'Cpa6':  [0.3, 0.1. 0.2 ...],
-        'Prex2':  [0.3, 0.1. 0.2 ...],
+        'Prex2':  [0.3, 0.1. 0.2 ...],f
         ...
         }
         ```
@@ -136,6 +179,6 @@ class Cell_Representation:
 
         The f_c will take as input the f_g, then the anndata, then the 
         """
-        self.cell_representation = f_c(self.f_g, self.adata)
+        self.adata = f_c(self.f_g, self.adata)
         print(f"> Finished calculating f_c with {self.fc_cfg.name}")
         return
