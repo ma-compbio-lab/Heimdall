@@ -20,7 +20,7 @@ class Cell_Representation:
         config (dict): Configuration dictionary.
         """
         self.dataset_preproc_cfg = config.dataset.preprocess_args
-        self.dataset_task_cfg = config.dataset.task_args
+        self.dataset_task_cfg = config.tasks.args
         self.fg_cfg = config.f_g
         self.fc_cfg = config.f_c
         self.model_cfg = config.model

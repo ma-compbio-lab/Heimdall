@@ -8,12 +8,3 @@ preprocess_args:
   normalize: true
   log_1p: true
   scale_data: true
-
-task_args:
-  label_col_name: "class"
-  metric_name: "MCC"
-  train_split: 0.8
-  shuffle: True
-  batchsize: 32
-  epochs: 10
-  prediction_dim: 20
