@@ -1,5 +1,6 @@
 args:
   task_type: "classification"
+  task_structure: "paired"
   label_col_name: "class"
   metrics: ["Accuracy", "MatthewsCorrCoef"]
   train_split: 0.8

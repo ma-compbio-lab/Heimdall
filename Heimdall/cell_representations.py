@@ -9,7 +9,9 @@ import numpy as np
 import torch
 from Heimdall.utils import get_value
 from scipy.sparse import issparse, csr_matrix
-
+from tqdm import tqdm
+import pandas as pd
+from sklearn.utils import resample
 
 
 class Cell_Representation:
@@ -29,6 +31,10 @@ class Cell_Representation:
         self.trainer_cfg = config.trainer
         self.scheduler_cfg = config.scheduler
         self.adata = None
+        self.task_structure = config.tasks.args.task_structure
+        self.processed_fcfg = False
+
+
 
     
     def preprocess_anndata(self):
@@ -72,6 +78,36 @@ class Cell_Representation:
         print("> Finished Processing Anndata Object")
 
 
+    
+    def prepare_datasets(self):
+        """
+        after preprocessing, provides the dataset in dataframe format that can be processed 
+        """
+        assert self.adata is not None, "no adata found, Make sure to run preprocess_anndata() first"
+        assert self.processed_fcfg is not False, "Please make sure to preprocess the cell representation at least once first"
+
+        cell_representation = self.adata.layers["cell_representation"]
+
+        if self.task_structure == "single":
+            ## 
+            self.prepare_labels()
+            X = cell_representation
+            y = self.labels
+            self.df = pd.DataFrame({"inputs" : X, "labels": y})
+
+        elif self.task_structure == "paired":
+            ###
+            self.df = self.prepare_paired_dataset(self.dataset_task_cfg.interaction_type)
+
+            if self.dataset_task_cfg.rebalance:
+                self.df = self.rebalance_dataset(self.df)
+
+        else:
+            raise ValueError("config.tasks.args.task_structure must be 'single' or 'paired'")
+
+
+        print("> Finished Preprocessing the dataset into self.df ")
+
 
 
     def prepare_labels(self):
@@ -88,9 +124,12 @@ class Cell_Representation:
 
 
 
-    def prepare_cell_cell_df(self, interaction_type):
-        interaction_matrix = CR.adata.obsp[interaction_type]
-        cell_expression = CR.adata.layers["cell_representation"]
+    def prepare_paired_dataset(self, interaction_type):
+
+        assert self.adata is not None, "no adata found, Make sure to run preprocess_anndata() first"
+
+        interaction_matrix = self.adata.obsp[interaction_type]
+        cell_expression = self.adata.layers["cell_representation"]
 
         # Ensure interaction_matrix is in CSR format for efficient row slicing
         if not isinstance(interaction_matrix, csr_matrix):
@@ -115,7 +154,7 @@ class Cell_Representation:
         df = pd.DataFrame({
             'CellA_Index': cell_a_indices,
             'CellB_Index': cell_b_indices,
-            'Interaction_Label': labels
+            'labels': labels
         })
         # Add expression data
         if issparse(cell_expression):
@@ -125,7 +164,42 @@ class Cell_Representation:
             df['CellA_Expression'] = [cell_expression[i] for i in df['CellA_Index']]
             df['CellB_Expression'] = [cell_expression[j] for j in df['CellB_Index']]
 
-        self.cell_pair_df = df
+        df['labels'] = df['labels'].replace(-1, 0)
+
+        return df[["CellA_Expression", "CellB_Expression", "labels"]]
+
+
+
+    def rebalance_dataset(self, df):
+        # Step 1: Find which label has a lower number
+        label_counts = df['labels'].value_counts()
+        minority_label = label_counts.idxmin()
+        majority_label = label_counts.idxmax()
+        minority_count = label_counts[minority_label]
+
+        print(f"Minority label: {minority_label}")
+        print(f"Majority label: {majority_label}")
+        print(f"Number of samples in minority class: {minority_count}")
+
+        # Step 2: Downsample the majority class
+        df_minority = df[df['labels'] == minority_label]
+        df_majority = df[df['labels'] == majority_label]
+
+        df_majority_downsampled = resample(df_majority,
+                                        replace=False,
+                                        n_samples=minority_count,
+                                        random_state=42)
+
+        # Combine minority class with downsampled majority class
+        df_balanced = pd.concat([df_minority, df_majority_downsampled])
+
+        print(f"Original dataset shape: {df.shape}")
+        print(f"Balanced dataset shape: {df_balanced.shape}")
+        print("New label distribution:")
+        print(df_balanced['labels'].value_counts())
+
+        return df_balanced
+
 
 
 
@@ -181,4 +255,5 @@ class Cell_Representation:
         """
         self.adata = f_c(self.f_g, self.adata)
         print(f"> Finished calculating f_c with {self.fc_cfg.name}")
+        self.processed_fcfg = True
         return
