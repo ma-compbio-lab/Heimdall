@@ -124,52 +124,58 @@ class Heimdall_Transformer(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
 
 
-    def forward(self, inputs, labels=None, conditional_tokens = None, attention_mask = None):
+    def forward(self, inputs, conditional_tokens = None, attention_mask = None):
         """
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+
+        if len(conditional_tokens) == 0: ## handling when tehre are no conditional tokens supplied
+            conditional_tokens = None
+
         logits = self.LM_model(inputs, conditional_tokens, attention_mask)
 
-        loss = None
-        if labels is not None:
-            labels = labels.to(logits.device)
+        return logits
 
-            ## instantiating the problem type if it is not specified
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+        # loss = None
+        # if labels is not None:
+        #     labels = labels.to(logits.device)
 
-            ## obtaining the loss
-            if self.config.problem_type == "regression":
-                if self.use_huberloss:
-                    loss_fct = HuberLoss()
-                else:
-                    loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+        #     ## instantiating the problem type if it is not specified
+        #     if self.config.problem_type is None:
+        #         if self.num_labels == 1:
+        #             self.config.problem_type = "regression"
+        #         elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+        #             self.config.problem_type = "single_label_classification"
+        #         else:
+        #             self.config.problem_type = "multi_label_classification"
+
+        #     ## obtaining the loss
+        #     if self.config.problem_type == "regression":
+        #         if self.use_huberloss:
+        #             loss_fct = HuberLoss()
+        #         else:
+        #             loss_fct = MSELoss()
+        #         if self.num_labels == 1:
+        #             loss = loss_fct(logits.squeeze(), labels.squeeze())
+        #         else:
+        #             loss = loss_fct(logits, labels)
+        #     elif self.config.problem_type == "single_label_classification":
+        #         loss_fct = CrossEntropyLoss()
+        #         loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+        #     elif self.config.problem_type == "multi_label_classification":
+        #         loss_fct = BCEWithLogitsLoss()
+        #         loss = loss_fct(logits, labels)
 
 
-        payload = {
-            "loss" : loss,
-            "logits" : logits
-        }
+        # payload = {
+        #     "loss" : loss,
+        #     "logits" : logits
+        # }
 
-        return payload
+        # return payload
 
         
 
