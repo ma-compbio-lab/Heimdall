@@ -19,7 +19,7 @@ from Heimdall.models import Heimdall_Transformer, TransformerConfig
 ## Cell representation tools from heimdall
 from Heimdall.cell_representations import Cell_Representation
 from Heimdall.f_g import identity_fg
-from Heimdall.f_c import old_geneformer_fc
+from Heimdall.f_c import old_geneformer_fc, geneformer_fc
 from Heimdall.utils import heimdall_collate_fn
 from Heimdall.trainer import Heimdall_Trainer
 
@@ -37,7 +37,10 @@ def main(config):
     CR = Cell_Representation(config) ## takes in the whole config from hydra
     CR.preprocess_anndata() ## standard sc preprocessing can be done here
     CR.preprocess_f_g(identity_fg) ## takes in the identity f_g specified above
+
     CR.preprocess_f_c(old_geneformer_fc) ## takes in the geneformer f_c specified above
+    # CR.preprocess_f_c(geneformer_fc) ## for now use the old_geneformer
+
     CR.prepare_labels() ## prepares the labels
 
     ## we can take this out here now and pass this into a PyTorch dataloader and separately create the model
