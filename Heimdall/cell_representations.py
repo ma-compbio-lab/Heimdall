@@ -12,6 +12,8 @@ from scipy.sparse import issparse, csr_matrix
 from tqdm import tqdm
 import pandas as pd
 from sklearn.utils import resample
+from notebooks import data_processing_utils
+
 
 
 class Cell_Representation:
@@ -37,6 +39,32 @@ class Cell_Representation:
 
 
     
+    def convert_to_ensembl_ids(self, data_dir, species="human"):
+        """
+        Converts gene symbols in the anndata object to Ensembl IDs using a provided mapping.
+    
+        Args:
+            - data: anndata object with gene symbols as var index
+            - data_dir: directory where the data is stored
+            - species: species name (default is "human")
+    
+        Returns:
+            - data: anndata object with Ensembl IDs as var index
+            - symbol_to_ensembl_mapping: mapping dictionary from symbols to Ensembl IDs
+        """
+        if species == 'mouse':
+            self.adata.var_names = self.adata.var_names.str.upper()
+        symbol_to_ensembl_mapping = data_processing_utils.symbol_to_ensembl_from_ensembl(
+            data_dir=data_dir, genes=self.adata.var.index.tolist(), species='human')
+        
+        self.adata.uns["gene_mapping:symbol_to_ensembl"] = symbol_to_ensembl_mapping.mapping_full
+    
+        self.adata.var["gene_symbol"] = self.adata.var.index
+        self.adata.var["gene_ensembl"] = self.adata.var["gene_symbol"].map(symbol_to_ensembl_mapping.mapping_combined.get)
+        self.adata.var.index = self.adata.var.index.map(symbol_to_ensembl_mapping.mapping_reduced)
+    
+        return self.adata, symbol_to_ensembl_mapping
+    
     def preprocess_anndata(self):
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
@@ -44,6 +72,9 @@ class Cell_Representation:
         # Load your AnnData object
         self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
+
+        #convert gene names to ensembl ids
+        self.adata, symbol_to_ensembl_mapping = self.convert_to_ensembl_ids(data_dir="/work/magroup/shared/Heimdall/data/", species=self.dataset_preproc_cfg.species)
 
         if(get_value(self.dataset_preproc_cfg, "normalize")):
             # Normalizing based on target sum
@@ -74,6 +105,8 @@ class Cell_Representation:
             sc.pp.scale(self.adata, max_value=10)
         else:
             print("> Not Scaling the data...")
+
+        
 
         print("> Finished Processing Anndata Object")
 
