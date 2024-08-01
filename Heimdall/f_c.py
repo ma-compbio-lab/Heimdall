@@ -8,6 +8,7 @@ from tqdm import tqdm
 import hydra
 import pandas as pd
 from omegaconf import OmegaConf
+import pickle
 
 
 def load_gene_medians(pickle_file_path):
@@ -33,6 +34,41 @@ def value_binning(expression_values, B=10):
     return binned_values
 
 
+
+def old_geneformer_fc(fg, adata):
+    """
+    geneformer_fc is a fc that will reprocess each cell by ordering them by their gene expression value,
+    and replace each gene name by their corresponding representation, either token_id or a different vector
+
+    right now this only supports token_id
+
+    args:
+        - fg: dictionary that maps gene names to token ids
+        - adata: the whole, already processed, anndata object with the CellxGene Matrix
+
+    output:
+        - output: dataset, a numpy object that is dimension CellxGene where the position has the token denoting what gene it is
+    """
+
+    assert all(isinstance(value, (int)) for value in fg.values()), \
+            "Current geneformer_fc only supports token ids"
+
+    print("> Performing the f_c using rank-based values, as seen in geneformer")
+    df = pd.DataFrame(adata.X, columns=fg.keys())
+
+    dataset = []
+    for i in tqdm(range(len(df))):
+        cell = df.iloc[i]
+        sorted_cell = cell.sort_values(ascending=False).index
+        cell_w_gene_ids = [fg[gene] for gene in sorted_cell]
+        dataset.append(cell_w_gene_ids)
+
+    dataset = np.array(dataset)
+    adata.layers["cell_representation"] = dataset
+    print(f"> Added processed data to adata.layers['cell_representation']")
+    return adata
+
+
 def geneformer_fc(fg, adata):
     """
     geneformer_fc is a fc that will reprocess each cell by ordering them by their normalized gene expression value,
@@ -49,6 +85,8 @@ def geneformer_fc(fg, adata):
         - specifically, a numpy object that is dimension CellxGene where the position has the token denoting what gene it is
     """
 
+    raise NotImplementedError("This function is still in development, for debugging please use `old_geneformer_fc`")
+
     assert all(isinstance(value, (int)) for value in fg.values()), \
             "Current geneformer_fc only supports token ids"
 
@@ -62,8 +100,8 @@ def geneformer_fc(fg, adata):
     adata_genes = set(adata.var_names)
     median_genes = set(gene_medians.keys())
     common_genes = adata_genes.intersection(median_genes)
-    df = df[list(common_genes)]
 
+    df = df[list(common_genes)]
     if not common_genes:
         raise ValueError("No common genes found between adata.var_names and gene_medians keys.")
 
@@ -82,7 +120,9 @@ def geneformer_fc(fg, adata):
         dataset.append(cell_w_gene_ids)
 
     dataset = np.array(dataset)
-    return dataset
+    adata.layers["cell_representation"] = dataset
+    print(f"> Added processed data to adata.layers['cell_representation']")
+    return adata
 
 
 def scgpt_fc(fg, adata, B=10):

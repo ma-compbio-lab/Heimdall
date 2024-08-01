@@ -8,3 +8,4 @@ preprocess_args:
   normalize: true
   log_1p: true
   scale_data: true
+  species: 'human'
