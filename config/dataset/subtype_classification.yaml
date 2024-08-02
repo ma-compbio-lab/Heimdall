@@ -1,0 +1,9 @@
+dataset_name: "bmnc_subtype_classification"
+
+preprocess_args:
+  data_path: "/work/magroup/scllm/datasets/bmnc_subtypes_proteins.h5ad"
+  top_n_genes: 1000
+  normalize: true
+  log_1p: true
+  scale_data: true
+  species: 'human'
