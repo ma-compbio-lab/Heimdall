@@ -1,3 +1,5 @@
+[![Lint](https://github.com/gkrieg/Heimdall/actions/workflows/lint.yml/badge.svg)](https://github.com/gkrieg/Heimdall/actions/workflows/lint.yml)
+
 # Heimdall
 
 # Installation
