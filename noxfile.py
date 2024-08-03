@@ -16,7 +16,7 @@ def flake8(session):
         "flake8-use-fstring",
         "pep8-naming",
     )
-    session.run("flake8", "Heimdall/")
+    session.run("flake8", "Heimdall/", "train.py")
 
 
 @nox.session

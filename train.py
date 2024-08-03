@@ -1,16 +1,15 @@
 import hydra
-import torch
 from datasets import Dataset
 from omegaconf import OmegaConf
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
-## Cell representation tools from heimdall
+# Cell representation tools from heimdall
 from Heimdall.cell_representations import CellRepresentation
-from Heimdall.f_c import geneformer_fc, old_geneformer_fc
+from Heimdall.f_c import geneformer_fc, old_geneformer_fc  # noqa: F401
 from Heimdall.f_g import identity_fg
 
-## initialize the model
+# initialize the model
 from Heimdall.models import HeimdallTransformer, TransformerConfig
 from Heimdall.trainer import HeimdallTrainer
 from Heimdall.utils import heimdall_collate_fn
@@ -26,20 +25,20 @@ def main(config):
     # preprocess the dataset
     #####
 
-    CR = Cell_Representation(config)  ## takes in the whole config from hydra
-    CR.preprocess_anndata()  ## standard sc preprocessing can be done here
-    CR.preprocess_f_g(identity_fg)  ## takes in the identity f_g specified above
+    cr = CellRepresentation(config)  # takes in the whole config from hydra
+    cr.preprocess_anndata()  # standard sc preprocessing can be done here
+    cr.preprocess_f_g(identity_fg)  # takes in the identity f_g specified above
 
-    CR.preprocess_f_c(old_geneformer_fc)  ## takes in the geneformer f_c specified above
-    # CR.preprocess_f_c(geneformer_fc) ## for now use the old_geneformer
+    cr.preprocess_f_c(old_geneformer_fc)  # takes in the geneformer f_c specified above
+    # cr.preprocess_f_c(geneformer_fc) ## for now use the old_geneformer
 
-    CR.prepare_labels()  ## prepares the labels
+    cr.prepare_labels()  # prepares the labels
 
-    ## we can take this out here now and pass this into a PyTorch dataloader and separately create the model
-    X = CR.adata.layers["cell_representation"]
-    y = CR.labels
+    # we can take this out here now and pass this into a PyTorch dataloader and separately create the model
+    x = cr.adata.layers["cell_representation"]
+    y = cr.labels
 
-    print(f"Cell representation X: {X.shape}")
+    print(f"Cell representation x: {x.shape}")
     print(f"Cell labels y: {y.shape}")
 
     ########
@@ -48,10 +47,10 @@ def main(config):
     # easily be rolled into a helper function
     ########
 
-    train_x, test_val_x, train_y, test_val_y = train_test_split(X, y, test_size=0.2, random_state=42)
+    train_x, test_val_x, train_y, test_val_y = train_test_split(x, y, test_size=0.2, random_state=42)
     test_x, val_x, test_y, val_y = train_test_split(test_val_x, test_val_y, test_size=0.5, random_state=42)
 
-    print(f"> Cell representation X: {X.shape}")
+    print(f"> Cell representation x: {x.shape}")
     print(f"> Cell labels y: {y.shape}")
     print(f"> train_x.shape {train_x.shape}")
     print(f"> validation_x.shape {val_x.shape}")
@@ -59,7 +58,8 @@ def main(config):
 
     # this is how you dynamically process your outputs into the right dataloader format
     # if you do not want conditional tokens, just omit those arguments
-    # what is crucial is that the dataset contains the arguments `inputs` and `labels`, anything else will be put into `conditional`
+    # what is crucial is that the dataset contains the arguments `inputs` and `labels`,
+    # anything else will be put into `conditional`
 
     ds_train = Dataset.from_dict(
         {"inputs": train_x, "labels": train_y, "conditional_tokens_1": train_x, "conditional_tokens_2": train_x},
@@ -76,7 +76,7 @@ def main(config):
     ds_train = Dataset.from_dict({"inputs": train_x,'labels':train_y})
     """
 
-    ## this can probably be rolled into the train functionality itself, but lets keep it outside to be eaiser to debug
+    # this can probably be rolled into the train functionality itself, but lets keep it outside to be eaiser to debug
     dataloader_train = DataLoader(
         ds_train,
         batch_size=int(config.tasks.args.batchsize),
@@ -133,7 +133,7 @@ def main(config):
         run_wandb=True,
     )
 
-    ### Training
+    # Training
     trainer.fit()
 
 
