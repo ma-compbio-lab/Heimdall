@@ -70,6 +70,7 @@ def main(config):
     ds_test = Dataset.from_dict(
         {"inputs": test_x, "labels": test_y, "conditional_tokens_1": test_x, "conditional_tokens_2": test_x},
     )
+    tuple(map(lambda ds: ds.set_format("torch"), (ds_train, ds_valid, ds_test)))
 
     # optionally if you do not want any conditional tokens, do the following format:
     """
