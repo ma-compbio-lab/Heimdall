@@ -30,5 +30,9 @@ trainer:
   accumulate_grad_batches: 1
 
 optimizer:
-  args: 
+  args:
     lr: 2e-3
+
+tasks:
+  args:
+    epochs: 1
