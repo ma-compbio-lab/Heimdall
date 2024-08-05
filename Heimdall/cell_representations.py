@@ -67,7 +67,15 @@ class Dataset(PyTorchDataset, ABC):
     def __init__(self, data: "CellRepresentation"):
         super().__init__()
         self._data = data
+
+        if self.labels is None:
+            self._setup_labels()
+
+        # NOTE: need to setup labels first, index sizes might depend on it
         self._setup_idx()
+
+        if self.splits is None:
+            self._setup_splits()
 
     @property
     def idx(self) -> NDArray[np.int_]:
@@ -77,6 +85,22 @@ class Dataset(PyTorchDataset, ABC):
     def data(self) -> "CellRepresentation":
         return self._data
 
+    @property
+    def labels(self) -> NDArray:
+        return getattr(self.data, "_labels", None)
+
+    @labels.setter
+    def labels(self, val):
+        self.data._labels = val
+
+    @property
+    def splits(self) -> NDArray:
+        return getattr(self.data, "_splits", None)
+
+    @splits.setter
+    def splits(self, val):
+        self.data._splits = val
+
     def __len__(self) -> int:
         return len(self.idx)
 
@@ -84,8 +108,28 @@ class Dataset(PyTorchDataset, ABC):
         name = self.__class__.__name__
         return f"{name}(size={len(self):,}) wrapping: {self.data}"
 
+    def _setup_splits(self):
+        # TODO: use predefined splits if available
+        predefined_splits = None
+        size = len(self)
+        seed = self.data._cfg.seed
+
+        if predefined_splits is None:
+            warnings.warn(
+                "Pre-defined split unavailable, using random 6/2/2 split",
+                UserWarning,
+                stacklevel=2,
+            )
+            train_val_idx, test_idx = train_test_split(np.arange(size), train_size=0.6, random_state=seed)
+            train_idx, val_idx = train_test_split(train_val_idx, test_size=0.2, random_state=seed)
+
+        self.splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+
     @abstractmethod
     def _setup_idx(self): ...
+
+    @abstractmethod
+    def _setup_labels(self): ...
 
     @abstractmethod
     def __getitem__(self, idx) -> Tuple[FeatType, LabelType]: ...
@@ -94,6 +138,21 @@ class Dataset(PyTorchDataset, ABC):
 class SingleInstanceDataset(Dataset):
     def _setup_idx(self):
         self._idx = np.arange(self.data.adata.shape[0])
+
+    def _setup_labels(self):
+        adata = self.data.adata
+        dataset_task_cfg = self.data.dataset_task_cfg
+
+        df = adata.obs
+        class_mapping = {
+            label: idx
+            for idx, label in enumerate(
+                df[dataset_task_cfg.label_col_name].unique(),
+                start=0,
+            )
+        }
+        df["class_id"] = df[dataset_task_cfg.label_col_name].map(class_mapping)
+        self.labels = np.array(df["class_id"])
 
     def __getitem__(self, idx) -> Tuple[CellFeatType, LabelType]:
         return {
@@ -107,6 +166,44 @@ class PairedInstanceDataset(Dataset):
         # NOTE: full mask is set up during runtime given split masks or the data
         mask = self.data.adata.obsp["full_mask"]
         self._idx = np.vstack(np.nonzero(mask)).T  # pairs x 2
+
+    def _setup_labels(self):
+        adata = self.data.adata
+        dataset_task_cfg = self.data.dataset_task_cfg
+
+        all_obsp_task_keys, obsp_mask_keys = [], []
+        for key in adata.obsp:
+            (obsp_mask_keys if key in SPLIT_MASK_KEYS else all_obsp_task_keys).append(key)
+        all_obsp_task_keys = sorted(all_obsp_task_keys)
+
+        # Select task keys
+        candidate_obsp_task_keys = dataset_task_cfg.interaction_type
+        if candidate_obsp_task_keys == "_all_":
+            obsp_task_keys = all_obsp_task_keys
+        else:
+            if isinstance(candidate_obsp_task_keys, str):
+                candidate_obsp_task_keys = [candidate_obsp_task_keys]
+
+            if invalid_obsp_task_keys := [i for i in candidate_obsp_task_keys if i not in all_obsp_task_keys]:
+                raise ValueError(
+                    f"{len(invalid_obsp_task_keys)} out of {len(candidate_obsp_task_keys)} "
+                    f"specified interaction types are invalid: {invalid_obsp_task_keys}\n"
+                    f"Valid options are: {pformat(all_obsp_task_keys)}",
+                )
+
+        # Set up task mask
+        full_mask = np.sum([np.abs(adata.obsp[i]) for i in obsp_task_keys], axis=-1) > 0
+        adata.obsp["full_mask"] = full_mask
+        nz = np.nonzero(full_mask)
+        num_tasks = len(obsp_task_keys)
+
+        # TODO: specify task type multiclass/multilabel/regression in config
+        (labels := np.empty((len(nz[0]), num_tasks), dtype=np.float32)).fill(np.nan)
+        for i, task in enumerate(obsp_task_keys):
+            label_i = np.array(adata.obsp[task][nz]).ravel()
+            labels[:, i][label_i == 1] = 1
+            labels[:, i][label_i == -1] = 0
+        self.labels = labels
 
     def __getitem__(self, idx) -> Tuple[Tuple[CellFeatType, CellFeatType], LabelType]:
         cell1_idx, cell2_idx = self.idx[idx]
@@ -146,7 +243,7 @@ class CellRepresentation:
             self.preprocess_anndata()
             self.preprocess_f_g(identity_fg)
             self.preprocess_f_c(old_geneformer_fc)
-            self.prepare_labels()  # TODO: move to dataset object
+            # self.prepare_labels()  # TODO: move to dataset object
             self.prepare_dataset_loaders()
 
     @property
@@ -271,7 +368,6 @@ class CellRepresentation:
 
     @check_states(adata=True, processed_fcfg=True)
     def prepare_dataset_loaders(self):
-        # TODO: Move labels setup to dataset
         if self.task_structure == "single":
             full_dataset = SingleInstanceDataset(self)
         elif self.task_structure == "paired":
@@ -282,8 +378,8 @@ class CellRepresentation:
         # Set up full dataset given the processed cell representation data
         self.datasets = {"full": full_dataset}
 
-        # Prepare data splits
-        self._prepare_splits()
+        # # Prepare data splits
+        # self._prepare_splits()
 
         # Set up dataset splits given the data splits
         for split, split_idx in self.splits.items():
@@ -305,6 +401,7 @@ class CellRepresentation:
         dataset_str = pformat(self.datasets).replace("\n", "\n\t")
         print(f"> Finished setting up datasets (and loaders):\n\t{dataset_str}")
 
+    @deprecate(raise_error=True)
     def _prepare_splits(self):
         # TODO: use predefined splits if available
         predefined_splits = None
@@ -350,6 +447,7 @@ class CellRepresentation:
 
         print("> Finished Preprocessing the dataset into self.df ")
 
+    @deprecate(raise_error=True)
     def prepare_labels(self):
         """Pull out the specified class from data to set up label."""
         assert self.adata is not None, "no adata found, Make sure to run preprocess_anndata() first"
@@ -408,6 +506,7 @@ class CellRepresentation:
 
         print(f"> Finished extracting labels, self.labels.shape: {self.labels.shape}")
 
+    @deprecate(raise_error=True)
     def prepare_paired_dataset(self, interaction_type):
         assert self.adata is not None, "no adata found, Make sure to run preprocess_anndata() first"
 

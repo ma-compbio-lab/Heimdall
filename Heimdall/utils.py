@@ -1,6 +1,7 @@
 import math
 import warnings
-from functools import wraps
+from functools import partial, wraps
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -97,15 +98,18 @@ def heimdall_collate_fn(examples):
     return batch
 
 
-def deprecate(func):
+def deprecate(func: Optional[Callable] = None, raise_error: bool = False):
+
+    if func is None:
+        return partial(deprecate, raise_error=raise_error)
 
     @wraps(func)
     def bounded(*args, **kwargs):
-        warnings.warn(
-            f"{func} is deprecated, do not use",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        msg = f"{func} is deprecated, do not use"
+        if raise_error:
+            raise RuntimeError(msg)
+
+        warnings.warn(msg, DeprecationWarning, stacklevel=2)
         return func(*args, **kwargs)
 
     return bounded
