@@ -210,7 +210,7 @@ class HeimdallTrainer:
                 lr = self.lr_scheduler.get_last_lr()[0]
                 with self.accelerator.accumulate(self.model):
 
-                    logits = self.model(inputs=batch["inputs"], conditional_tokens=batch["conditional_tokens"])
+                    logits = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
                     labels = batch["labels"].to(logits.device)
 
                     loss = self.get_loss(logits, labels)
@@ -242,7 +242,7 @@ class HeimdallTrainer:
         with torch.no_grad():
             for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
 
-                logits = self.model(inputs=batch["inputs"], conditional_tokens=batch["conditional_tokens"])
+                logits = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
                 labels = batch["labels"].to(logits.device)
                 loss += self.get_loss(logits, labels).item()
 
