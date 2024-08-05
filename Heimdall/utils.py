@@ -1,4 +1,6 @@
 import math
+import warnings
+from functools import wraps
 
 import torch
 import torch.nn as nn
@@ -93,3 +95,15 @@ def heimdall_collate_fn(examples):
         batch["conditional_tokens"] = conditional_tokens
 
     return batch
+
+
+def deprecate(func):
+
+    @wraps(func)
+    def bounded(*args, **kwargs):
+        warnings.warn(
+            f"{func} is deprecated, do not use",
+        )
+        return func(*args, **kwargs)
+
+    return bounded

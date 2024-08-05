@@ -19,7 +19,7 @@ from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
 from tqdm import tqdm
 
-from Heimdall.utils import get_value, heimdall_collate_fn
+from Heimdall.utils import deprecate, get_value, heimdall_collate_fn
 from notebooks import data_processing_utils
 
 SPLIT_MASK_KEYS = {"full_mask", "train_mask", "val_mask", "test_mask", "full", "train", "val", "test"}
@@ -319,6 +319,7 @@ class CellRepresentation:
 
         self._splits = dict(train=train_idx, val=val_idx, test=test_idx)
 
+    @deprecate
     def prepare_datasets(self):
         """After preprocessing, provides the dataset in dataframe format that
         can be processed."""
