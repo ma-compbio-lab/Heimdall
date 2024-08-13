@@ -319,26 +319,38 @@ class CellRepresentation:
 
         return self.adata, symbol_to_ensembl_mapping
 
-    def preprocess_anndata(self):
+    def preprocess_anndata(self, cache_and_load_preproc=False):
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
 
-        # Load your AnnData object
-        splitpath = os.path.splitext(self.dataset_preproc_cfg.data_path)
-        preprocessed_data_path = splitpath[0] + "_preprocessed_" + splitpath[1]
-        if os.path.isfile(preprocessed_data_path):
-            self.adata = ad.read_h5ad(preprocessed_data_path)
-            print(f"> Finished Loading in preprossed dataset: {preprocessed_data_path}")
+        os.makedirs('heimdall_preprocessed', exist_ok=True)
+
+        if cache_and_load_preproc:
+            filepath = self.dataset_preproc_cfg.data_path.split("/")
+            preprocessed_data_path = "heimdall_preprocessed/preprocessed_" + filepath[-1]
+
+            if os.path.isfile(preprocessed_data_path):
+                self.adata = ad.read_h5ad(preprocessed_data_path)
+                print(f"> Found already preprocessed dataset, loading in {preprocessed_data_path}")
+                print(f"> Finished Loading in preprocessed dataset: {preprocessed_data_path}")
+                return
+
+            else:
+                self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
+                print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
         else:
             self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
             print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
 
         # convert gene names to ensembl ids
-        if "gene_mapping:symbol_to_ensembl" not in self.adata.uns.keys():
-            self.adata, symbol_to_ensembl_mapping = self.convert_to_ensembl_ids(
-                data_dir="/work/magroup/shared/Heimdall/data/",
-                species=self.dataset_preproc_cfg.species,
-            )
+        if self.dataset_preproc_cfg.data_path.split("/")[-3] == "cell_type_annotation":
+            print("==> Found cell type annotation tasks folder, wont convert to ensembl ids")
+        else:
+            if "gene_mapping:symbol_to_ensembl" not in self.adata.uns.keys():
+                self.adata, symbol_to_ensembl_mapping = self.convert_to_ensembl_ids(
+                    data_dir="/home/nzh/Desktop/Heimdall/data",
+                    species=self.dataset_preproc_cfg.species,
+                )
 
         # check if layer already exists with your desired preprocessing
         preprocessing_string = "_".join(
@@ -347,6 +359,7 @@ class CellRepresentation:
         if preprocessing_string in self.adata.layers.keys():
             print("> Using cached preprocessed data")
             self.adata.X = self.adata.layers[preprocessing_string].copy()
+            self.sequence_length = len(self.adata.var)
             return
 
         else:
@@ -378,6 +391,8 @@ class CellRepresentation:
                 self.adata = self.adata[:, self.adata.var["highly_variable"]]
             else:
                 print("> No highly variable subset... using entire dataset")
+            
+            self.sequence_length = len(self.adata.var)
 
             if get_value(self.dataset_preproc_cfg, "scale_data"):
                 # Scale the data
@@ -389,8 +404,10 @@ class CellRepresentation:
             print("> Finished Processing Anndata Object")
             print("> Writing preprocessed Anndata Object")
             self.adata.layers[preprocessing_string] = self.adata.X.copy()
-            self.adata.write(preprocessed_data_path)
-            print("> Finished writing preprocessed Anndata Object")
+
+            if cache_and_load_preproc:
+                self.adata.write(preprocessed_data_path)
+                print("> Finished writing preprocessed Anndata Object")
 
             print("> Not Scaling the data...")
 

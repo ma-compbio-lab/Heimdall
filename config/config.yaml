@@ -10,8 +10,8 @@ defaults:
   - /scheduler: cosine # contains scheduler
   - /trainer: default # contains optimizer and trainer details
   - /optimizer: AdamW
-  - /f_c: identity
-  - /f_g: identity
+  - /f_c: geneformer
+  - /f_g: gene_id
   - /loss: CrossEntropyLoss
 
 ####

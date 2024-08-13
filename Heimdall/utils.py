@@ -40,6 +40,9 @@ class PositionalEncoding(torch.nn.Module):
         x = self.dropout(x)
         return x
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 
 # Dataset Preparation collation tool
 def heimdall_collate_fn(examples):
