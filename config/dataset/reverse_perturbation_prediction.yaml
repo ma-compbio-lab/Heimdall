@@ -7,3 +7,13 @@ preprocess_args:
   log_1p: true
   scale_data: true
   species: 'human'
+
+task_args:
+  presplit: true
+  paired: true
+  label_train: "task_ko_tarin"
+  label_val: "task_ko_val"
+  label_test: "task_ko_test"
+  metric_name: "MCC"
+  batchsize: 32
+  epochs: 10
