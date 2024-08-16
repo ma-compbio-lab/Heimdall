@@ -11,7 +11,7 @@ defaults:
   - /trainer: default # contains optimizer and trainer details
   - /optimizer: AdamW
   - /f_c: geneformer
-  - /f_g: gene_id
+  - /f_g: identity
   - /loss: CrossEntropyLoss
 
 ####
