@@ -321,7 +321,7 @@ class CellRepresentation:
 
         return self.adata, symbol_to_ensembl_mapping
 
-    def preprocess_anndata(self, cache_and_load_preproc=True):
+    def preprocess_anndata(self, cache_and_load_preproc=False):
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
 
