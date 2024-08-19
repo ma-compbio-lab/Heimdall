@@ -9,7 +9,6 @@ from Heimdall.cell_representations import CellRepresentation
 # initialize the model
 from Heimdall.models import HeimdallTransformer, TransformerConfig
 from Heimdall.trainer import HeimdallTrainer
-
 from Heimdall.utils import count_parameters
 
 
