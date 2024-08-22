@@ -2,4 +2,5 @@
 
 data_path: '/home/nzh/Desktop/Heimdall/data'
 ensembl_dir: '/home/nzh/Desktop/Heimdall/data'
+cache_preprocessed_dataset_dir: null  # dir to save preprocessed dataset, do not cache if set to null
 entity: 'Heimdall'
