@@ -262,27 +262,29 @@ class CellRepresentation:
     @property
     @check_states(labels=True)
     def num_tasks(self) -> int:
-        warnings.warn(
-            "Need to improve to explicitly handle multiclass vs. multilabel",
-            UserWarning,
-            stacklevel=2,
-        )
-        if (self.labels % 1).any():  # inferred to be regression
-            task_type = "regression"
-            out = self._labels.shape[1]
-        elif self.labels.max() == 1:  # inferred to be multilabel
-            task_type = "classification-multilabel"
-            if len(self.labels.shape) == 1:
-                out = 1
-            else:
+        if "_num_tasks" not in self.__dict__:
+            warnings.warn(
+                "Need to improve to explicitly handle multiclass vs. multilabel",
+                UserWarning,
+                stacklevel=2,
+            )
+            if (self.labels % 1).any():  # inferred to be regression
+                task_type = "regression"
                 out = self._labels.shape[1]
-        else:  # inferred to be multiclass
-            task_type = "classification-multiclass"
-            out = self._labels.max() + 1
+            elif self.labels.max() == 1:  # inferred to be multilabel
+                task_type = "classification-multilabel"
+                if len(self.labels.shape) == 1:
+                    out = 1
+                else:
+                    out = self._labels.shape[1]
+            else:  # inferred to be multiclass
+                task_type = "classification-multiclass"
+                out = self._labels.max() + 1
 
-        print(f"> Task dimension inferred: {out} (inferred task type {task_type!r}, {self.labels.shape=})")
+            self._num_tasks = out = int(out)
+            print(f"> Task dimension inferred: {out} (inferred task type {task_type!r}, {self.labels.shape=})")
 
-        return out
+        return self._num_tasks
 
     @property
     @check_states(splits=True)
