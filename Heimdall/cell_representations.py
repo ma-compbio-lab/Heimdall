@@ -1,6 +1,5 @@
 """The Cell Representation Object for Processing."""
 
-import os
 import warnings
 from abc import ABC, abstractmethod
 from functools import partial, wraps
