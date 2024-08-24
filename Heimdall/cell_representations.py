@@ -564,12 +564,12 @@ class CellRepresentation:
         if hasattr(f_g, f_g_name):
             real_f_g = getattr(f_g, f_g_name)
         else:
-            print(f"f_g {f_g_name} does not exist. Please check for the correct name")
+            raise ValueError(f"f_g {f_g_name} does not exist. Please check for the correct name in config")
 
         if hasattr(f_c, f_c_name):
             real_f_c = getattr(f_c, f_c_name)
         else:
-            print(f"f_c {f_c_name} does not exist. Please check for the correct name")
+            raise ValueError(f"f_c {f_c_name} does not exist. Please check for the correct name in config")
 
         self.preprocess_f_g(real_f_g)
         cell_reps = self.preprocess_f_c(real_f_c)
