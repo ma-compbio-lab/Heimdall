@@ -30,6 +30,23 @@ class TransformerConfig:
     problem_type: str = "single_label_classification"
 
 
+@dataclass
+class TransformerOutput:
+    logits: torch.Tensor
+    # predictions: torch.Tensor
+    sequence_embeddings: torch.Tensor
+    # pooled_embeddings: torch.Tensor
+    cls_embeddings: torch.Tensor
+
+    @property
+    def device(self):
+        return self.logits.device
+
+    def to(self, device):
+        for key, val in self.__dict__.items():
+            self.__dict__[key] = val.to(device)
+
+
 class HeimdallTransformer(nn.Module):
     def __init__(self, config: TransformerConfig, input_type: str, conditional_input_types: Optional[dict] = None):
         super().__init__()
@@ -100,7 +117,8 @@ class HeimdallTransformer(nn.Module):
             norm_first=True,  # BERT uses LayerNorm before self-attention and feedforward networks
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.num_encoder_layers)
-        self.decoder = nn.Linear(config.d_model, config.prediction_dim, bias=True)
+        # self.decoder = nn.Linear(config.d_model, config.prediction_dim, bias=True)
+        self.head = LinearSeqPredHead(config.d_model, config.prediction_dim)  # FIX: instantiate from config
 
         # Initialize the [CLS] token as a learnable parameter
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
@@ -129,15 +147,12 @@ class HeimdallTransformer(nn.Module):
                 UserWarning,
                 stacklevel=2,
             )
-            logits = self.lm_model(inputs[0], conditional_tokens, attention_mask) + self.lm_model(
-                inputs[1],
-                conditional_tokens,
-                attention_mask,
-            )
+            outputs1, outputs2 = (self.lm_model(inputs[i], conditional_tokens, attention_mask) for i in range(2))
+            outputs = TransformerOutput(**{key: outputs1[key] + outputs2[key] for key in outputs1})
         else:
-            logits = self.lm_model(inputs, conditional_tokens, attention_mask)
+            outputs = self.lm_model(inputs, conditional_tokens, attention_mask)
 
-        return logits
+        return outputs
 
         # loss = None
         # if labels is not None:
@@ -239,10 +254,74 @@ class HeimdallTransformer(nn.Module):
         # Encoder
         encoder_output = self.encoder(input_embeds, src_key_padding_mask=attention_mask)
 
-        # Taking just the CLS token to pass to the decoder
-        cls_token = encoder_output[:, 0, :]
+        return self.head(encoder_output)
 
-        # Decoder
-        prediction_scores = self.decoder(cls_token)
 
-        return prediction_scores
+class CellPredHeadMixin:
+    def forward(self, encoder_output) -> TransformerOutput:
+        cls_emb = encoder_output[:, 0, :]
+        logits = self.decoder(cls_emb.unsqueeze(1)).squeeze(1)
+        return TransformerOutput(
+            logits=logits,
+            sequence_embeddings=encoder_output,
+            cls_embeddings=cls_emb,
+        )
+
+
+class SeqPredHeadMixin:
+    def forward(self, encoder_output) -> TransformerOutput:
+        logits = self.decoder(encoder_output[:, 1:, :])
+        return TransformerOutput(
+            logits=logits,
+            sequence_embeddings=encoder_output,
+            cls_embeddings=encoder_output[:, 0, :],
+        )
+
+
+class LinearDecoderMixin(nn.Module):
+    def __init__(self, dim_in: int, dim_out: Optional[int] = None, dropout: float = 0.0, **kwargs):
+        super().__init__()
+        if dim_out is None:
+            dim_out = dim_in
+        self.decoder = nn.Sequential(
+            nn.Linear(dim_in, dim_out, **kwargs),
+            nn.Dropout(dropout),
+        )
+
+
+class FFN(nn.Module):
+    def __init__(self, dim_in: int, dim_out: Optional[int] = None, mult: int = 4, dropout: float = 0.0):
+        super().__init__()
+
+        dim_inner = int(dim_in * mult)
+        if dim_out is None:
+            dim_out = dim_in
+
+        self.net = nn.Sequential(
+            nn.Linear(dim_in, dim_inner),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_inner, dim_out),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+class PreNormResidual(nn.Module):
+    def __init__(self, module: nn.Module):
+        super().__init__()
+        self.mod = module
+
+    def forward(self, x):
+        res = self.mod(self.norm(x))
+        assert res.shape == x.shape, "Input and output size must be the same for residual operations"
+        return res + x
+
+
+class LinearCellPredHead(CellPredHeadMixin, LinearDecoderMixin):
+    """Linear cell prediction head."""
+
+
+class LinearSeqPredHead(SeqPredHeadMixin, LinearDecoderMixin):
+    """Linear sequence prediction head."""
