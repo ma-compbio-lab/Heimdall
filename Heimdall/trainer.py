@@ -257,8 +257,14 @@ class HeimdallTrainer:
         with torch.no_grad():
             for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
 
-                logits = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
-                labels = batch["labels"].to(logits.device)
+                outputs = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
+                logits = outputs.logits
+                labels = batch["labels"].to(outputs.device)
+
+                if (masks := batch.get("masks")) is not None:
+                    masks = masks.to(outputs.device)
+                    logits, labels = logits[masks], labels[masks]
+
                 loss += self.get_loss(logits, labels).item()
 
                 # predictions = outputs["logits"] if isinstance(outputs, dict) else outputs
