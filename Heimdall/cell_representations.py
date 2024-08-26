@@ -22,6 +22,8 @@ from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
 from tqdm import tqdm
 
+import Heimdall.f_c
+import Heimdall.f_g
 from Heimdall.utils import deprecate, get_value, heimdall_collate_fn
 from notebooks import data_processing_utils
 
@@ -249,10 +251,6 @@ class CellRepresentation:
         self.processed_fcfg = False
 
         if auto_setup:
-            # TODO: get from config
-            from Heimdall.f_c import old_geneformer_fc
-            from Heimdall.f_g import identity_fg
-
             self.preprocess_anndata()
             self.tokenize_cells()
             self.prepare_dataset_loaders()
@@ -557,22 +555,14 @@ class CellRepresentation:
                     return
 
         # Below here is the de facto "else"
-
-        import Heimdall.f_c as f_c
-        import Heimdall.f_g as f_g
-
-        if hasattr(f_g, f_g_name):
-            real_f_g = getattr(f_g, f_g_name)
-        else:
+        if (f_g := getattr(Heimdall.f_g, f_g_name, None)) is None:
             raise ValueError(f"f_g {f_g_name} does not exist. Please check for the correct name in config")
 
-        if hasattr(f_c, f_c_name):
-            real_f_c = getattr(f_c, f_c_name)
-        else:
+        if (f_c := getattr(Heimdall.f_c, f_c_name, None)) is None:
             raise ValueError(f"f_c {f_c_name} does not exist. Please check for the correct name in config")
 
-        self.preprocess_f_g(real_f_g)
-        cell_reps = self.preprocess_f_c(real_f_c)
+        self.preprocess_f_g(f_g)
+        cell_reps = self.preprocess_f_c(f_c)
         self.adata.layers["cell_representation"] = cell_reps
         if (self._cfg.cache_preprocessed_dataset_dir) is not None:
             with open(preprocessed_reps_path, "wb") as rep_file:
