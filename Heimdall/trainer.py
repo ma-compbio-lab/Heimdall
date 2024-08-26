@@ -193,7 +193,10 @@ class HeimdallTrainer:
         if self.accelerator.is_main_process:
             print("> Model has finished Training")
 
-    def get_loss(self, logits, labels):
+    def get_loss(self, logits, labels, masks=None):
+        if masks is not None:
+            logits, labels = logits[masks], labels[masks]
+
         if self.custom_loss_func:
             loss = self.loss_fn(logits, labels)
         elif self.cfg.loss.name == "BCEWithLogitsLoss":
@@ -220,11 +223,12 @@ class HeimdallTrainer:
 
                 lr = self.lr_scheduler.get_last_lr()[0]
                 with self.accelerator.accumulate(self.model):
+                    outputs = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
+                    labels = batch["labels"].to(outputs.device)
+                    if (masks := batch.get("masks")) is not None:
+                        masks = masks.to(outputs.device)
 
-                    logits = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
-                    labels = batch["labels"].to(logits.device)
-
-                    loss = self.get_loss(logits, labels)
+                    loss = self.get_loss(outputs.logits, labels, masks=masks)
 
                     self.accelerator.backward(loss)
                     if self.accelerator.sync_gradients:

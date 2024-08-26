@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import default_collate
 
-MAIN_KEYS = {"inputs", "labels"}
+MAIN_KEYS = {"inputs", "labels", "masks"}
 
 
 def get_value(dictionary, key, default=False):
