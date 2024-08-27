@@ -9,6 +9,7 @@ import torch.nn as nn
 from omegaconf import DictConfig
 
 from Heimdall.cell_representations import CellRepresentation
+from Heimdall.utils import instantiate_from_config
 
 # try:
 #     from flash_attn.models.bert import BertEncoder
@@ -115,8 +116,7 @@ class HeimdallTransformer(nn.Module):
             norm_first=True,  # BERT uses LayerNorm before self-attention and feedforward networks
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.num_encoder_layers)
-        # self.decoder = nn.Linear(config.d_model, config.prediction_dim, bias=True)
-        self.head = LinearSeqPredHead(config.d_model, self.num_labels)  # FIX: instantiate from config
+        self.head = instantiate_from_config(config.head_config, dim_in=config.d_model, dim_out=self.num_labels)
 
         # Initialize the [CLS] token as a learnable parameter
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
