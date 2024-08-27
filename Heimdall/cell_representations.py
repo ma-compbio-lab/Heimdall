@@ -87,7 +87,6 @@ class CellRepresentation(SpecialTokenMixin):
         self.trainer_cfg = config.trainer
         self.scheduler_cfg = config.scheduler
         self.adata = None
-        # self.task_structure = config.tasks.args.task_structure
         self.processed_fcfg = False
 
         if auto_setup:
