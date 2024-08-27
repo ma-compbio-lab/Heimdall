@@ -3,7 +3,7 @@ import math
 import warnings
 from functools import partial, wraps
 from pprint import pformat
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -15,6 +15,7 @@ MAIN_KEYS = {"inputs", "labels", "masks"}
 
 def instantiate_from_config(
     config: DictConfig,
+    *args: Tuple[Any],
     _target_key: str = "type",
     _params_key: str = "args",
     _disable_key: str = "disable",
@@ -35,10 +36,10 @@ def instantiate_from_config(
 
     # Instantiate object and handel exception during instantiation
     try:
-        return cls(**full_kwargs)
+        return cls(*args, **full_kwargs)
     except Exception as e:
         raise RuntimeError(
-            f"Failed to instantiate {cls!r} with kwargs:\n{pformat(full_kwargs)}",
+            f"Failed to instantiate {cls!r} with\nargs:\n{pformat(args)}\nkwargs:\n{pformat(full_kwargs)}",
         ) from e
 
 
