@@ -1,7 +1,8 @@
 args:
-  task_type: classification
+  task_type: multiclass
   task_structure: paired
   interaction_type: task_ko
+  splits: predefined # will automatically search for the train/val/test masks, otherwise will use "random"
   metrics:
     - Accuracy
   train_split: 0.8
