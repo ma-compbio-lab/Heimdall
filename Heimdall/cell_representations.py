@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from numpy.typing import NDArray
-from omegaconf.errors import ConfigAttributeError
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
@@ -250,31 +249,7 @@ class CellRepresentation(SpecialTokenMixin):
     def prepare_dataset_loaders(self):
         # Set up full dataset given the processed cell representation data
         # This will prepare: labels, splits
-        full_dataset: Dataset
-        try:
-            # Instantiate dataset object
-            full_dataset = instantiate_from_config(self._cfg.tasks.args.dataset_config, self)
-            # dataset_cls = getattr(
-            #     importlib.import_module("Heimdall.cell_representations"),
-            #     self._cfg.tasks.args.dataset_type,
-            # )
-        except ConfigAttributeError:  # XXX: to be deprecated
-            warnings.warn(
-                "Failed to instantiate data class, rolling back to previous handling",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            from Heimdall.datasets import PairedInstanceDataset, SingleInstanceDataset
-
-            if self.task_structure == "single":
-                full_dataset = SingleInstanceDataset(self)
-            elif self.task_structure == "paired":
-                full_dataset = PairedInstanceDataset(self)
-            else:
-                raise ValueError("config.tasks.args.task_structure must be 'single' or 'paired'")
-
-        # dataset_kwargs = self._cfg.tasks.args.get("dataset_args", {})
-        # full_dataset = dataset_cls(self, **dataset_kwargs)
+        full_dataset: Dataset = instantiate_from_config(self._cfg.tasks.args.dataset_config, self)
         self.datasets = {"full": full_dataset}
 
         # Set up dataset splits given the data splits

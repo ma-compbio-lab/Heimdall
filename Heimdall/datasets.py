@@ -178,14 +178,6 @@ class PairedInstanceDataset(Dataset):
         }
 
 
-# class SpecialTokenMixin:
-#     _SPECIAL_TOKENS = ["pad", "mask"]
-#
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.special_tokens = {token: self.data.sequence_length + i for i, token in enumerate(self._SPECIAL_TOKENS)}
-
-
 class PretrainDataset(SingleInstanceDataset, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
