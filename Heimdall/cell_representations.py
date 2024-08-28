@@ -17,6 +17,7 @@ from numpy.typing import NDArray
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
+import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
@@ -250,8 +251,9 @@ class CellRepresentation:
 
         if auto_setup:
             # TODO: get from config
-            from Heimdall.f_c import old_geneformer_fc
-            from Heimdall.f_g import identity_fg
+            #from Heimdall.f_c import geneformer_fc
+            #from Heimdall.f_c import old_geneformer_fc
+            #from Heimdall.f_g import identity_fg
 
             self.preprocess_anndata()
             self.tokenize_cells()
@@ -500,9 +502,17 @@ class CellRepresentation:
 
         """
         assert self.fg_cfg.args.output_type in ["ids", "vector"]
+        output = f_g(self.adata.var, self.dataset_preproc_cfg.species)
 
-        # For identity, we convert each of the vars into a unique ID
-        gene_mapping = f_g(self.adata.var)
+        if isinstance(output, tuple) and isinstance(output[0], torch.nn.Embedding):
+            #if the output is a tuple with an embedding layer and gene mapping
+            embedding_layer, gene_mapping = output
+            self.embedding_layer = embedding_layer
+            print("> f_g returned an nn.Embedding layer. Storing the layer for later use.")
+
+        else:
+            #if no embedding layer is provided, treat the output as the gene mapping
+            gene_mapping = output
 
         assert all(
             isinstance(value, (np.ndarray, list, int)) for value in gene_mapping.values()
@@ -512,6 +522,8 @@ class CellRepresentation:
         print(f"> Finished calculating f_g with {self.fg_cfg.name}")
         return
 
+
+    
     def preprocess_f_c(self, f_c):
         """Process f_c.
 
@@ -522,10 +534,21 @@ class CellRepresentation:
         The f_c will take as input the f_g, then the anndata, then the
 
         """
-        cell_reps = f_c(self.f_g, self.adata)
+        if hasattr(self, 'embedding_layer'):
+            #if an embedding layer exists, pass it along with the gene mapping and anndata
+            cell_reps = f_c(self.f_g, self.adata, self.embedding_layer)
+
+        else:
+            cell_reps = f_c(self.f_g, self.adata)
         print(f"> Finished calculating f_c with {self.fc_cfg.name}")
         self.processed_fcfg = True
         return cell_reps
+
+
+
+
+ 
+
 
     @check_states(adata=True)
     def tokenize_cells(self):

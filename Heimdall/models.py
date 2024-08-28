@@ -31,7 +31,7 @@ class TransformerConfig:
 
 
 class HeimdallTransformer(nn.Module):
-    def __init__(self, config: TransformerConfig, input_type: str, conditional_input_types: Optional[dict] = None):
+    def __init__(self, config: TransformerConfig, input_type: str, conditional_input_types: Optional[dict] = None, embedding_layer=None):
         super().__init__()
         """Heimdall transformer model.
 
@@ -61,14 +61,21 @@ class HeimdallTransformer(nn.Module):
         self.conditional_input_types = conditional_input_types
         self.input_type = input_type
         self.num_labels = config.prediction_dim
+        self.embedding_layer = embedding_layer
+
+
 
         # Set up the Input Embedding layers
-        if input_type == "learned":
-            self.input_embeddings = nn.Embedding(config.vocab_size, config.d_model)
-        elif input_type == "predefined":
-            pass
+        if self.embedding_layer is not None:
+            self.input_embeddings = self.embedding_layer
+            print(f"Using provided pretrained embedding layer with shape: {pretrained_embedding_layer.weight.shape}")
         else:
-            raise ValueError("input_type must be either 'learned' or 'predefined'")
+            if input_type == 'learned':
+                self.input_embeddings = nn.Embedding(config.vocab_size, config.d_model)
+            elif input_type == 'predefined':
+                pass
+            else:
+                raise ValueError("input_type must be either 'learned' or 'predefined'")
 
         # Setting up explicit Positional Encodings
         if config.pos_enc == "BERT":
