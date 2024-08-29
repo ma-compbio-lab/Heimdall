@@ -309,9 +309,10 @@ class FFN(nn.Module):
 
 
 class PreNormResidual(nn.Module):
-    def __init__(self, module: nn.Module):
+    def __init__(self, module: nn.Module, dim: int):
         super().__init__()
         self.mod = module
+        self.norm = nn.LayerNorm(dim)
 
     def forward(self, x):
         res = self.mod(self.norm(x))
