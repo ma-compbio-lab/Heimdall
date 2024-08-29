@@ -15,9 +15,7 @@ pip install -r requirements.txt
 pip install torch==2.0.1+cu118 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 
-## Set up for dev
-
-### Install dev tools
+## Dev installation
 
 ```bash
 pip install -U nox pre-commit
@@ -38,27 +36,6 @@ that the pre-commit hooks could automatically apply fixes to the current
 commit. In that case, you can first review the changes and accept them if they
 are appropriate, or make alternative changes to suppress the error. Afterwards,
 recommit the changes.
-
-## Dev notes
-
-### Cheatsheet
-
-```bash
-# Run cell type classification dev experiment with wandb disabled
-WANDB_MODE=disabled python train.py +experiments=classification_experiment_dev
-
-# Run cell type classification dev experiment with wandb offline mode
-WANDB_MODE=offline python train.py +experiments=classification_experiment_dev
-
-# Run cell cell interaction dev experiment with wandb disabled
-WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev
-
-# Run cell cell interaction dev experiment with wandb disabled and overwrite epochs
-WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev tasks.args.epochs=2
-
-# Run cell cell interaction dev experiment with user profile (dev has wandb disabled by default)
-python train.py +experiments=cell_cell_interaction_dev user=lane-remy-dev
-```
 
 # Quickstart
 
@@ -220,4 +197,36 @@ This is activated by passing it through the function:
 
 ```python
 CR.preprocess_f_c(geneformer_fc) ## takes in the geneformer f_c specified above
+```
+
+# Dev Notes
+
+## Cheatsheet
+
+```bash
+# Run cell type classification dev experiment with wandb disabled
+WANDB_MODE=disabled python train.py +experiments=classification_experiment_dev
+
+# Run cell type classification dev experiment with wandb offline mode
+WANDB_MODE=offline python train.py +experiments=classification_experiment_dev
+
+# Run cell cell interaction dev experiment with wandb disabled
+WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev
+
+# Run cell cell interaction dev experiment with wandb disabled and overwrite epochs
+WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev tasks.args.epochs=2
+
+# Run cell cell interaction dev experiment with user profile (dev has wandb disabled by default)
+python train.py +experiments=cell_cell_interaction_dev user=lane-remy-dev
+```
+
+## Local tests
+
+We use [pytest](https://docs.pytest.org/en/stable/getting-started.html) to write local tests.
+New test suites can be added under `tests/test_{suite_name}.py`.
+
+Run a particular test suite with:
+
+```bash
+python -m pytest tests/test_{suite_name}.py
 ```
