@@ -1,0 +1,103 @@
+/var/spool/slurmd/job4443625/slurm_script: line 12: activate: No such file or directory
+
+    Copy/Paste this in your local terminal to ssh tunnel with remote
+    -----------------------------------------------------------------
+    ssh -N -L 8976:10.1.121.159:8976 wenduoc@lanec1.compbio.cs.cmu.edu
+    -----------------------------------------------------------------
+    Then open a browser on your local machine to the following address
+    ------------------------------------------------------------------
+    localhost:8976  (prefix w/ https:// if using password)
+    ------------------------------------------------------------------
+    
+[I 2024-08-29 18:04:46.167 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2024-08-29 18:04:46.175 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[W 2024-08-29 18:04:46.178 LabApp] 'iopub_data_rate_limit' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2024-08-29 18:04:46.178 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2024-08-29 18:04:46.179 LabApp] 'token' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2024-08-29 18:04:46.183 ServerApp] ServerApp.iopub_data_rate_limit config is deprecated in 2.0. Use ZMQChannelsWebsocketConnection.iopub_data_rate_limit.
+[W 2024-08-29 18:04:46.183 ServerApp] ServerApp.token config is deprecated in 2.0. Use IdentityProvider.token.
+[I 2024-08-29 18:04:46.183 ServerApp] jupyterlab | extension was successfully linked.
+[I 2024-08-29 18:04:46.191 ServerApp] notebook | extension was successfully linked.
+[I 2024-08-29 18:04:46.610 ServerApp] notebook_shim | extension was successfully linked.
+[W 2024-08-29 18:04:46.679 ServerApp] All authentication is disabled.  Anyone who can connect to this server will be able to run code.
+[I 2024-08-29 18:04:46.681 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2024-08-29 18:04:46.687 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2024-08-29 18:04:46.690 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2024-08-29 18:04:46.697 LabApp] JupyterLab extension loaded from /home/wenduoc/mambaforge/envs/scDRS/lib/python3.12/site-packages/jupyterlab
+[I 2024-08-29 18:04:46.698 LabApp] JupyterLab application directory is /home/wenduoc/mambaforge/envs/scDRS/share/jupyter/lab
+[I 2024-08-29 18:04:46.699 LabApp] Extension Manager is 'pypi'.
+[I 2024-08-29 18:04:46.737 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2024-08-29 18:04:46.747 ServerApp] notebook | extension was successfully loaded.
+[I 2024-08-29 18:04:46.748 ServerApp] Serving notebooks from local directory: /home/wenduoc/Heimdall
+[I 2024-08-29 18:04:46.748 ServerApp] Jupyter Server 2.14.1 is running at:
+[I 2024-08-29 18:04:46.748 ServerApp] http://10.1.121.159:8976/tree
+[I 2024-08-29 18:04:46.748 ServerApp]     http://127.0.0.1:8976/tree
+[I 2024-08-29 18:04:46.748 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2024-08-29 18:04:46.810 ServerApp] Skipped non-installed server(s): bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server
+[I 2024-08-29 18:06:39.314 ServerApp] 302 GET / (@10.1.121.1) 1.32ms
+[W 2024-08-29 18:07:15.486 ServerApp] Notebook notebooks/perturb_seq_norman_diff_ko_paired.ipynb is not trusted
+[E 2024-08-29 18:07:15.837 ServerApp] Uncaught exception GET /lab/api/settings?1724969235917 (10.1.121.1)
+    HTTPServerRequest(protocol='http', host='localhost:8976', method='GET', uri='/lab/api/settings?1724969235917', version='HTTP/1.1', remote_ip='10.1.121.1')
+    Traceback (most recent call last):
+      File "/home/wenduoc/mambaforge/envs/scDRS/lib/python3.12/site-packages/tornado/web.py", line 1790, in _execute
+        result = await result
+                 ^^^^^^^^^^^^
+    tornado.iostream.StreamClosedError: Stream is closed
+[I 2024-08-29 18:07:22.173 ServerApp] Kernel started: b57cdd9b-fd1e-4871-8401-ae2026736e67
+[I 2024-08-29 18:07:28.016 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[I 2024-08-29 18:07:28.020 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[I 2024-08-29 18:07:28.058 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[I 2024-08-29 18:07:28.060 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[W 2024-08-29 18:07:28.093 ServerApp] Got events for closed stream <zmq.eventloop.zmqstream.ZMQStream object at 0x7fedd265b170>
+[I 2024-08-29 18:09:22.576 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:15:23.880 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:17:24.870 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:18:46.596 ServerApp] Kernel restarted: b57cdd9b-fd1e-4871-8401-ae2026736e67
+[I 2024-08-29 18:18:46.602 ServerApp] Starting buffering for b57cdd9b-fd1e-4871-8401-ae2026736e67:0f6031aa-a271-496d-8a8c-3af87e00b76d
+[I 2024-08-29 18:18:46.650 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[I 2024-08-29 18:18:46.650 ServerApp] Restoring connection for b57cdd9b-fd1e-4871-8401-ae2026736e67:0f6031aa-a271-496d-8a8c-3af87e00b76d
+[I 2024-08-29 18:19:25.209 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:21:26.892 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:23:28.459 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:25:28.844 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:27:28.927 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:28:25.764 ServerApp] Kernel restarted: b57cdd9b-fd1e-4871-8401-ae2026736e67
+[I 2024-08-29 18:28:25.770 ServerApp] Starting buffering for b57cdd9b-fd1e-4871-8401-ae2026736e67:0f6031aa-a271-496d-8a8c-3af87e00b76d
+[I 2024-08-29 18:28:25.817 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[I 2024-08-29 18:28:25.817 ServerApp] Restoring connection for b57cdd9b-fd1e-4871-8401-ae2026736e67:0f6031aa-a271-496d-8a8c-3af87e00b76d
+[W 2024-08-29 18:28:26.895 ServerApp] Got events for closed stream <zmq.eventloop.zmqstream.ZMQStream object at 0x7fedd03c6ed0>
+[I 2024-08-29 18:29:29.001 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:31:30.618 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:35:30.821 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:37:31.808 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:45:36.321 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:47:38.308 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:49:40.309 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 18:51:40.381 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 19:02:46.206 ServerApp] Kernel restarted: b57cdd9b-fd1e-4871-8401-ae2026736e67
+[I 2024-08-29 19:02:46.213 ServerApp] Starting buffering for b57cdd9b-fd1e-4871-8401-ae2026736e67:0f6031aa-a271-496d-8a8c-3af87e00b76d
+[I 2024-08-29 19:02:46.262 ServerApp] Connecting to kernel b57cdd9b-fd1e-4871-8401-ae2026736e67.
+[I 2024-08-29 19:02:46.262 ServerApp] Restoring connection for b57cdd9b-fd1e-4871-8401-ae2026736e67:0f6031aa-a271-496d-8a8c-3af87e00b76d
+[W 2024-08-29 19:02:49.136 ServerApp] Got events for closed stream <zmq.eventloop.zmqstream.ZMQStream object at 0x7fedd014acf0>
+[I 2024-08-29 19:03:40.712 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 19:05:40.802 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:08:59.251 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:29:09.276 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:31:09.792 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:33:10.573 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:35:11.055 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:45:11.223 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:53:12.934 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 20:55:14.116 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:03:15.378 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:46:00.043 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:47:14.398 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:49:15.243 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:50:59.840 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:52:33.617 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:52:59.492 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 21:57:01.264 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 22:00:53.505 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 22:02:56.287 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 22:06:47.404 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
+[I 2024-08-29 22:07:31.025 ServerApp] Saving file at /notebooks/data_processing_scdrs.ipynb
