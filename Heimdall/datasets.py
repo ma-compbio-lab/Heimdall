@@ -22,7 +22,9 @@ class Dataset(PyTorchDataset, ABC):
     def __init__(self, data: "CellRepresentation"):
         super().__init__()
         self._data = data
+        self.predefined_split = None
 
+        ## we can set up the specific splits here
         if self.labels is None:
             self._setup_labels()
 
@@ -65,11 +67,10 @@ class Dataset(PyTorchDataset, ABC):
 
     def _setup_splits(self):
         # TODO: use predefined splits if available
-        predefined_splits = None
         size = len(self)
         seed = self.data._cfg.seed
 
-        if predefined_splits is None:
+        if self.predefined_split is None:
             warnings.warn(
                 "Pre-defined split unavailable, using random 6/2/2 split",
                 UserWarning,
@@ -77,6 +78,22 @@ class Dataset(PyTorchDataset, ABC):
             )
             train_val_idx, test_idx = train_test_split(np.arange(size), train_size=0.6, random_state=seed)
             train_idx, val_idx = train_test_split(train_val_idx, test_size=0.2, random_state=seed)
+
+        else:
+            warnings.warn(
+                "Using Predefined Split",
+                UserWarning,
+                stacklevel=2,
+            )
+
+            ### must be train test val, in that order
+            all_idx = np.arange(size)
+            train_len = len(self.labels["train"])
+            val_len = len(self.labels["val"])
+            test_len = len(self.labels["test"])
+            train_idx = all_idx[:train_len]
+            test_idx = all_idx[train_len:test_len]
+            val_idx = all_idx[test_len:val_len]
 
         self.splits = {"train": train_idx, "val": val_idx, "test": test_idx}
 
@@ -88,6 +105,10 @@ class Dataset(PyTorchDataset, ABC):
 
     @abstractmethod
     def __getitem__(self, idx) -> Tuple[FeatType, LabelType]: ...
+
+def filter_list(input_list):
+    keywords = ["train", "test", "val"]
+    return [item for item in input_list if any(keyword in item.lower() for keyword in keywords)]
 
 
 class SingleInstanceDataset(Dataset):
@@ -119,8 +140,25 @@ class SingleInstanceDataset(Dataset):
 class PairedInstanceDataset(Dataset):
     def _setup_idx(self):
         # NOTE: full mask is set up during runtime given split masks or the data
-        mask = self.data.adata.obsp["full_mask"]
-        self._idx = np.vstack(np.nonzero(mask)).T  # pairs x 2
+
+        if self.predefined_split == None:
+
+            mask = self.data.adata.obsp["full_mask"]
+            self._idx = np.vstack(np.nonzero(mask)).T  # pairs x 2
+        else:
+            ## we already have the masks defined
+            ## we can and will just vstack and concatenate the three together into one big set
+            train_mask = self.data.adata.obsp["train"]
+            test_mask = self.data.adata.obsp["test"]
+            val_mask = self.data.adata.obsp["val"]
+
+            train_idx = np.vstack(np.nonzero(train_mask)).T  # pairs x 2
+            test_idx = np.vstack(np.nonzero(test_mask)).T  # pairs x 2
+            val_idx = np.vstack(np.nonzero(val_mask)).T  # pairs x 2
+
+            #### adding it together into one large dataset, but the order of train/test/val is preserved
+            self._idx = np.concatenate([train_idx, test_idx, val_idx], axis=0)
+
 
     def _setup_labels(self):
         adata = self.data.adata
@@ -129,38 +167,71 @@ class PairedInstanceDataset(Dataset):
         all_obsp_task_keys, obsp_mask_keys = [], []
         for key in adata.obsp:
             (obsp_mask_keys if key in SPLIT_MASK_KEYS else all_obsp_task_keys).append(key)
+
         all_obsp_task_keys = sorted(all_obsp_task_keys)
+        obsp_mask_keys = sorted(obsp_mask_keys)
 
-        # Select task keys
+        ### in hydra, this can be either a list or a string
         candidate_obsp_task_keys = dataset_task_cfg.interaction_type
-        if candidate_obsp_task_keys == "_all_":
-            obsp_task_keys = all_obsp_task_keys
-        else:
-            if isinstance(candidate_obsp_task_keys, str):
-                candidate_obsp_task_keys = [candidate_obsp_task_keys]
+        if isinstance(candidate_obsp_task_keys, str):
+            candidate_obsp_task_keys = [candidate_obsp_task_keys]
 
-            if invalid_obsp_task_keys := [i for i in candidate_obsp_task_keys if i not in all_obsp_task_keys]:
-                raise ValueError(
-                    f"{len(invalid_obsp_task_keys)} out of {len(candidate_obsp_task_keys)} "
-                    f"specified interaction types are invalid: {invalid_obsp_task_keys}\n"
-                    f"Valid options are: {pformat(all_obsp_task_keys)}",
-                )
+        if invalid_obsp_task_keys := [i for i in candidate_obsp_task_keys if i not in all_obsp_task_keys]:
+            raise ValueError(
+                f"{len(invalid_obsp_task_keys)} out of {len(candidate_obsp_task_keys)} "
+                f"specified interaction types are invalid: {invalid_obsp_task_keys}\n"
+                f"Valid options are: {pformat(all_obsp_task_keys)}",
+            )
+        obsp_task_keys = candidate_obsp_task_keys
 
-            obsp_task_keys = candidate_obsp_task_keys
+        task_type = dataset_task_cfg.task_type
+        if task_type == "multiclass":
 
-        # Set up task mask
-        full_mask = np.sum([np.abs(adata.obsp[i]) for i in obsp_task_keys], axis=-1) > 0
-        adata.obsp["full_mask"] = full_mask
-        nz = np.nonzero(full_mask)
+            ## this should only be the single interaction obsp of interest
+            assert len(obsp_task_keys) == 1
+            ## not using a predefined split
+            if dataset_task_cfg.splits == "all":
+                full_mask = np.sum([np.abs(adata.obsp[i]) for i in obsp_task_keys], axis=-1) > 0
+                adata.obsp["full_mask"] = full_mask
+                nz = np.nonzero(full_mask)
 
-        # TODO: specify task type multiclass/multilabel/regression in config
-        if len(obsp_task_keys) == 1:
-            task_mat = adata.obsp[obsp_task_keys[0]]
-            assert (task_mat.data > 0).all(), "Multiclass task id must be positive"
+                task_mat = adata.obsp[obsp_task_keys[0]]
+                assert (task_mat.data > 0).all(), "Multiclass task id must be positive"
 
-            num_tasks = task_mat.max()  # class id starts from 1. 0's are ignoreed
-            labels = np.array(task_mat[nz]).ravel().astype(np.int64) - 1  # class 0 is not used
-        else:
+                num_tasks = task_mat.max()  # class id starts from 1. 0's are ignoreed
+                labels = np.array(task_mat[nz]).ravel().astype(np.int64) - 1  # class 0 is not used
+                self.labels = labels
+
+            elif dataset_task_cfg.splits == "predefined":
+                self.predefined_split = True
+                task_mat = adata.obsp[obsp_task_keys[0]]  ## same taskmat for everything
+                assert (task_mat.data > 0).all(), "Multiclass task id must be positive"
+
+                labels = {}
+                for split in ["train", "test", "val"]:
+                    split_mask_name = next((key for key in obsp_mask_keys if split in key), None)
+                    if split_mask_name is None:
+                        raise ValueError(f"No key found for split '{split}' in obsp_task_keys")
+
+                    split_mask = adata.obsp[split_mask_name]
+                    split_nz = np.nonzero(split_mask)
+                    split_labels = np.array(task_mat[split_nz]).ravel().astype(np.int64) - 1  # class 0 is not used
+                    labels[split] = split_labels
+
+                    ### renaming the masks for conveniences here
+                    if split != split_mask_name:
+                        adata.obsp[split] = adata.obsp.pop(split_mask_name)
+
+                self.labels = labels
+
+            else:
+                raise ValueError(f"dataset_task_cfg.splits needs to be `all` or `predefined`")
+
+        elif task_type == "binary":
+            full_mask = np.sum([np.abs(adata.obsp[i]) for i in obsp_task_keys], axis=-1) > 0
+            adata.obsp["full_mask"] = full_mask
+            nz = np.nonzero(full_mask)
+
             num_tasks = len(obsp_task_keys)
 
             (labels := np.empty((len(nz[0]), num_tasks), dtype=np.float32)).fill(np.nan)
@@ -168,7 +239,10 @@ class PairedInstanceDataset(Dataset):
                 label_i = np.array(adata.obsp[task][nz]).ravel()
                 labels[:, i][label_i == 1] = 1
                 labels[:, i][label_i == -1] = 0
-        self.labels = labels
+            self.labels = labels
+
+        else:
+            raise NotImplementedError(f"{task_type} Not Implemented Yet")
 
     def __getitem__(self, idx) -> Tuple[Tuple[CellFeatType, CellFeatType], LabelType]:
         cell1_idx, cell2_idx = self.idx[idx]
