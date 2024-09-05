@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import torch
-
+from scipy.sparse import issparse
 
 def load_gene_medians(pickle_file_path):
     with open(pickle_file_path, "rb") as f:
@@ -25,7 +25,6 @@ def value_binning(expression_values, n_bins=10):
     """
     if np.max(expression_values) == 0:
         return np.zeros_like(expression_values, dtype=np.int64)
-        
     non_zero_values = expression_values[expression_values > 0]
     
     bin_edges = np.quantile(non_zero_values, np.linspace(0, 1, n_bins - 1))
@@ -93,31 +92,27 @@ def geneformer_fc(fg, adata, embedding_layer=None):
 
     print("> Performing the f_c using rank-based values, as seen in geneformer")
 
-    df = pd.DataFrame(adata.X, columns=fg.keys())
+    #normalize by gene medians
+    df = pd.DataFrame(adata.X.toarray(), columns=fg.keys()) if hasattr(adata.X, "toarray") else pd.DataFrame(adata.X, columns=fg.keys())
     gene_medians = df.median()
     normalized_df = df.apply(lambda x: x / gene_medians[x.name])
-
+    
     dataset = []
     for i in tqdm(range(len(normalized_df))):
         cell = normalized_df.iloc[i]
         sorted_cell = cell.sort_values(ascending=False).index
+        # Use token ids only
+        cell_w_gene_ids = sorted_cell.tolist()
 
-        if embedding_layer is None:
-            # Use token ids
-            cell_w_gene_ids = [fg[gene] for gene in sorted_cell]
-        else:
-            # Use embeddings from the embedding_layer
-            indices = torch.tensor([fg[gene] for gene in sorted_cell], dtype=torch.long)
-            cell_w_gene_ids = embedding_layer(indices).detach().numpy()  # Convert embeddings to numpy array
-        
         dataset.append(cell_w_gene_ids)
-    #dataset = np.array(dataset, dtype=object if embedding_layer else np.int64)
-    dataset = np.array(dataset)
 
+    dataset = np.array(dataset)
     return dataset
 
 
-def scgpt_fc(fg, adata, B=10):
+
+
+def scgpt_fc(fg, adata, embedding_layer=None, B=10):
     """
     scgpt_fc reprocesses each cell by binning genes based on expression values
     and replacing each gene name with their corresponding token_id.
@@ -136,21 +131,16 @@ def scgpt_fc(fg, adata, B=10):
 
     print("> Performing the f_c using rank-based values with binning, as seen in scGPT")
     df = pd.DataFrame(adata.X.toarray(), columns=fg.keys()) if hasattr(adata.X, "toarray") else pd.DataFrame(adata.X, columns=fg.keys())
-
-    dataset = []
+    df = df[df.columns.intersection(fg.keys())]
     binned_values_dataset = []
     
     for i in tqdm(range(len(df))):
         cell = df.iloc[i]
-        sorted_cell = cell.sort_values(ascending=False).index
-        cell_w_gene_ids = [fg[gene] for gene in sorted_cell]
+        #apply quantile-based binning to the expression values
         binned_values = value_binning(cell.values, n_bins=B)
         
-        combined_representation = list(zip(cell_w_gene_ids, binned_values))
-        dataset.append(combined_representation)
         binned_values_dataset.append(binned_values)
     
-    dataset = np.array(dataset)
     binned_values_dataset = np.array(binned_values_dataset)
     return binned_values_dataset
 

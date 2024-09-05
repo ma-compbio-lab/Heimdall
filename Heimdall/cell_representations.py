@@ -333,25 +333,25 @@ class CellRepresentation:
         return self.adata, symbol_to_ensembl_mapping
 
     def preprocess_anndata(self):
-        if self.adata is not None:
-            raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
+        # if self.adata is not None:
+        #     raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
 
         preprocessed_data_path = None
-        if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            filename = Path(self.dataset_preproc_cfg.data_path).name
-            cache_dir = Path(cache_dir).resolve()
-            cache_dir.mkdir(exist_ok=True, parents=True)
-            preprocessing_string = "_".join(
-                [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
-            )
-            preprocessed_data_path = cache_dir / f"preprocessed_{preprocessing_string}_{filename}"
+        # if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+        #     filename = Path(self.dataset_preproc_cfg.data_path).name
+        #     cache_dir = Path(cache_dir).resolve()
+        #     cache_dir.mkdir(exist_ok=True, parents=True)
+        #     preprocessing_string = "_".join(
+        #         [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
+        #     )
+        #     preprocessed_data_path = cache_dir / f"preprocessed_{preprocessing_string}_{filename}"
 
-            if preprocessed_data_path.is_file():
-                print(f"> Found already preprocessed dataset, loading in {preprocessed_data_path}")
-                self.adata = ad.read_h5ad(preprocessed_data_path)
-                self.sequence_length = len(self.adata.var)
-                print(f"> Finished Processing Anndata Object:\n{self.adata}")
-                return
+        #     if preprocessed_data_path.is_file():
+        #         print(f"> Found already preprocessed dataset, loading in {preprocessed_data_path}")
+        #         self.adata = ad.read_h5ad(preprocessed_data_path)
+        #         self.sequence_length = len(self.adata.var)
+        #         print(f"> Finished Processing Anndata Object:\n{self.adata}")
+        #         return
 
         self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
@@ -362,7 +362,49 @@ class CellRepresentation:
                 data_dir=self._cfg.ensembl_dir,
                 species=self.dataset_preproc_cfg.species,
             )
+        print(self.adata.var.index)
+        
+        ##remove genes missing from esm2 embedding mapping
+        if get_value(self.dataset_preproc_cfg, "filter_genes_esm2"):
+            print("> Checking for missing genes") 
+            #check for species
+            if self.dataset_preproc_cfg.species == 'human':
+                protein_gene_map = torch.load('/work/magroup/shared/Heimdall/data/pretrained_embeddings/ESM2/protein_map_human_ensembl.pt')
+                gene_list = list(protein_gene_map.keys())
+            elif self.dataset_prepoc_cfg.species == 'mouse':
+                protein_gene_map = torch.load('/work/magroup/shared/Heimdall/data/pretrained_embeddings/ESM2/protein_map_mouse_ensembl.pt')
+                gene_list = list(protein_gene_map.keys())
+                
+            # Filter gene_list to only include genes that start with "ENS"
+            filtered_gene_list = [gene for gene in gene_list if gene.startswith("ENS")]
+            genes_to_keep = self.adata.var.index.isin(filtered_gene_list)
+            
+            self.adata = self.adata[:, genes_to_keep]
+        else:
+            print('> Skipping check for missing genes')
 
+        ##remove genes missing from gene2vec embedding mapping
+        if get_value(self.dataset_preproc_cfg, "filter_genes_gene2vec"):
+            print("> Checking for missing genes") 
+            #check for species
+            if self.dataset_preproc_cfg.species == 'human':
+                with open('/work/magroup/shared/Heimdall/data/pretrained_embeddings/gene2vec/gene2vec_genes.pkl', 'rb') as pickle_file:
+                    gene2vec_map = pkl.load(pickle_file)
+                gene_list = list(gene2vec_map.keys())
+            else:
+                raise ValueError("gene2vec is only available for human datasets")
+                
+            # Filter gene_list to only include genes that start with "ENS"
+            filtered_gene_list = [gene for gene in gene_list if gene.startswith("ENS")]
+            genes_to_keep = self.adata.var.index.isin(filtered_gene_list)
+            
+            self.adata = self.adata[:, genes_to_keep]
+
+        else:
+            print('> Skipping check for missing genes')
+
+
+        
         if get_value(self.dataset_preproc_cfg, "normalize"):
             # Normalizing based on target sum
             print("> Normalizing anndata...")
@@ -381,7 +423,6 @@ class CellRepresentation:
             print("> Skipping Log Transforming anndata..")
 
         if get_value(self.dataset_preproc_cfg, "top_n_genes") and self.dataset_preproc_cfg["top_n_genes"] != "false":
-            print(self.dataset_preproc_cfg)
             # Identify highly variable genes
             print(f"> Using highly variable subset... top {self.dataset_preproc_cfg.top_n_genes} genes")
             sc.pp.highly_variable_genes(self.adata, n_top_genes=self.dataset_preproc_cfg.top_n_genes)
@@ -540,8 +581,10 @@ class CellRepresentation:
 
         else:
             cell_reps = f_c(self.f_g, self.adata)
+
         print(f"> Finished calculating f_c with {self.fc_cfg.name}")
         self.processed_fcfg = True
+        self.adata.layers["cell_representation"] = cell_reps
         return cell_reps
 
 
@@ -561,26 +604,25 @@ class CellRepresentation:
         """
         f_g_name = self.fg_cfg.name
         f_c_name = self.fc_cfg.name
-        if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            filename = Path(self.dataset_preproc_cfg.data_path).name
-            cache_dir = Path(cache_dir).resolve()
-            cache_dir.mkdir(exist_ok=True, parents=True)
-            preprocessing_string = "_".join(
-                [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
-            )
-            preprocessed_reps_path = (
-                cache_dir / f"preprocessed_{preprocessing_string}_{filename}_{f_g_name}_{f_c_name}.pkl"
-            )
-            if os.path.isfile(preprocessed_reps_path):
-                with open(preprocessed_reps_path, "rb") as rep_file:
-                    cell_reps = pkl.load(rep_file)
-                    self.adata.layers["cell_representation"] = cell_reps
-                    print("> Using cached cell representations")
-                    self.processed_fcfg = True
-                    return
+        # if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+        #     filename = Path(self.dataset_preproc_cfg.data_path).name
+        #     cache_dir = Path(cache_dir).resolve()
+        #     cache_dir.mkdir(exist_ok=True, parents=True)
+        #     preprocessing_string = "_".join(
+        #         [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
+        #     )
+        #     preprocessed_reps_path = (
+        #         cache_dir / f"preprocessed_{preprocessing_string}_{filename}_{f_g_name}_{f_c_name}.pkl"
+        #     )
+        #     if os.path.isfile(preprocessed_reps_path):
+        #         with open(preprocessed_reps_path, "rb") as rep_file:
+        #             cell_reps = pkl.load(rep_file)
+        #             self.adata.layers["cell_representation"] = cell_reps
+        #             print("> Using cached cell representations")
+        #             self.processed_fcfg = True
+        #             return
 
         # Below here is the de facto "else"
-
         import Heimdall.f_c as f_c
         import Heimdall.f_g as f_g
 
