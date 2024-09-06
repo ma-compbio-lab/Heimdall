@@ -174,7 +174,7 @@ class PairedInstanceDataset(Dataset):
             nz = np.nonzero(full_mask)
 
             # Set up predefined splits
-            self.splits = {split: np.where(mask[nz])[0] for split, mask in masks.items()}
+            self.splits = {split: np.where(mask[nz])[1] for split, mask in masks.items()}
 
         else:
             raise ValueError(f"Unknown split type {split_type!r}")
