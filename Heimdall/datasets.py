@@ -35,7 +35,7 @@ class Dataset(PyTorchDataset, ABC):
         if self.splits is None:
             self._setup_random_splits()
         split_size_str = "\n  ".join(f"{i}: {len(j):,}" for i, j in self.splits.items())
-        print(f"Dataset splits sizes:\n{split_size_str}")
+        print(f"Dataset splits sizes:\n  {split_size_str}")
 
     @property
     def idx(self) -> NDArray[np.int_]:
@@ -162,7 +162,7 @@ class PairedInstanceDataset(Dataset):
         elif (split_type := dataset_task_cfg.splits.type) == "predefined":
             masks = {}
             for split in self.SPLITS:
-                if (split_key := dataset_task_cfg.splits.keys.get(split)) is None:
+                if (split_key := dataset_task_cfg.splits.keys_.get(split)) is None:
                     warnings.warn(
                         f"Skipping {split!r} split as the corresponding key is not found",
                         UserWarning,
@@ -170,7 +170,7 @@ class PairedInstanceDataset(Dataset):
                     )
                     continue
                 masks[split] = adata.obsp[split_key]
-            full_mask = np.any(list(masks.values()), axis=0)
+            full_mask = np.sum(list(masks.values())).astype(bool)
             nz = np.nonzero(full_mask)
 
             # Set up predefined splits
@@ -187,6 +187,7 @@ class PairedInstanceDataset(Dataset):
             if len(obsp_task_keys) > 1:
                 raise ValueError(f"{task_type!r} only supports a single task key, provided task keys: {obsp_task_keys}")
 
+            task_mat = adata.obsp[obsp_task_keys[0]]
             num_tasks = task_mat.max()  # class id starts from 1. 0's are ignoreed
             labels = np.array(task_mat[nz]).ravel().astype(np.int64) - 1  # class 0 is not used
 
