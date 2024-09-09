@@ -12,6 +12,7 @@ defaults:
   - override /optimizer: AdamW
   - override /f_c: geneformer
   - override /f_g: gene2vec
+
   - override /loss: CrossEntropyLoss
 
 ####
