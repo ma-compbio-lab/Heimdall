@@ -18,7 +18,6 @@ from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
 from tqdm import tqdm
 
@@ -209,7 +208,7 @@ class CellRepresentation(SpecialTokenMixin):
             )
         print(self.adata.var.index)
 
-        ##remove genes missing from esm2 embedding mapping
+        # remove genes missing from esm2 embedding mapping
         if get_value(self.dataset_preproc_cfg, "filter_genes_esm2"):
             print("> Checking for missing genes")
             # check for species
@@ -232,7 +231,7 @@ class CellRepresentation(SpecialTokenMixin):
         else:
             print("> Skipping check for missing genes")
 
-        ##remove genes missing from gene2vec embedding mapping
+        # remove genes missing from gene2vec embedding mapping
         if get_value(self.dataset_preproc_cfg, "filter_genes_gene2vec"):
             print("> Checking for missing genes")
             # check for species

@@ -2,8 +2,6 @@ import pickle
 
 import numpy as np
 import pandas as pd
-import torch
-from scipy.sparse import issparse
 from tqdm import tqdm
 
 
@@ -87,7 +85,8 @@ def geneformer_fc(fg, adata, embedding_layer=None):
         - adata: the whole, already processed, anndata object with the CellxGene Matrix
 
     output:
-        - output: dataset, a numpy object that is dimension CellxGene where the position has the token denoting what gene it is
+        - output: dataset, a numpy object that is dimension CellxGene where the position has the token denoting what
+          gene it is
 
     """
     assert all(isinstance(value, (int)) for value in fg.values()), "Current geneformer_fc only supports token ids"
@@ -116,14 +115,14 @@ def geneformer_fc(fg, adata, embedding_layer=None):
     return dataset
 
 
-def scgpt_fc(fg, adata, embedding_layer=None, B=10):
+def scgpt_fc(fg, adata, embedding_layer=None, num_bins=10):
     """scgpt_fc reprocesses each cell by binning genes based on expression
     values and replacing each gene name with their corresponding token_id.
 
     args:
         - fg: dictionary that maps gene names to token ids
         - adata: the whole, already processed, anndata object with the CellxGene Matrix
-        - B: number of bins for value binning
+        - num_bins: number of bins for value binning
 
     output:
         - dataset: a numpy object that is dimension CellxGene where the position has the token denoting what gene it is
@@ -145,7 +144,7 @@ def scgpt_fc(fg, adata, embedding_layer=None, B=10):
     for i in tqdm(range(len(df))):
         cell = df.iloc[i]
         # apply quantile-based binning to the expression values
-        binned_values = value_binning(cell.values, n_bins=B)
+        binned_values = value_binning(cell.values, n_bins=num_bins)
 
         binned_values_dataset.append(binned_values)
 

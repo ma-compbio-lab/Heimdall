@@ -1,14 +1,22 @@
 import importlib
+import json
 import math
 import warnings
+from collections import defaultdict
+from dataclasses import dataclass, field
 from functools import partial, wraps
+from pathlib import Path
 from pprint import pformat
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import mygene
+import pandas as pd
+import requests
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 from torch.utils.data import default_collate
+from tqdm.auto import tqdm
 
 MAIN_KEYS = {"inputs", "labels", "masks"}
 
@@ -151,17 +159,6 @@ def deprecate(func: Optional[Callable] = None, raise_error: bool = False):
 
     return bounded
 
-
-import json
-from collections import defaultdict
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-import mygene
-import pandas as pd
-import requests
-from tqdm.auto import tqdm
 
 MG = mygene.MyGeneInfo()
 
@@ -328,7 +325,7 @@ def _load_ensembl_table(
             symbol_to_ensembl[symbol].append(ensembl)
             ensembl_to_symbol[ensembl].append(symbol)
 
-        symbol_to_ensembl, ensembl_to_symbol = map(
+        symbol_to_ensembl, ensembl_to_symbol = map(  # noqa: C417
             lambda x: {i: sorted(j) for i, j in x.items()},
             (symbol_to_ensembl, ensembl_to_symbol),
         )

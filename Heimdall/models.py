@@ -79,7 +79,7 @@ class HeimdallTransformer(nn.Module):
         # Set up the Input Embedding layers
         if self.embedding_layer is not None:
             self.input_embeddings = self.embedding_layer
-            print(f"Using provided pretrained embedding layer with shape: {pretrained_embedding_layer.weight.shape}")
+            print(f"Using provided pretrained embedding layer with shape: {embedding_layer.weight.shape}")
 
         self.num_labels = data.num_tasks
         self.vocab_size = data.sequence_length + 2  # <PAD> and <MASK> TODO: data.vocab_size
