@@ -102,7 +102,7 @@ def geneformer_fc(fg, adata, embedding_layer=None):
         cell = normalized_df.iloc[i]
         sorted_cell = cell.sort_values(ascending=False).index
         # Use token ids only
-        cell_w_gene_ids = sorted_cell.tolist()
+        cell_w_gene_ids = [fg[gene] for gene in sorted_cell]
 
         dataset.append(cell_w_gene_ids)
 
