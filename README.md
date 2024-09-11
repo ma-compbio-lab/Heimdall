@@ -198,16 +198,14 @@ remote branch, run `nox` to perform a final quality check. Note that `nox` is
 linting only and does not fix the issues for you. You need to address
 the issues manually based on the instructions provided.
 
-```bash
-nox
-```
+### Installing `Heimdall` locally as a pip package
 
-Commit changes once the quality checks are passed, which triggers the pre-commit
-hook to run some final formatting checks and catch any remaining issues. Note
-that the pre-commit hooks could automatically apply fixes to the current
-commit. In that case, you can first review the changes and accept them if they
-are appropriate, or make alternative changes to suppress the error. Afterwards,
-recommit the changes.
+In order to run `Heimdall` outside of the home directory (e.g. in the `notebooks/` directory),
+you can install a local pip package version with
+
+```bash
+pip install ./
+```
 
 ## Cheatsheet
 
@@ -238,3 +236,8 @@ Run a particular test suite with:
 ```bash
 python -m pytest tests/test_{suite_name}.py
 ```
+
+## Turning off caching
+
+To turn off dataset caching for dev purposes,
+set `cache_preprocessed_dataset_dir: null` in `config/global_vars.yaml`.
