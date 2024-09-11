@@ -32,10 +32,12 @@ class Dataset(PyTorchDataset, ABC):
         self._setup_idx()
 
         # Set up random splits if predefined splits are unavailable
+        split_type = "predefined"
         if self.splits is None:
             self._setup_random_splits()
+            split_type = "random"
         split_size_str = "\n  ".join(f"{i}: {len(j):,}" for i, j in self.splits.items())
-        print(f"Dataset splits sizes:\n  {split_size_str}")
+        print(f"> Dataset splits sizes ({split_type}):\n  {split_size_str}")
 
     @property
     def idx(self) -> NDArray[np.int_]:
