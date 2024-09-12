@@ -1,4 +1,3 @@
-import pickle
 from abc import ABC, abstractmethod
 from typing import Sequence
 
@@ -70,14 +69,14 @@ class Fe(ABC):
         return embedding_indices
 
 
-class Fc(ABC):
-    """Abstraction for cell embedding."""
-
-    def __init__(self, fg: Fg, fe: Fe, adata: ad.AnnData, config: dict):
-        self.fg = fg
-        self.fe = fe
-        self.adata = adata
-        self.config = config
+# class Fc(ABC):
+#     """Abstraction for cell embedding."""
+#
+#     def __init__(self, fg: Fg, fe: Fe, adata: ad.AnnData, config: dict):
+#         self.fg = fg
+#         self.fe = fe
+#         self.adata = adata
+#         self.config = config
 
 
 def old_geneformer_fc(fg, adata):

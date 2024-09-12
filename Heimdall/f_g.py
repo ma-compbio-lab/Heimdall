@@ -74,7 +74,9 @@ class PretrainedFg(Fg, ABC):
         first_embedding = next(iter(embedding_map.values()))
         if len(first_embedding) < self.config.d_embedding:
             raise ValueError(
-                f"Dimensionality of pretrained embeddings ({len(first_embedding)} is less than the embedding dimensionality specified in the config ({self.config.d_embedding}). Please decrease the embedding dimensionality to be compatible with the pretrained embeddings.",
+                f"Dimensionality of pretrained embeddings ({len(first_embedding)} is less than the embedding "
+                "dimensionality specified in the config ({self.config.d_embedding}). Please decrease the embedding"
+                "dimensionality to be compatible with the pretrained embeddings.",
             )
 
         valid_gene_names = list(embedding_map.keys())
@@ -111,7 +113,7 @@ class IdentityFg(Fg):
 
     def preprocess_embeddings(self):
         self.gene_embeddings = None
-        self.adata.var["embedding_index"] = np.arange(self.num_genes)
+        self.adata.var["identity_embedding_index"] = np.arange(self.num_genes)
         self.adata.var["identity_valid_mask"] = np.full(self.num_genes, True)
 
 
