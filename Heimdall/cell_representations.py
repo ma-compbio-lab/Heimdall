@@ -17,8 +17,7 @@ from numpy.typing import NDArray
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
-from torch.utils.data import DataLoader
-from torch.utils.data import Subset
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 import Heimdall.f_c
@@ -206,7 +205,6 @@ class CellRepresentation(SpecialTokenMixin):
                 data_dir=self._cfg.ensembl_dir,
                 species=self.dataset_preproc_cfg.species,
             )
-        print(self.adata.var.index)
 
         # remove genes missing from esm2 embedding mapping
         if get_value(self.dataset_preproc_cfg, "filter_genes_esm2"):
@@ -356,7 +354,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         return df_balanced
 
-    def preprocess_f_g(self, f_g):
+    def preprocess_f_g(self, fg_constructor):
         """Process f_g.
 
         Run the f_g, and then preprocess and store it locally the f_g must
@@ -387,25 +385,27 @@ class CellRepresentation(SpecialTokenMixin):
 
         """
         assert self.fg_cfg.args.output_type in ["ids", "vector"]
-        output = f_g(self.adata.var, self.dataset_preproc_cfg.species)
 
-        if isinstance(output, tuple) and isinstance(output[0], torch.nn.Embedding):
-            # if the output is a tuple with an embedding layer and gene mapping
-            embedding_layer, gene_mapping = output
-            self.embedding_layer = embedding_layer
-            print("> f_g returned an nn.Embedding layer. Storing the layer for later use.")
+        self.fg = fg_constructor(self.adata, self.fg_cfg.args)
+        self.fg.preprocess_embeddings()
+        # output = f_g(self.adata.var, self.dataset_preproc_cfg.species)
 
-        else:
-            # if no embedding layer is provided, treat the output as the gene mapping
-            gene_mapping = output
+        # if isinstance(output, tuple) and isinstance(output[0], torch.nn.Embedding):
+        #     # if the output is a tuple with an embedding layer and gene mapping
+        #     embedding_layer, gene_mapping = output
+        #     self.embedding_layer = embedding_layer
+        #     print("> f_g returned an nn.Embedding layer. Storing the layer for later use.")
 
-        assert all(
-            isinstance(value, (np.ndarray, list, int)) for value in gene_mapping.values()
-        ), "Make sure that all values in the gene_mapping dictionary are either int, list or np array"
+        # else:
+        #     # if no embedding layer is provided, treat the output as the gene mapping
+        #     gene_mapping = output
 
-        self.f_g = gene_mapping
+        # assert all(
+        #     isinstance(value, (np.ndarray, list, int)) for value in gene_mapping.values()
+        # ), "Make sure that all values in the gene_mapping dictionary are either int, list or np array"
+
+        # self.f_g = gene_mapping
         print(f"> Finished calculating f_g with {self.fg_cfg.name}")
-        return
 
     def preprocess_f_c(self, f_c):
         """Process f_c.
@@ -419,10 +419,10 @@ class CellRepresentation(SpecialTokenMixin):
         """
         if hasattr(self, "embedding_layer"):
             # if an embedding layer exists, pass it along with the gene mapping and anndata
-            cell_reps = f_c(self.f_g, self.adata, self.embedding_layer)
+            cell_reps = f_c(self.fg, self.adata, self.embedding_layer)
 
         else:
-            cell_reps = f_c(self.f_g, self.adata)
+            cell_reps = f_c(self.fg, self.adata)
 
         print(f"> Finished calculating f_c with {self.fc_cfg.name}")
         self.processed_fcfg = True

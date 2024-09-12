@@ -55,21 +55,31 @@ def old_geneformer_fc(fg, adata):
 
     """
 
-    assert all(isinstance(value, (int)) for value in fg.values()), "Current geneformer_fc only supports token ids"
+    # assert all(isinstance(value, (int)) for value in fg.values()), "Current geneformer_fc only supports token ids"
+    valid_mask = adata.var["valid_mask"]
+    valid_genes = adata.var_names[valid_mask].values
 
-    print("> Performing the f_c using rank-based values, as seen in geneformer")
-    df = pd.DataFrame(adata.X, columns=fg.keys())
-    gene_medians = df.median()
-    normalized_df = df.apply(lambda x: x / gene_medians[x.name])
+    expression = adata.X[:, valid_mask]
+    gene_medians = np.median(expression, axis=0)
+    normalized_expression = expression / gene_medians
 
-    dataset = []
-    for i in tqdm(range(len(normalized_df))):
-        cell = normalized_df.iloc[i]
-        sorted_cell = cell.sort_values(ascending=False).index
-        cell_w_gene_ids = [fg[gene] for gene in sorted_cell]
-        dataset.append(cell_w_gene_ids)
+    argsorted_expression = np.argsort(normalized_expression, axis=1)[:, ::-1]
 
-    dataset = np.array(dataset)
+    # print("> Performing the f_c using rank-based values, as seen in geneformer")
+    # df = pd.DataFrame(adata.X, columns=fg.keys())
+    # gene_medians = df.median()
+    # normalized_df = df.apply(lambda x: x / gene_medians[x.name])
+
+    gene_lists = valid_genes[argsorted_expression]
+    dataset = np.array([fg[gene_list] for gene_list in gene_lists])
+    # dataset = []
+    # for cell_index, gene_indices in tqdm(enumerate(argsorted_expression)):
+    #     # cell = normalized_df.iloc[i]
+    #     # sorted_cell = cell.sort_values(ascending=False).index
+    #     cell_w_gene_ids = [fg[gene] for gene in sorted_cell]
+    #     dataset.append(cell_w_gene_ids)
+
+    # dataset = np.array(dataset)
     return dataset
 
 
