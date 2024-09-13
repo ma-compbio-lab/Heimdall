@@ -5,14 +5,18 @@
 # Installation
 
 ```bash
-git clone
+# Clone repository
+git clone https://github.com/gkrieg/Heimdall && cd Heimdall
 
-cd Heimdall
+# Create conda env
+conda create --name heimdall python=3.10 && conda activate heimdall
 
-conda create --name heimdall python=3.10
-conda activate heimdall
+# Install dependencies
+pip install torch==2.0.1+cu118 --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
-pip install torch==2.0.1+cu118 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Install Heimdall (in editable `-e` mode)
+pip install -e .
 ```
 
 # Quickstart
@@ -197,15 +201,6 @@ After you are done committing changes and are ready to push the commits to the
 remote branch, run `nox` to perform a final quality check. Note that `nox` is
 linting only and does not fix the issues for you. You need to address
 the issues manually based on the instructions provided.
-
-### Installing `Heimdall` locally as a pip package
-
-In order to run `Heimdall` outside of the home directory (e.g. in the `notebooks/` directory),
-you can install a local pip package version with
-
-```bash
-pip install ./
-```
 
 ## Cheatsheet
 
