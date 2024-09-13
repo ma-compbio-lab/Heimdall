@@ -228,7 +228,8 @@ class SeqMaskedPretrainDataset(MaskedPretrainDataset):
         is_padding = data["labels"] == self.data.special_tokens["pad"]
         mask[is_padding] = False
 
-        data["inputs"][mask] = self.mask_token
+        data["identity_inputs"][mask] = self.mask_token
+        # data["expression_inputs"][mask] = self.mask_token
         data["masks"] = mask
 
         return data
