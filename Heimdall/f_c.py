@@ -12,15 +12,6 @@ from Heimdall.f_g import Fg
 from Heimdall.fe import Fe
 
 
-@dataclass
-class TransformerInput:
-    gene_inputs: NDArray
-    expression_inputs: NDArray
-
-    def __post_init__(self):
-        pass
-
-
 class Fc(ABC):
     """Abstraction for cell embedding."""
 
