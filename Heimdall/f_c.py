@@ -18,7 +18,8 @@ class Fc(ABC):
         fg: `Fg` used for this `Fc` implementation.
         fe: `Fe` used for this `Fe` implementation.
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
-        max_input_length: maximum number of identity/expression tokens to consider for each cell. Extra tokens are truncated.
+        max_input_length: maximum number of identity/expression tokens to consider for each cell.
+            Extra tokens are truncated.
 
     """
 
@@ -37,9 +38,11 @@ class Fc(ABC):
 
         Returns:
             Sets the following fields of `self.adata`:
-            `.obsm['cell_identity_embedding_indices']` : :class:`~numpy.ndarray` (shape `(self.adata.n_obs, self.max_input_length)`)
+            `.obsm['cell_identity_embedding_indices']` : :class:`~numpy.ndarray`
+                (shape `(self.adata.n_obs, self.max_input_length)`)
                 Gene identity embedding indices for all cells.
-            `.obsm['cell_expression_embedding_indices']` : :class:`~numpy.ndarray` (shape `(self.adata.n_obs, self.max_input_length)`)
+            `.obsm['cell_expression_embedding_indices']` : :class:`~numpy.ndarray`
+                (shape `(self.adata.n_obs, self.max_input_length)`)
                 Gene expression embedding indices for all cells.
 
         """

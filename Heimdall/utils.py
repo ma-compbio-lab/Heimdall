@@ -59,6 +59,7 @@ def instantiate_from_config(
     _params_key: str = "args",
     _disable_key: str = "disable",
     _catch_conflict: bool = True,
+    return_name: bool = False,
     **extra_kwargs: Any,
 ):
     if config.get(_disable_key, False):
@@ -75,6 +76,9 @@ def instantiate_from_config(
 
     # Instantiate object and handel exception during instantiation
     try:
+        if return_name:
+            return cls(*args, **full_kwargs), obj
+
         return cls(*args, **full_kwargs)
     except Exception as e:
         raise RuntimeError(

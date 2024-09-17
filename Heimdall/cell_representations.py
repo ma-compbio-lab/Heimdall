@@ -358,7 +358,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     @check_states(adata=True)
     def tokenize_cells(self):
-        """Processes the f_g and f_c from the config.
+        """Processes the `f_g`, `fe` and `f_c` from the config.
 
         This will first check to see if the cell representations are already
         cached, and then will either load the cached representations or compute
@@ -366,9 +366,9 @@ class CellRepresentation(SpecialTokenMixin):
 
         """
 
-        self.fg = instantiate_from_config(self.fg_cfg, self.adata)
-        self.fe = instantiate_from_config(self.fe_cfg, self.adata)
-        self.fc = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata)
+        self.fg, fg_name = instantiate_from_config(self.fg_cfg, self.adata, return_name=True)
+        self.fe, fe_name = instantiate_from_config(self.fe_cfg, self.adata, return_name=True)
+        self.fc, fc_name = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata, return_name=True)
 
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             filename = Path(self.dataset_preproc_cfg.data_path).name

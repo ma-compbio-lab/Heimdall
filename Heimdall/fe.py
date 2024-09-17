@@ -16,7 +16,8 @@ class Fe(ABC):
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         d_embedding: dimensionality of embedding for each expression entity
-        num_embeddings: number of embeddings to generate for expression-based embedding, e.g. how many bins for binning, etc.
+        num_embeddings: number of embeddings to generate for expression-based embedding,
+            e.g. how many bins for binning, etc.
         embedding_filepath: filepath from which to load pretrained embeddings
 
     """
