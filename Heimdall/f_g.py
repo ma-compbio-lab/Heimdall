@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Sequence
+from os import PathLike
+from typing import Dict, Optional, Sequence
 
 import anndata as ad
 import numpy as np
@@ -14,13 +15,16 @@ class Fg(ABC):
 
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
+        d_embedding: dimensionality of embedding for each gene entity
+        embedding_filepath: filepath from which to load pretrained embeddings
 
     """
 
-    def __init__(self, adata: ad.AnnData, config: dict):
+    def __init__(self, adata: ad.AnnData, d_embedding: int, embedding_filepath: Optional[str | PathLike] = None):
         self.adata = adata
         _, self.num_genes = adata.shape
-        self.config = config
+        self.d_embedding = d_embedding
+        self.embedding_filepath = embedding_filepath
 
     @abstractmethod
     def preprocess_embeddings(self):
@@ -30,10 +34,20 @@ class Fg(ABC):
         Preprocessing may include anything from downloading gene embeddings from
         a URL to generating embeddings from scratch.
 
+        Returns:
+            Sets `self.gene_embeddings`.
+            Sets the following fields of `self.adata`:
+            `.var['identity_embedding_index']` : :class:`~numpy.ndarray` (shape `(self.adata.n_vars,)`)
+                Index of gene in embeddings.
+            `.var['identity_valid_mask']` : :class:`~numpy.ndarray` (shape `(self.adata.n_vars,)`)
+                Boolean mask indicating whether or not gene is mapped by this `Fg`.
+
         """
 
     def __getitem__(self, gene_names: Sequence[str]) -> Sequence[int | NAType]:
         """Get the indices of genes in the embedding array.
+
+        Must run `self.preprocess_embeddings()` before using this function.
 
         Args:
             gene_names: name of the gene as stored in `self.adata`.
@@ -43,7 +57,8 @@ class Fg(ABC):
 
         """
         embedding_indices = self.adata.var.loc[gene_names, "identity_embedding_index"]
-        if np.any(embedding_indices.isna()):
+        valid_mask = self.adata.var.loc[gene_names, "identity_valid_mask"]
+        if valid_mask.sum() != len(gene_names):
             raise KeyError(
                 "At least one gene is not mapped in this Fg. Please remove such genes from consideration in the Fc.",
             )
@@ -72,10 +87,10 @@ class PretrainedFg(Fg, ABC):
         embedding_map = self.load_embeddings()
 
         first_embedding = next(iter(embedding_map.values()))
-        if len(first_embedding) < self.config.d_embedding:
+        if len(first_embedding) < self.d_embedding:
             raise ValueError(
                 f"Dimensionality of pretrained embeddings ({len(first_embedding)} is less than the embedding "
-                "dimensionality specified in the config ({self.config.d_embedding}). Please decrease the embedding"
+                "dimensionality specified in the config ({self.d_embedding}). Please decrease the embedding"
                 "dimensionality to be compatible with the pretrained embeddings.",
             )
 
@@ -92,12 +107,12 @@ class PretrainedFg(Fg, ABC):
         self.adata.var["identity_embedding_index"] = index_map
         self.adata.var["identity_valid_mask"] = valid_mask
 
-        self.gene_embeddings = np.zeros((num_mapped_genes, self.config.d_embedding), dtype=np.float64)
+        self.gene_embeddings = np.zeros((num_mapped_genes, self.d_embedding), dtype=np.float64)
 
         for gene_name in self.adata.var_names:
             embedding_index = self.adata.var.loc[gene_name, "identity_embedding_index"]
             if not pd.isna(embedding_index):
-                self.gene_embeddings[embedding_index] = embedding_map[gene_name][: self.config.d_embedding]
+                self.gene_embeddings[embedding_index] = embedding_map[gene_name][: self.d_embedding]
 
         print(f"Found {len(valid_indices)} genes with mappings out of {len(self.adata.var_names)} genes.")
 
@@ -121,7 +136,7 @@ class ESM2Fg(PretrainedFg):
     """Mapping of gene names to pretrained ESM2 embeddings."""
 
     def load_embeddings(self):
-        raw_gene_embedding_map = torch.load(self.config.embedding_filepath)
+        raw_gene_embedding_map = torch.load(self.embedding_filepath)
 
         raw_gene_embedding_map = {
             gene_name: embedding.detach().cpu().numpy() for gene_name, embedding in raw_gene_embedding_map.items()
@@ -134,7 +149,7 @@ class Gene2VecFg(PretrainedFg):
     """Mapping of gene names to pretrained Gene2Vec embeddings."""
 
     def load_embeddings(self):
-        raw_gene_embedding_dataframe = pd.read_csv(self.config.embedding_filepath, sep=r"\s+", header=None, index_col=0)
+        raw_gene_embedding_dataframe = pd.read_csv(self.embedding_filepath, sep=r"\s+", header=None, index_col=0)
         raw_gene_embedding_map = {
             gene_name: raw_gene_embedding_dataframe.loc[gene_name].values
             for gene_name in raw_gene_embedding_dataframe.index

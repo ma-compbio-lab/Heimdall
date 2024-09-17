@@ -1,4 +1,4 @@
-name: "SortingFe"
+type: Heimdall.fe.SortingFe
 
 args:
   embedding_filepath: null

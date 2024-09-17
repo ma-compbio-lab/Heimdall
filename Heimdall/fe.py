@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Sequence
+from os import PathLike
+from typing import Optional, Sequence
 
 import anndata as ad
 import numpy as np
@@ -10,12 +11,28 @@ from Heimdall.utils import searchsorted2d
 
 
 class Fe(ABC):
-    """Abstraction for expression-based embedding."""
+    """Abstraction for expression-based embedding.
 
-    def __init__(self, adata: ad.AnnData, config: dict):
+    Args:
+        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
+        d_embedding: dimensionality of embedding for each expression entity
+        num_embeddings: number of embeddings to generate for expression-based embedding, e.g. how many bins for binning, etc.
+        embedding_filepath: filepath from which to load pretrained embeddings
+
+    """
+
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        d_embedding: int,
+        num_embeddings: Optional[int] = None,
+        embedding_filepath: Optional[str | PathLike] = None,
+    ):
         self.adata = adata
         _, self.num_genes = adata.shape
-        self.config = config
+        self.d_embedding = d_embedding
+        self.num_embeddings = num_embeddings
+        self.embedding_filepath = embedding_filepath
 
     @abstractmethod
     def preprocess_embeddings(self):
@@ -24,6 +41,12 @@ class Fe(ABC):
 
         Preprocessing may include anything from downloading gene embeddings from
         a URL to generating embeddings from scratch.
+
+        Returns:
+            Sets `self.expression_embeddings`.
+            Sets the following fields of `self.adata`:
+            `.obsm['processed_expression_values']` : :class:`~numpy.ndarray` (shape `(self.adata.n_obs, -1)`)
+                Processed expression values, for later use in calculation of expression-based embeddings.
 
         """
 
@@ -38,10 +61,6 @@ class Fe(ABC):
 
         """
         embedding_indices = self.adata.obsm["processed_expression_values"][cell_indices]
-        # if np.any(embedding_indices.isna()):
-        #     raise KeyError(
-        #         "At least one gene is not mapped in this Fe. Please remove such genes from consideration in the Fc.",
-        #     )
 
         return embedding_indices
 
@@ -53,7 +72,7 @@ class DummyFe(Fe):
         """Stand-in `fe` preprocessing; marks `expression_embedding_index` as
         invalid."""
         self.expression_embeddings = None
-        dummy_indices = pd.array(np.full((len(self.adata), self.config.num_embeddings), np.nan))
+        dummy_indices = pd.array(np.full((len(self.adata), self.num_embeddings), np.nan))
         self.adata.obsm["processed_expression_values"] = dummy_indices
 
 
@@ -67,7 +86,7 @@ class BinningFe(Fe):
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
         expression = self.adata.X[:, valid_mask]
 
-        n_bins = self.config.num_embeddings
+        n_bins = self.num_embeddings
         if np.max(expression) == 0:
             binned_values = np.zeros_like(expression)  # TODO: add correct typing (maybe add to config...?)
 

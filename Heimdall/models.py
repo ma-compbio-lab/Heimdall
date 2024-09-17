@@ -91,8 +91,8 @@ class HeimdallTransformer(nn.Module):
         gene_embedding_layer = data.fg.gene_embeddings
         if gene_embedding_layer is not None:
             self.gene_embeddings = nn.Embedding.from_pretrained(torch.tensor(gene_embedding_layer, dtype=torch.float32))
-        elif data.fg.config.d_embedding is not None:
-            self.gene_embeddings = nn.Embedding(self.vocab_size, data.fg.config.d_embedding)
+        elif data.fg.d_embedding is not None:
+            self.gene_embeddings = nn.Embedding(self.vocab_size, data.fg.d_embedding)
         else:
             self.gene_embeddings = None
 
@@ -101,17 +101,17 @@ class HeimdallTransformer(nn.Module):
             self.expression_embeddings = nn.Embedding.from_pretrained(
                 torch.tensor(expression_embedding_layer, dtype=torch.float32),
             )
-        elif data.fe.config.d_embedding is not None:
+        elif data.fe.d_embedding is not None:
             self.expression_embeddings = nn.Embedding(
-                data.fe.config.num_embeddings or self.vocab_size,
-                data.fe.config.d_embedding,
+                data.fe.num_embeddings or self.vocab_size,
+                data.fe.d_embedding,
             )
         else:
             self.expression_embeddings = None
 
         # # Set up the Input Embedding layers
         # if input_type == "learned":
-        #     self.input_embeddings = nn.Embedding(self.vocab_size, data.fg.config.d_embedding)
+        #     self.input_embeddings = nn.Embedding(self.vocab_size, data.fg.d_embedding)
         # elif input_type == "predefined":
         #     pass
         # else:

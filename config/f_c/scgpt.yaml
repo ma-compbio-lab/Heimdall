@@ -1,5 +1,4 @@
-name: "ScGPTFc"
+type: Heimdall.f_c.ScGPTFc
 
 args:
-  output_type: "ids"
-  max_input_length: 128
+  max_input_length: ${model.args.d_model}

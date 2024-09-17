@@ -1,4 +1,4 @@
-name: "DummyFe"
+type: Heimdall.fe.DummyFe
 
 args:
   embedding_filepath: null

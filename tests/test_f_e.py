@@ -36,7 +36,7 @@ def identity_fg(mock_dataset):
             "d_embedding": 128,
         },
     )
-    identity_fg = IdentityFg(mock_dataset, fg_config)
+    identity_fg = IdentityFg(mock_dataset, **fg_config)
 
     return identity_fg
 
@@ -50,7 +50,7 @@ def sorting_fe(mock_dataset):
             "d_embedding": 128,
         },
     )
-    sorting_fe = SortingFe(mock_dataset, fe_config)
+    sorting_fe = SortingFe(mock_dataset, **fe_config)
 
     return sorting_fe
 
@@ -64,7 +64,7 @@ def binning_fe(mock_dataset):
             "d_embedding": 128,
         },
     )
-    binning_fe = BinningFe(mock_dataset, fe_config)
+    binning_fe = BinningFe(mock_dataset, **fe_config)
 
     return binning_fe
 

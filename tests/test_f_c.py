@@ -37,7 +37,7 @@ def identity_fg(mock_dataset):
             "d_embedding": 128,
         },
     )
-    identity_fg = IdentityFg(mock_dataset, fg_config)
+    identity_fg = IdentityFg(mock_dataset, **fg_config)
 
     return identity_fg
 
@@ -51,7 +51,7 @@ def sorting_fe(mock_dataset):
             "d_embedding": None,
         },
     )
-    sorting_fe = SortingFe(mock_dataset, fe_config)
+    sorting_fe = SortingFe(mock_dataset, **fe_config)
 
     return sorting_fe
 
@@ -65,7 +65,7 @@ def binning_fe(mock_dataset):
             "d_embedding": 128,
         },
     )
-    binning_fe = BinningFe(mock_dataset, fe_config)
+    binning_fe = BinningFe(mock_dataset, **fe_config)
 
     return binning_fe
 
@@ -78,7 +78,7 @@ def geneformer_fc(mock_dataset, identity_fg, sorting_fe):
     identity_fg.preprocess_embeddings()
     sorting_fe.preprocess_embeddings()
 
-    geneformer_fc = GeneformerFc(identity_fg, sorting_fe, mock_dataset, fc_config)
+    geneformer_fc = GeneformerFc(identity_fg, sorting_fe, mock_dataset, **fc_config)
 
     return geneformer_fc
 
@@ -93,7 +93,7 @@ def scgpt_fc(mock_dataset, identity_fg, binning_fe):
     identity_fg.preprocess_embeddings()
     binning_fe.preprocess_embeddings()
 
-    scgpt_fc = ScGPTFc(identity_fg, binning_fe, mock_dataset, fc_config)
+    scgpt_fc = ScGPTFc(identity_fg, binning_fe, mock_dataset, **fc_config)
 
     return scgpt_fc
 

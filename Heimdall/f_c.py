@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Sequence, Union
+from typing import Optional, Sequence, Union
 
 import anndata as ad
 import numpy as np
@@ -13,13 +12,21 @@ from Heimdall.fe import Fe
 
 
 class Fc(ABC):
-    """Abstraction for cell embedding."""
+    """Abstraction for cell embedding.
 
-    def __init__(self, fg: Fg | None, fe: Fe | None, adata: ad.AnnData, config: dict):
+    Args:
+        fg: `Fg` used for this `Fc` implementation.
+        fe: `Fe` used for this `Fe` implementation.
+        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
+        max_input_length: maximum number of identity/expression tokens to consider for each cell. Extra tokens are truncated.
+
+    """
+
+    def __init__(self, fg: Fg | None, fe: Fe | None, adata: ad.AnnData, max_input_length: Optional[int] = None):
         self.fg = fg
         self.fe = fe
         self.adata = adata
-        self.config = config
+        self.max_input_length = max_input_length
 
     @abstractmethod
     def preprocess_cells(self):
@@ -28,11 +35,25 @@ class Fc(ABC):
 
         This function can be deterministic, or may involve random sampling.
 
+        Returns:
+            Sets the following fields of `self.adata`:
+            `.obsm['cell_identity_embedding_indices']` : :class:`~numpy.ndarray` (shape `(self.adata.n_obs, self.max_input_length)`)
+                Gene identity embedding indices for all cells.
+            `.obsm['cell_expression_embedding_indices']` : :class:`~numpy.ndarray` (shape `(self.adata.n_obs, self.max_input_length)`)
+                Gene expression embedding indices for all cells.
+
         """
 
-    def __getitem__(self, cell_indices: Union[int, Sequence[int], slice]) -> tuple[NDArray]:
+    def __getitem__(self, cell_indices: Union[int, Sequence[int], slice]) -> tuple[NDArray, NDArray]:
         """Retrieve `cell_identity_embedding_indices` and
-        `cell_expression_embedding_indices`."""
+        `cell_expression_embedding_indices`.
+
+        Can only be called after running `self.preprocess_cells()`.
+
+        Returns:
+            A tuple of gene identity embedding indices and gene expression embedding indices for all cells.
+
+        """
 
         identity_inputs = self.adata.obsm["cell_identity_embedding_indices"][cell_indices].copy()
         expression_inputs = self.adata.obsm["cell_expression_embedding_indices"][cell_indices].copy()
@@ -49,14 +70,14 @@ class Fc(ABC):
     ) -> Tensor:
         """Embed cells using the embedding layers.
 
-        # TODO: make it accept a range of cell indices...? Would have to modify `preprocess_cells` accordingly.
-
         Args:
+            identity_inputs: batched gene identity embedding indices
             gene_embedding_layer: Torch module for embedding based on gene identity.
+            expression_inputs: batched gene expression embedding indices
             expression_embedding_layer: Torch module for embedding based on expression.
 
         Returns:
-            Embedding of an individual cell.
+            Embeddings of cells.
 
         """
 
@@ -71,7 +92,7 @@ class GeneformerFc(Fc):
         valid_mask = self.adata.var["identity_valid_mask"]
         valid_genes = self.adata.var_names[valid_mask].values
 
-        cell_expression_embedding_indices = self.fe[:]
+        cell_expression_embedding_indices = self.fe[:, : self.max_input_length]
 
         try:
             gene_lists = valid_genes[cell_expression_embedding_indices]
@@ -81,7 +102,9 @@ class GeneformerFc(Fc):
                 "layer, which is not compatible with Geneformer. Please use a valid combination of `Fe` and `Fg`.",
             )
 
-        cell_identity_embedding_indices = np.array([self.fg[gene_list] for gene_list in gene_lists])
+        cell_identity_embedding_indices = np.array(
+            [self.fg[gene_list][: self.max_input_length] for gene_list in gene_lists],
+        )
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
@@ -116,9 +139,9 @@ class ScGPTFc(Fc):
         valid_genes = self.adata.var_names[valid_mask].values
 
         cell_identity_embedding_indices = np.array(
-            [self.fg[valid_genes][: self.config.max_input_length] for _ in range(len(self.adata))],
+            [self.fg[valid_genes][: self.max_input_length] for _ in range(len(self.adata))],
         )
-        cell_expression_embedding_indices = self.fe[:, : self.config.max_input_length]
+        cell_expression_embedding_indices = self.fe[:, : self.max_input_length]
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices

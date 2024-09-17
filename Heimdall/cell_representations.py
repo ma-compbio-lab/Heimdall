@@ -365,23 +365,10 @@ class CellRepresentation(SpecialTokenMixin):
         them and save them.
 
         """
-        fg_name = self.fg_cfg.name
-        fc_name = self.fc_cfg.name
-        fe_name = self.fe_cfg.name
 
-        # Below here is the de facto "else"
-        if (fg_constructor := getattr(Heimdall.f_g, self.fg_cfg.name, None)) is None:
-            raise ValueError(f"f_g {self.fg_cfg.name} does not exist. Please check for the correct name in config")
-
-        if (fc_constructor := getattr(Heimdall.f_c, self.fc_cfg.name, None)) is None:
-            raise ValueError(f"f_c {self.fc_cfg.name} does not exist. Please check for the correct name in config")
-
-        if (fe_constructor := getattr(Heimdall.fe, self.fe_cfg.name, None)) is None:
-            raise ValueError(f"fe {self.fe_cfg.name} does not exist. Please check for the correct name in config")
-
-        self.fg = fg_constructor(self.adata, self.fg_cfg.args)
-        self.fe = fe_constructor(self.adata, self.fe_cfg.args)
-        self.fc = fc_constructor(self.fg, self.fe, self.adata, self.fc_cfg.args)
+        self.fg = instantiate_from_config(self.fg_cfg, self.adata)
+        self.fe = instantiate_from_config(self.fe_cfg, self.adata)
+        self.fc = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata)
 
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             filename = Path(self.dataset_preproc_cfg.data_path).name
@@ -405,13 +392,13 @@ class CellRepresentation(SpecialTokenMixin):
                     return
 
         self.fg.preprocess_embeddings()
-        print(f"> Finished calculating f_g with {self.fg_cfg.name}")
+        print(f"> Finished calculating f_g with {self.fg_cfg.type}")
 
         self.fe.preprocess_embeddings()
-        print(f"> Finished calculating fe with {self.fe_cfg.name}")
+        print(f"> Finished calculating fe with {self.fe_cfg.type}")
 
         self.fc.preprocess_cells()
-        print(f"> Finished calculating f_c with {self.fc_cfg.name}")
+        print(f"> Finished calculating f_c with {self.fc_cfg.type}")
         self.processed_fcfg = True
 
         cell_reps = self.fc[:]

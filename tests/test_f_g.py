@@ -38,7 +38,7 @@ def test_identity_fg(mock_dataset):
 
     gene_names = mock_dataset.var_names
 
-    identity_fg = IdentityFg(mock_dataset, config)
+    identity_fg = IdentityFg(mock_dataset, **config)
     identity_fg.preprocess_embeddings()
 
     embedding_indices = identity_fg[gene_names]
@@ -62,7 +62,7 @@ def test_esm2_fg(mock_dataset):
 
     expected_valid_values = [0.04376760497689247, 0.1535314917564392, 0.11875522881746292]
 
-    esm2_fg = ESM2Fg(mock_dataset, config)
+    esm2_fg = ESM2Fg(mock_dataset, **config)
     esm2_fg.preprocess_embeddings()
 
     try:
@@ -91,7 +91,7 @@ def test_gene2vec_fg(mock_dataset):
     valid_gene_mask = [gene_name != "fake_gene" for gene_name in gene_names]
     expected_valid_values = [0.09901640564203262, -0.02311580441892147, 0.33965930342674255]
 
-    gene2vec_fg = Gene2VecFg(mock_dataset, config)
+    gene2vec_fg = Gene2VecFg(mock_dataset, **config)
     gene2vec_fg.preprocess_embeddings()
 
     try:

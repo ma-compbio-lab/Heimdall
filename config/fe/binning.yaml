@@ -1,4 +1,4 @@
-name: "BinningFe"
+type: Heimdall.fe.BinningFe
 
 args:
   embedding_filepath: null

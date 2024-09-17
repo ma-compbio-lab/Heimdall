@@ -1,4 +1,4 @@
-name: "GeneformerFc"
+type: Heimdall.f_c.GeneformerFc
 
 args:
-  output_type: "ids"
+  max_input_length: ${model.args.d_model}
