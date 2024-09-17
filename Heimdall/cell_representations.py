@@ -20,10 +20,10 @@ from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
-import Heimdall.f_c
-import Heimdall.f_g
-import Heimdall.fe
 from Heimdall.datasets import Dataset
+from Heimdall.f_c import Fc
+from Heimdall.f_g import Fg
+from Heimdall.fe import Fe
 from Heimdall.utils import (
     deprecate,
     get_value,
@@ -366,6 +366,9 @@ class CellRepresentation(SpecialTokenMixin):
 
         """
 
+        self.fg: Fg
+        self.fe: Fe
+        self.fc: Fc
         self.fg, fg_name = instantiate_from_config(self.fg_cfg, self.adata, return_name=True)
         self.fe, fe_name = instantiate_from_config(self.fe_cfg, self.adata, return_name=True)
         self.fc, fc_name = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata, return_name=True)
