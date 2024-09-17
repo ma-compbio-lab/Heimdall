@@ -1,4 +1,5 @@
 .local_nvim_session
+.swp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
