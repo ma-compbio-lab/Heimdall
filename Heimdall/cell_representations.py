@@ -26,7 +26,6 @@ from Heimdall.f_g import Fg
 from Heimdall.fe import Fe
 from Heimdall.utils import (
     deprecate,
-    get_class,
     get_value,
     heimdall_collate_fn,
     instantiate_from_config,
@@ -184,7 +183,6 @@ class CellRepresentation(SpecialTokenMixin):
 
         preprocessed_data_path = None
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            filename = Path(self.dataset_preproc_cfg.data_path).name
             cache_dir = Path(cache_dir).resolve()
             cache_dir.mkdir(exist_ok=True, parents=True)
             preprocessing_string = self._cfg.dataset.dataset_name
@@ -373,12 +371,8 @@ class CellRepresentation(SpecialTokenMixin):
         self.fc, fc_name = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata, return_name=True)
 
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            filename = Path(self.dataset_preproc_cfg.data_path).name
             cache_dir = Path(cache_dir).resolve()
             cache_dir.mkdir(exist_ok=True, parents=True)
-            # preprocessing_string = "_".join(
-            #     [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
-            # )
             preprocessing_string = f"experiment_{self._cfg.project_name}"
 
             preprocessed_reps_path = cache_dir / f"preprocessed_{preprocessing_string}.pkl"
