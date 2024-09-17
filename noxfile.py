@@ -28,6 +28,14 @@ def lint(session):
 
 
 @nox.session
+def unittests(session):
+    session.install("-r", "requirements.txt")
+    session.install("-r", "requirements_dev.txt")
+    session.install(".")
+    session.run("pytest")
+
+
+@nox.session
 def test_experiments(session):
     session.install("-r", "requirements.txt")
     session.install(
@@ -41,6 +49,7 @@ def test_experiments(session):
         "cell_cell_interaction_dev",
         "pancreas",
         "pretrain_geneformer_dev",
+        "reverse_perturbation",
     ]
     for exp in experiments:
         session.log(f"Runing {exp}")
@@ -49,4 +58,5 @@ def test_experiments(session):
 
 nox.options.sessions = [
     "lint",
+    "unittests",
 ]

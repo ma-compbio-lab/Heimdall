@@ -17,13 +17,13 @@ from numpy.typing import NDArray
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
-from torch.utils.data import DataLoader
-from torch.utils.data import Subset
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
-import Heimdall.f_c
-import Heimdall.f_g
 from Heimdall.datasets import Dataset
+from Heimdall.f_c import Fc
+from Heimdall.f_g import Fg
+from Heimdall.fe import Fe
 from Heimdall.utils import (
     deprecate,
     get_value,
@@ -89,6 +89,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.dataset_task_cfg = config.tasks.args
         self.fg_cfg = config.f_g
         self.fc_cfg = config.f_c
+        self.fe_cfg = config.fe
         self.model_cfg = config.model
         self.optimizer_cfg = config.optimizer
         self.trainer_cfg = config.trainer
@@ -106,7 +107,7 @@ class CellRepresentation(SpecialTokenMixin):
     @property
     @check_states(adata=True, processed_fcfg=True)
     def cell_representations(self) -> NDArray[np.float32]:
-        return self.adata.layers["cell_representation"]
+        return self.fc[:]
 
     @property
     @check_states(labels=True)
@@ -182,13 +183,10 @@ class CellRepresentation(SpecialTokenMixin):
 
         preprocessed_data_path = None
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            filename = Path(self.dataset_preproc_cfg.data_path).name
             cache_dir = Path(cache_dir).resolve()
             cache_dir.mkdir(exist_ok=True, parents=True)
-            preprocessing_string = "_".join(
-                [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
-            )
-            preprocessed_data_path = cache_dir / f"preprocessed_{preprocessing_string}_{filename}"
+            preprocessing_string = self._cfg.dataset.dataset_name
+            preprocessed_data_path = cache_dir / f"preprocessed_{preprocessing_string}.h5ad"
 
             if preprocessed_data_path.is_file():
                 print(f"> Found already preprocessed dataset, loading in {preprocessed_data_path}")
@@ -206,7 +204,6 @@ class CellRepresentation(SpecialTokenMixin):
                 data_dir=self._cfg.ensembl_dir,
                 species=self.dataset_preproc_cfg.species,
             )
-        print(self.adata.var.index)
 
         # remove genes missing from esm2 embedding mapping
         if get_value(self.dataset_preproc_cfg, "filter_genes_esm2"):
@@ -214,12 +211,12 @@ class CellRepresentation(SpecialTokenMixin):
             # check for species
             if self.dataset_preproc_cfg.species == "human":
                 protein_gene_map = torch.load(
-                    "/work/magroup/shared/Heimdall/data/pretrained_embeddings/ESM2/protein_map_human_ensembl.pt",
+                    f"{self._cfg.data_path}/pretrained_embeddings/ESM2/protein_map_human_ensembl.pt",
                 )
                 gene_list = list(protein_gene_map.keys())
             elif self.dataset_prepoc_cfg.species == "mouse":
                 protein_gene_map = torch.load(
-                    "/work/magroup/shared/Heimdall/data/pretrained_embeddings/ESM2/protein_map_mouse_ensembl.pt",
+                    f"{self._cfg.data_path}/pretrained_embeddings/ESM2/protein_map_mouse_ensembl.pt",
                 )
                 gene_list = list(protein_gene_map.keys())
 
@@ -237,7 +234,7 @@ class CellRepresentation(SpecialTokenMixin):
             # check for species
             if self.dataset_preproc_cfg.species == "human":
                 with open(
-                    "/work/magroup/shared/Heimdall/data/pretrained_embeddings/gene2vec/gene2vec_genes.pkl",
+                    f"{self._cfg.data_path}/pretrained_embeddings/gene2vec/gene2vec_genes.pkl",
                     "rb",
                 ) as pickle_file:
                     gene2vec_map = pkl.load(pickle_file)
@@ -356,121 +353,82 @@ class CellRepresentation(SpecialTokenMixin):
 
         return df_balanced
 
-    def preprocess_f_g(self, f_g):
-        """Process f_g.
-
-        Run the f_g, and then preprocess and store it locally the f_g must
-        return a `gene_mapping` where the keys are the gene ids and the ids are
-        the.
-
-        The f_g will take in the anndata as an object just for flexibility
-
-        For example:
-        ```
-        {'Sox17': 0,
-        'Rgs20': 1,
-        'St18': 2,
-        'Cpa6': 3,
-        'Prex2': 4,
-        ...
-        }
-
-        or even:
-        {'Sox17': [0.3, 0.1. 0.2 ...],
-        'Rgs20':  [0.3, 0.1. 0.2 ...],
-        'St18':  [0.3, 0.1. 0.2 ...],
-        'Cpa6':  [0.3, 0.1. 0.2 ...],
-        'Prex2':  [0.3, 0.1. 0.2 ...],
-        ...
-        }
-        ```
-
-        """
-        assert self.fg_cfg.args.output_type in ["ids", "vector"]
-        output = f_g(self.adata.var, self.dataset_preproc_cfg.species)
-
-        if isinstance(output, tuple) and isinstance(output[0], torch.nn.Embedding):
-            # if the output is a tuple with an embedding layer and gene mapping
-            embedding_layer, gene_mapping = output
-            self.embedding_layer = embedding_layer
-            print("> f_g returned an nn.Embedding layer. Storing the layer for later use.")
-
-        else:
-            # if no embedding layer is provided, treat the output as the gene mapping
-            gene_mapping = output
-
-        assert all(
-            isinstance(value, (np.ndarray, list, int)) for value in gene_mapping.values()
-        ), "Make sure that all values in the gene_mapping dictionary are either int, list or np array"
-
-        self.f_g = gene_mapping
-        print(f"> Finished calculating f_g with {self.fg_cfg.name}")
-        return
-
-    def preprocess_f_c(self, f_c):
-        """Process f_c.
-
-        Preprocess the cell f_c, this will preprocess the anndata.X into the
-        actual dataset to the actual tokenizers, you can imagine this as a cell
-        tokenizer.
-
-        The f_c will take as input the f_g, then the anndata, then the
-
-        """
-        if hasattr(self, "embedding_layer"):
-            # if an embedding layer exists, pass it along with the gene mapping and anndata
-            cell_reps = f_c(self.f_g, self.adata, self.embedding_layer)
-
-        else:
-            cell_reps = f_c(self.f_g, self.adata)
-
-        print(f"> Finished calculating f_c with {self.fc_cfg.name}")
-        self.processed_fcfg = True
-        self.adata.layers["cell_representation"] = cell_reps
-        return cell_reps
-
     @check_states(adata=True)
     def tokenize_cells(self):
-        """Processes the f_g and f_c from the config.
+        """Processes the `f_g`, `fe` and `f_c` from the config.
 
         This will first check to see if the cell representations are already
         cached, and then will either load the cached representations or compute
         them and save them.
 
         """
-        f_g_name = self.fg_cfg.name
-        f_c_name = self.fc_cfg.name
+
+        self.fg: Fg
+        self.fe: Fe
+        self.fc: Fc
+        self.fg, fg_name = instantiate_from_config(self.fg_cfg, self.adata, return_name=True)
+        self.fe, fe_name = instantiate_from_config(self.fe_cfg, self.adata, return_name=True)
+        self.fc, fc_name = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata, return_name=True)
+
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            filename = Path(self.dataset_preproc_cfg.data_path).name
             cache_dir = Path(cache_dir).resolve()
             cache_dir.mkdir(exist_ok=True, parents=True)
-            preprocessing_string = "_".join(
-                [g for g in self.dataset_preproc_cfg.keys() if get_value(self.dataset_preproc_cfg, g)],
-            )
-            preprocessed_reps_path = (
-                cache_dir / f"preprocessed_{preprocessing_string}_{filename}_{f_g_name}_{f_c_name}.pkl"
-            )
+            preprocessing_string = f"experiment_{self._cfg.project_name}"
+
+            preprocessed_reps_path = cache_dir / f"preprocessed_{preprocessing_string}.pkl"
             if os.path.isfile(preprocessed_reps_path):
                 with open(preprocessed_reps_path, "rb") as rep_file:
-                    cell_reps = pkl.load(rep_file)
-                    self.adata.layers["cell_representation"] = cell_reps
-                    print("> Using cached cell representations")
+                    (
+                        identity_embedding_index,
+                        identity_valid_mask,
+                        processed_expression_values,
+                        gene_embeddings,
+                        expression_embeddings,
+                        identity_reps,
+                        expression_reps,
+                    ) = pkl.load(rep_file)
+
+                    self.fg.load_from_cache(identity_embedding_index, identity_valid_mask, gene_embeddings)
+                    self.fe.load_from_cache(processed_expression_values, expression_embeddings)
+                    self.fc.load_from_cache(identity_reps, expression_reps)
+
+                    print(f"> Using cached cell representations at {preprocessed_reps_path}")
                     self.processed_fcfg = True
+                    # TODO: caching should also load other things, such as var["identity_valid_mask"],
+                    # fg.gene_embedings, etc.
                     return
 
-        # Below here is the de facto "else"
-        if (f_g := getattr(Heimdall.f_g, f_g_name, None)) is None:
-            raise ValueError(f"f_g {f_g_name} does not exist. Please check for the correct name in config")
+        self.fg.preprocess_embeddings()
+        print(f"> Finished calculating f_g with {self.fg_cfg.type}")
 
-        if (f_c := getattr(Heimdall.f_c, f_c_name, None)) is None:
-            raise ValueError(f"f_c {f_c_name} does not exist. Please check for the correct name in config")
+        self.fe.preprocess_embeddings()
+        print(f"> Finished calculating fe with {self.fe_cfg.type}")
 
-        self.preprocess_f_g(f_g)
-        cell_reps = self.preprocess_f_c(f_c)
-        self.adata.layers["cell_representation"] = cell_reps
+        self.fc.preprocess_cells()
+        print(f"> Finished calculating f_c with {self.fc_cfg.type}")
+        self.processed_fcfg = True
+
+        print(f"{self._cfg.cache_preprocessed_dataset_dir=}")
         if (self._cfg.cache_preprocessed_dataset_dir) is not None:
+            # Gather things for caching
+            identity_reps, expression_reps = self.fc[:]
+            processed_expression_values = self.fe[:]
+            identity_embedding_index, identity_valid_mask = self.fg.__getitem__(self.adata.var_names, return_mask=True)
+
+            gene_embeddings = self.fg.gene_embeddings
+            expression_embeddings = self.fe.expression_embeddings
+
             with open(preprocessed_reps_path, "wb") as rep_file:
-                pkl.dump(cell_reps, rep_file)
+                cache_representation = (
+                    identity_embedding_index,
+                    identity_valid_mask,
+                    processed_expression_values,
+                    gene_embeddings,
+                    expression_embeddings,
+                    identity_reps,
+                    expression_reps,
+                )
+                pkl.dump(cache_representation, rep_file)
                 print(f"finished writing cell representations at {preprocessed_reps_path}")
 
     ###################################################
@@ -504,7 +462,7 @@ class CellRepresentation(SpecialTokenMixin):
             self.processed_fcfg is not False
         ), "Please make sure to preprocess the cell representation at least once first"
 
-        cell_representation = self.adata.layers["cell_representation"]
+        cell_representation = self.adata.obsm["cell_representation"]
 
         if self.task_structure == "single":
             self.prepare_labels()
@@ -589,7 +547,7 @@ class CellRepresentation(SpecialTokenMixin):
         assert self.adata is not None, "no adata found, Make sure to run preprocess_anndata() first"
 
         interaction_matrix = self.adata.obsp[interaction_type]
-        cell_expression = self.adata.layers["cell_representation"]
+        cell_expression = self.adata.obsm["cell_representation"]
 
         # Ensure interaction_matrix is in CSR format for efficient row slicing
         if not isinstance(interaction_matrix, csr_matrix):

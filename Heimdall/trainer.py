@@ -108,7 +108,7 @@ class HeimdallTrainer:
     def _initialize_wandb(self):
         if self.run_wandb and self.accelerator.is_main_process:
             print("==> Starting a new WANDB run")
-            new_tags = (self.cfg.dataset.dataset_name, self.cfg.f_g.name, self.cfg.f_c.name)
+            new_tags = (self.cfg.dataset.dataset_name, self.cfg.f_g.type, self.cfg.fe.type, self.cfg.f_c.type)
             wandb_config = {
                 "wandb": {
                     "tags": new_tags,
@@ -223,7 +223,8 @@ class HeimdallTrainer:
 
                 lr = self.lr_scheduler.get_last_lr()[0]
                 with self.accelerator.accumulate(self.model):
-                    outputs = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
+                    inputs = (batch["identity_inputs"], batch["expression_inputs"])
+                    outputs = self.model(inputs=inputs, conditional_tokens=batch.get("conditional_tokens"))
                     labels = batch["labels"].to(outputs.device)
                     if (masks := batch.get("masks")) is not None:
                         masks = masks.to(outputs.device)
@@ -248,6 +249,9 @@ class HeimdallTrainer:
                     if self.run_wandb and self.accelerator.is_main_process:
                         self.accelerator.log(log)
 
+                if self.cfg.trainer.fastdev:
+                    break
+
     def validate_model(self, dataloader, dataset_type):
         self.model.eval()
         metrics = self._initialize_metrics()
@@ -256,8 +260,9 @@ class HeimdallTrainer:
 
         with torch.no_grad():
             for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
+                inputs = (batch["identity_inputs"], batch["expression_inputs"])
 
-                outputs = self.model(inputs=batch["inputs"], conditional_tokens=batch.get("conditional_tokens"))
+                outputs = self.model(inputs=inputs, conditional_tokens=batch.get("conditional_tokens"))
                 logits = outputs.logits
                 labels = batch["labels"].to(outputs.device)
 
@@ -290,6 +295,9 @@ class HeimdallTrainer:
                     #     print(metric)
                     #     print(metric_name)
                     #     metric.update(logits, labels)
+
+                if self.cfg.trainer.fastdev:
+                    break
 
         loss = loss / len(dataloader)
         if self.accelerator.num_processes > 1:
