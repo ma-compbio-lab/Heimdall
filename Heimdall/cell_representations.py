@@ -12,7 +12,6 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import torch
 from numpy.typing import NDArray
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
