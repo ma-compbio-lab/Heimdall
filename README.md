@@ -221,6 +221,20 @@ WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev tasks
 python train.py +experiments=cell_cell_interaction_dev user=lane-remy-dev
 ```
 
+### Nox
+
+Run code linting and unittests:
+
+```bash
+nox
+```
+
+Run dev experiments test on Lane (compute node with CUDA):
+
+```bash
+nox -e test_experiments
+```
+
 ## Local tests
 
 We use [pytest](https://docs.pytest.org/en/stable/getting-started.html) to write local tests.

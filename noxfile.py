@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import nox
 
 
@@ -45,14 +47,17 @@ def test_experiments(session):
         # "https://download.pytorch.org/whl/cpu",
     )
 
-    experiments = [
-        "cell_cell_interaction_dev",
-        "pancreas",
-        "pretrain_geneformer_dev",
-        "reverse_perturbation",
-    ]
+    homedir = Path(__file__).resolve().parent
+    exp_config_dir = homedir / "config" / "experiments"
+    experiments = [i.stem for i in exp_config_dir.glob("*.yaml")]
+    # experiments = [
+    #     "cell_cell_interaction_dev",
+    #     "pancreas",
+    #     "pretrain_geneformer_dev",
+    #     "reverse_perturbation",
+    # ]
     for exp in experiments:
-        session.log(f"Runing {exp}")
+        session.log(f"Runing experiment {exp!r}")
         session.run("python", "train.py", f"+experiments={exp}", "user=lane-shared-dev")
 
 
