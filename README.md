@@ -229,10 +229,28 @@ Run code linting and unittests:
 nox
 ```
 
-Run dev experiments test on Lane (compute node with CUDA):
+Run dev experiments test on Lane compute node with CUDA (`lane-shared-dev` user profile):
 
 ```bash
 nox -e test_experiments
+```
+
+Run fast dev experiments (only selected small datasets):
+
+```bash
+nox -e test_experiments -- quick_run
+```
+
+Run full dev experiments (including those datasets):
+
+```bash
+nox -e test_experiments -- full_run
+```
+
+Run dev experiments with a different user profile:
+
+```bash
+nox -e test_experiments -- user=box-remy-dev
 ```
 
 ## Local tests
