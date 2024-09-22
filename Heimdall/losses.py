@@ -27,10 +27,10 @@ class MaskedLossMixin:
     def _reduce_sum(self, loss_mat: Tensor, mask: Tensor) -> Tensor:
         return (loss_mat[~mask] / loss_mat.shape[0]).sum()
 
-    def forward(self, input: Tensor, target: Tensor) -> Tensor:
+    def forward(self, input_: Tensor, target: Tensor) -> Tensor:
         mask = target.isnan()
         target[mask] = 0
-        loss_mat = super().forward(input, target)
+        loss_mat = super().forward(input_, target)
         loss = self._reduce(loss_mat, mask)
         return loss
 
