@@ -7,11 +7,12 @@ args:
   shuffle: true
   batchsize: 32
   epochs: 20
-  splits:
-    type: predefined
-    keys_:
-      train: train
-      val: val
-      test: test
+  # TODO: prepare predefined splits (https://github.com/gkrieg/Heimdall/issues/51)
+  # splits:
+  #   type: predefined
+  #   keys_:
+  #     train: train
+  #     val: val
+  #     test: test
   dataset_config:
     type: Heimdall.datasets.SingleInstanceDataset
