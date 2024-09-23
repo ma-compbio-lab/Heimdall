@@ -51,6 +51,7 @@ def test_experiments(session):
     large_experiments = [
         "cta_amb",
         "cta_mpi",
+        "cell_cell_interaction_full",
     ]
 
     # Set up args
