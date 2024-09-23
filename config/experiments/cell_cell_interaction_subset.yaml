@@ -5,7 +5,7 @@
 ####
 defaults:
   - override /model: transformer # the chosen model
-  - override /dataset: cell_cell_interaction # dataset for the relevant task
+  - override /dataset: zeng_merfish_ccc_subset # dataset for the relevant task
   - override /tasks: cell_cell_interaction # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
   - override /trainer: default # contains optimizer and trainer details
@@ -19,9 +19,9 @@ defaults:
 ####
 
 
-project_name: 'Cell_Cell_Interaction' #project name for WandB
-run_name: 'test01'  ## what is set for WandB
-work_dir: 'work_dir'  ## set your custom working directory
+project_name: Cell_Cell_Interaction_Subset #project name for WandB
+run_name: test01  ## what is set for WandB
+work_dir: work_dir  ## set your custom working directory
 
 seed: 55
 
