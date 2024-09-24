@@ -24,7 +24,7 @@ pip install -e .
 `train.py` provides a clear overview of the inputs needed, how to prepare the data, model, optimizer, and run the trainer.
 
 ```
-python train.py +experiments=classification_experiment_dev
+python train.py +experiments=cta_pancreas
 ```
 
 Make sure to edit the global file `config/global_vars.yaml` based on your set up.
@@ -34,7 +34,7 @@ Make sure to edit the global file `config/global_vars.yaml` based on your set up
 `scripts/create_sweep.py`  has the arguments `--experiment-name` (the hydra experiment file name),  `--project-name` (W&B project name), `--fg` and `--fc` which are the names of the hydra configs. It is a short script that will load in `sweeps/base.yaml` and updates it appropriately, and creates a sweep argument and returns it. This can work in tandem with `deploy_sweep.sh` to submit multiple sweeps on SLURM systems.
 
 ```
-python scripts/create_sweep.py --experiment-name pancreas --project-name Pancreas-Celltype-Classification
+python scripts/create_sweep.py --experiment-name cta_pancreas --project-name Pancreas-Celltype-Classification
 ```
 
 # Heimdall Trainer Documentation (outdated)
@@ -206,19 +206,19 @@ the issues manually based on the instructions provided.
 
 ```bash
 # Run cell type classification dev experiment with wandb disabled
-WANDB_MODE=disabled python train.py +experiments=classification_experiment_dev
+WANDB_MODE=disabled python train.py +experiments=cta_pancreas
 
 # Run cell type classification dev experiment with wandb offline mode
-WANDB_MODE=offline python train.py +experiments=classification_experiment_dev
+WANDB_MODE=offline python train.py +experiments=cta_pancreas
 
 # Run cell cell interaction dev experiment with wandb disabled
-WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev
+WANDB_MODE=disabled python train.py +experiments=cta_pancreas
 
 # Run cell cell interaction dev experiment with wandb disabled and overwrite epochs
-WANDB_MODE=disabled python train.py +experiments=cell_cell_interaction_dev tasks.args.epochs=2
+WANDB_MODE=disabled python train.py +experiments=cta_pancreas tasks.args.epochs=2
 
 # Run cell cell interaction dev experiment with user profile (dev has wandb disabled by default)
-python train.py +experiments=cell_cell_interaction_dev user=lane-remy-dev
+python train.py +experiments=cta_pancreas user=lane-remy-dev
 ```
 
 ### Nox
@@ -268,3 +268,9 @@ python -m pytest tests/test_{suite_name}.py
 
 To turn off dataset caching for dev purposes,
 set `cache_preprocessed_dataset_dir: null` in `config/global_vars.yaml`.
+Alternatively, pass `cache_preprocessed_dataset_dir=null` through the command
+line, e.g.,
+
+```bash
+python train.py +experiments=cta_pancreas cache_preprocessed_dataset_dir=null
+```
