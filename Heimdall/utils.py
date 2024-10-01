@@ -27,7 +27,7 @@ MAIN_KEYS = {"identity_inputs", "expression_inputs", "labels", "masks"}
 
 def hash_config(cfg: DictConfig) -> str:
     """Generate hash for a given config."""
-    cfg_str = OmegaConf.to_yaml(cfg, resolve=True, sort_keys=True)
+    cfg_str = OmegaConf.to_yaml(cfg, sort_keys=True)
     hex_str = hashlib.md5(cfg_str.encode("utf-8")).hexdigest()
     return str(uuid.UUID(hex_str))
 
