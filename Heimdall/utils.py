@@ -1,6 +1,8 @@
+import hashlib
 import importlib
 import json
 import math
+import uuid
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -16,11 +18,31 @@ import requests
 import torch
 import torch.nn as nn
 from numpy.typing import NDArray
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import default_collate
 from tqdm.auto import tqdm
 
 MAIN_KEYS = {"identity_inputs", "expression_inputs", "labels", "masks"}
+
+
+def hash_config(cfg: DictConfig) -> str:
+    """Generate hash for a given config."""
+    cfg_str = OmegaConf.to_yaml(cfg, sort_keys=True)
+    hex_str = hashlib.md5(cfg_str.encode("utf-8")).hexdigest()
+    return str(uuid.UUID(hex_str))
+
+
+def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str) -> Tuple[Path, Path]:
+    """Get cached data and config path given config."""
+    hash_str = hash_config(cfg)
+
+    cache_dir = cache_dir / hash_str
+    cache_dir.mkdir(exist_ok=True, parents=True)
+
+    cached_file_path = cache_dir / file_name
+    cached_cfg_path = cache_dir / "config.yaml"
+
+    return cached_file_path, cached_cfg_path
 
 
 def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
