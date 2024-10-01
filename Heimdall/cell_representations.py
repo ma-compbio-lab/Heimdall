@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from numpy.typing import NDArray
+from omegaconf import DictConfig, OmegaConf
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
@@ -26,6 +27,7 @@ from Heimdall.fe import Fe
 from Heimdall.utils import (
     deprecate,
     get_value,
+    hash_config,
     heimdall_collate_fn,
     instantiate_from_config,
     symbol_to_ensembl_from_ensembl,
@@ -182,17 +184,25 @@ class CellRepresentation(SpecialTokenMixin):
 
         preprocessed_data_path = None
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            cache_dir = Path(cache_dir).resolve()
+            cfg = self._cfg.dataset
+            hash_str = hash_config(cfg)
+
+            cache_dir = Path(cache_dir).resolve() / "preprocessed_anndata" / hash_str
             cache_dir.mkdir(exist_ok=True, parents=True)
-            preprocessing_string = self._cfg.dataset.dataset_name
-            preprocessed_data_path = cache_dir / f"preprocessed_{preprocessing_string}.h5ad"
+
+            preprocessed_data_path = cache_dir / "data.h5ad"
+            preprocessed_cfg_path = cache_dir / "config.yaml"
 
             if preprocessed_data_path.is_file():
-                print(f"> Found already preprocessed dataset, loading in {preprocessed_data_path}")
+                loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(preprocessed_cfg_path)).replace("\n", "\n    ")
+                print(f"> Found already preprocessed anndata: {preprocessed_data_path}")
+                print(f"  Preprocessing config:\n    {loaded_cfg_str}")
                 self.adata = ad.read_h5ad(preprocessed_data_path)
                 self.sequence_length = len(self.adata.var)
                 print(f"> Finished Processing Anndata Object:\n{self.adata}")
                 return
+
+            OmegaConf.save(cfg, preprocessed_cfg_path)
 
         self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
@@ -324,13 +334,26 @@ class CellRepresentation(SpecialTokenMixin):
         self.fc, fc_name = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata, return_name=True)
 
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            cache_dir = Path(cache_dir).resolve()
-            cache_dir.mkdir(exist_ok=True, parents=True)
-            preprocessing_string = f"experiment_{self._cfg.project_name}"
+            cfg = DictConfig(
+                {
+                    key: OmegaConf.to_container(getattr(self, key), resolve=True)
+                    for key in ("fg_cfg", "fe_cfg", "fc_cfg")
+                },
+            )
+            hash_str = hash_config(cfg)
 
-            preprocessed_reps_path = cache_dir / f"preprocessed_{preprocessing_string}.pkl"
-            if os.path.isfile(preprocessed_reps_path):
-                with open(preprocessed_reps_path, "rb") as rep_file:
+            cache_dir = Path(cache_dir).resolve() / "processed_data" / hash_str
+            cache_dir.mkdir(exist_ok=True, parents=True)
+
+            processed_data_path = cache_dir / "data.pkl"
+            processed_cfg_path = cache_dir / "config.yaml"
+
+            if os.path.isfile(processed_data_path):
+                loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(processed_cfg_path)).replace("\n", "\n    ")
+                print(f"> Using processed cell representations: {processed_data_path}")
+                print(f"  Processing config:\n    {loaded_cfg_str}")
+
+                with open(processed_data_path, "rb") as rep_file:
                     (
                         identity_embedding_index,
                         identity_valid_mask,
@@ -345,11 +368,12 @@ class CellRepresentation(SpecialTokenMixin):
                     self.fe.load_from_cache(processed_expression_values, expression_embeddings)
                     self.fc.load_from_cache(identity_reps, expression_reps)
 
-                    print(f"> Using cached cell representations at {preprocessed_reps_path}")
                     self.processed_fcfg = True
                     # TODO: caching should also load other things, such as var["identity_valid_mask"],
                     # fg.gene_embedings, etc.
                     return
+
+            OmegaConf.save(cfg, processed_cfg_path)
 
         self.fg.preprocess_embeddings()
         print(f"> Finished calculating f_g with {self.fg_cfg.type}")
@@ -370,7 +394,7 @@ class CellRepresentation(SpecialTokenMixin):
             gene_embeddings = self.fg.gene_embeddings
             expression_embeddings = self.fe.expression_embeddings
 
-            with open(preprocessed_reps_path, "wb") as rep_file:
+            with open(processed_data_path, "wb") as rep_file:
                 cache_representation = (
                     identity_embedding_index,
                     identity_valid_mask,
@@ -381,7 +405,7 @@ class CellRepresentation(SpecialTokenMixin):
                     expression_reps,
                 )
                 pkl.dump(cache_representation, rep_file)
-                print(f"Finished writing cell representations at {preprocessed_reps_path}")
+                print(f"Finished writing cell representations at {processed_data_path}")
 
     ###################################################
     # Deprecated functions
