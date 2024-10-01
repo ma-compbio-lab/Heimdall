@@ -12,7 +12,6 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import torch
 from numpy.typing import NDArray
 from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
@@ -205,52 +204,6 @@ class CellRepresentation(SpecialTokenMixin):
                 species=self.dataset_preproc_cfg.species,
             )
 
-        # remove genes missing from esm2 embedding mapping
-        if get_value(self.dataset_preproc_cfg, "filter_genes_esm2"):
-            print("> Checking for missing genes")
-            # check for species
-            if self.dataset_preproc_cfg.species == "human":
-                protein_gene_map = torch.load(
-                    f"{self._cfg.data_path}/pretrained_embeddings/ESM2/protein_map_human_ensembl.pt",
-                )
-                gene_list = list(protein_gene_map.keys())
-            elif self.dataset_prepoc_cfg.species == "mouse":
-                protein_gene_map = torch.load(
-                    f"{self._cfg.data_path}/pretrained_embeddings/ESM2/protein_map_mouse_ensembl.pt",
-                )
-                gene_list = list(protein_gene_map.keys())
-
-            # Filter gene_list to only include genes that start with "ENS"
-            filtered_gene_list = [gene for gene in gene_list if gene.startswith("ENS")]
-            genes_to_keep = self.adata.var.index.isin(filtered_gene_list)
-
-            self.adata = self.adata[:, genes_to_keep]
-        else:
-            print("> Skipping check for missing genes")
-
-        # remove genes missing from gene2vec embedding mapping
-        if get_value(self.dataset_preproc_cfg, "filter_genes_gene2vec"):
-            print("> Checking for missing genes")
-            # check for species
-            if self.dataset_preproc_cfg.species == "human":
-                with open(
-                    f"{self._cfg.data_path}/pretrained_embeddings/gene2vec/gene2vec_genes.pkl",
-                    "rb",
-                ) as pickle_file:
-                    gene2vec_map = pkl.load(pickle_file)
-                gene_list = list(gene2vec_map.keys())
-            else:
-                raise ValueError("gene2vec is only available for human datasets")
-
-            # Filter gene_list to only include genes that start with "ENS"
-            filtered_gene_list = [gene for gene in gene_list if gene.startswith("ENS")]
-            genes_to_keep = self.adata.var.index.isin(filtered_gene_list)
-
-            self.adata = self.adata[:, genes_to_keep]
-
-        else:
-            print("> Skipping check for missing genes")
-
         if get_value(self.dataset_preproc_cfg, "normalize"):
             # Normalizing based on target sum
             print("> Normalizing anndata...")
@@ -408,7 +361,6 @@ class CellRepresentation(SpecialTokenMixin):
         print(f"> Finished calculating f_c with {self.fc_cfg.type}")
         self.processed_fcfg = True
 
-        print(f"{self._cfg.cache_preprocessed_dataset_dir=}")
         if (self._cfg.cache_preprocessed_dataset_dir) is not None:
             # Gather things for caching
             identity_reps, expression_reps = self.fc[:]
@@ -429,7 +381,7 @@ class CellRepresentation(SpecialTokenMixin):
                     expression_reps,
                 )
                 pkl.dump(cache_representation, rep_file)
-                print(f"finished writing cell representations at {preprocessed_reps_path}")
+                print(f"Finished writing cell representations at {preprocessed_reps_path}")
 
     ###################################################
     # Deprecated functions

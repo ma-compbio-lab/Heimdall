@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import nox
 
 
-@nox.session
+@nox.session(reuse_venv=True)
 def flake8(session):
     session.install(
         "flake8",
@@ -19,7 +21,7 @@ def flake8(session):
     session.run("flake8", "Heimdall/", "train.py")
 
 
-@nox.session
+@nox.session(reuse_venv=True)
 def lint(session):
     targets = (flake8,)
     for t in targets:
@@ -31,12 +33,45 @@ def lint(session):
 def unittests(session):
     session.install("-r", "requirements.txt")
     session.install("-r", "requirements_dev.txt")
-    session.install(".")
+    session.install("-e", ".")
     session.run("pytest")
 
 
 @nox.session
 def test_experiments(session):
+    # Set up vars
+    homedir = Path(__file__).resolve().parent
+    exp_config_dir = homedir / "config" / "experiments"
+    experiments = [i.stem for i in exp_config_dir.glob("*.yaml")]
+
+    small_experiments = [
+        "pancreas",
+        "pretrain_geneformer_dev",
+    ]
+    large_experiments = [
+        "cta_amb",
+        "cta_mpi",
+        "cell_cell_interaction_full",
+    ]
+
+    # Set up args
+    quick_run = full_run = False
+    if "full_run" in session.posargs:
+        # $ nox -e test_experiments -- full_run
+        assert not quick_run
+        full_run = True
+    if "quick_run" in session.posargs:
+        # $ nox -e test_experiments -- quick_run
+        assert not full_run
+        quick_run = True
+
+    user = "lane-shared-dev"
+    if user := [i for i in session.posargs if i.startswith("user=")]:
+        # $ nox -e test_experiments -- user=box-remy-dev
+        assert len(user) == 1, "Multiple user options not allowed."
+        user = user[0].replace("user=", "")
+
+    # Install env
     session.install("-r", "requirements.txt")
     session.install(
         "torch==2.0.1",
@@ -45,15 +80,22 @@ def test_experiments(session):
         # "https://download.pytorch.org/whl/cpu",
     )
 
-    experiments = [
-        "cell_cell_interaction_dev",
-        "pancreas",
-        "pretrain_geneformer_dev",
-        "reverse_perturbation",
-    ]
+    # Run tests
     for exp in experiments:
-        session.log(f"Runing {exp}")
-        session.run("python", "train.py", f"+experiments={exp}", "user=lane-shared-dev")
+        if quick_run and exp not in small_experiments:
+            continue
+        elif not full_run and exp in large_experiments:
+            session.log(f"Skipping large experiment {exp!r}")
+            continue
+
+        session.log(f"Runing experiment {exp!r}")
+        session.run(
+            "python",
+            "train.py",
+            f"+experiments={exp}",
+            f"user={user}",
+            "cache_preprocessed_dataset_dir=null",
+        )
 
 
 nox.options.sessions = [
