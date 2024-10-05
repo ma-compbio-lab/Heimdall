@@ -15,3 +15,6 @@ args:
   rebalance: true
   dataset_config:
     type: Heimdall.datasets.PairedInstanceDataset
+  head_config:
+    type: Heimdall.models.LinearCellPredHead
+    args: null

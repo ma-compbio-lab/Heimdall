@@ -2,7 +2,7 @@
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 import torch
 import torch.nn as nn
@@ -35,15 +35,85 @@ class TransformerOutput:
         for key, val in self.__dict__.items():
             self.__dict__[key] = val.to(device)
 
+    @classmethod
+    def reduce(cls, outputs: Sequence["TransformerOutput"], reduction: Callable = torch.sum):
+        first_output = outputs[0]
+        reduced_output = TransformerOutput(
+            **{key: reduction([getattr(output, key) for output in outputs]) for key in first_output.__dict__},
+        )
+
+        return reduced_output
+
+
+class HeimdallModel(nn.Module):
+    def __init__(
+        self,
+        data: CellRepresentation,
+        model_config: DictConfig,
+        task_config: DictConfig,
+        conditional_input_types: Optional[dict] = None,
+    ):
+        super().__init__()
+        """Heimdall model. Combines language model and task-specific head.
+
+        Args:
+            data: Cell representation data object.
+            model_config: The language model config.
+            task_config: The task config.
+            conditional_input_types: Conditional input types specification.
+
+        """
+        self.lm_model = HeimdallTransformer(
+            data=data,
+            config=model_config,
+            conditional_input_types=conditional_input_types,
+        )
+        self.num_labels = data.num_tasks
+        dim_in = model_config.d_model
+        if task_config.dataset_config.type.endswith(
+            "PairedInstanceDataset",
+        ):  # TODO: should we be able to check this somewhere else in the config?
+            dim_in *= 2
+
+        self.head = instantiate_from_config(task_config.head_config, dim_in=dim_in, dim_out=self.num_labels)
+
+    def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
+        # handling when there are no conditional tokens supplied
+        if conditional_tokens is not None and len(conditional_tokens) == 0:
+            conditional_tokens = None
+
+        identity_inputs, expression_inputs = inputs
+        if isinstance(identity_inputs, list):
+            # TODO: replace with proper handling
+            warnings.warn(
+                "Paired input model not setup corectly yet, only use for dev",
+                UserWarning,
+                stacklevel=2,
+            )
+            # inputs = list(zip(identity_inputs, expression_inputs))
+            encoded_1, encoded_2 = (self.lm_model(inputs[i], conditional_tokens, attention_mask) for i in range(2))
+
+            # Combine paired encoded inputs before passing to decoder
+            concatenated_1 = torch.cat([encoded_1, encoded_2], dim=2)
+            concatenated_2 = torch.cat([encoded_2, encoded_1], dim=2)
+
+            outputs_1 = self.head(concatenated_1)
+            outputs_2 = self.head(concatenated_2)
+
+            outputs = TransformerOutput.reduce([outputs_1, outputs_2])
+        else:
+            encoded = self.lm_model(inputs, conditional_tokens, attention_mask)
+            outputs = self.head(encoded)
+
+        return outputs
+
 
 class HeimdallTransformer(nn.Module):
     def __init__(
         self,
         data: CellRepresentation,
         config: DictConfig,
-        input_type: str,
         conditional_input_types: Optional[dict] = None,
-        embedding_layer=None,
     ):
         super().__init__()
         """Heimdall transformer model.
@@ -51,7 +121,6 @@ class HeimdallTransformer(nn.Module):
         Args:
             data: Cell representation data object.
             config: The transformer config.
-            input_type: "learned" or "predefined"
             conditional_input_types: Conditional input types specification.
 
         Example ``conditional_input_types``:
@@ -73,17 +142,9 @@ class HeimdallTransformer(nn.Module):
         """
         self.config = config
         self.conditional_input_types = conditional_input_types
-        self.input_type = input_type
 
         self.fc = data.fc
 
-        # self.embedding_layer = embedding_layer
-        # # Set up the Input Embedding layers
-        # if self.embedding_layer is not None:
-        #     self.input_embeddings = self.embedding_layer
-        #     print(f"Using provided pretrained embedding layer with shape: {embedding_layer.weight.shape}")
-
-        self.num_labels = data.num_tasks
         self.vocab_size = data.sequence_length + 2  # <PAD> and <MASK> TODO: data.vocab_size
         self.max_seq_length = data.sequence_length
 
@@ -108,14 +169,6 @@ class HeimdallTransformer(nn.Module):
             )
         else:
             self.expression_embeddings = None
-
-        # # Set up the Input Embedding layers
-        # if input_type == "learned":
-        #     self.input_embeddings = nn.Embedding(self.vocab_size, data.fg.d_embedding)
-        # elif input_type == "predefined":
-        #     pass
-        # else:
-        #     raise ValueError("input_type must be either 'learned' or 'predefined'")
 
         # Setting up explicit Positional Encodings
         if config.pos_enc == "BERT":
@@ -147,84 +200,11 @@ class HeimdallTransformer(nn.Module):
             norm_first=True,  # BERT uses LayerNorm before self-attention and feedforward networks
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.num_encoder_layers)
-        self.head = instantiate_from_config(config.head_config, dim_in=config.d_model, dim_out=self.num_labels)
 
         # Initialize the [CLS] token as a learnable parameter
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
 
-    def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
-        """Forward function.
-
-        Args:
-            inputs: Inputs.
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression
-                loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-                If `config.num_labels == 1` a regression loss is computed
-                (Mean-Square loss), If `config.num_labels > 1` a classification
-                loss is computed (Cross-Entropy).
-
-        """
-        # handling when tehre are no conditional tokens supplied
-        if conditional_tokens is not None and len(conditional_tokens) == 0:
-            conditional_tokens = None
-
-        identity_inputs, expression_inputs = inputs
-        if isinstance(identity_inputs, list):
-            # TODO: replace with proper handling
-            warnings.warn(
-                "Paired input model not setup corectly yet, only use for dev",
-                UserWarning,
-                stacklevel=2,
-            )
-            inputs = list(zip(identity_inputs, expression_inputs))
-            outputs1, outputs2 = (self.lm_model(inputs[i], conditional_tokens, attention_mask) for i in range(2))
-            outputs = TransformerOutput(
-                **{key: getattr(outputs1, key) + getattr(outputs2, key) for key in outputs1.__dict__},
-            )
-        else:
-            outputs = self.lm_model(inputs, conditional_tokens, attention_mask)
-
-        return outputs
-
-        # loss = None
-        # if labels is not None:
-        #     labels = labels.to(logits.device)
-
-        #     ## instantiating the problem type if it is not specified
-        #     if self.config.problem_type is None:
-        #         if self.num_labels == 1:
-        #             self.config.problem_type = "regression"
-        #         elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-        #             self.config.problem_type = "single_label_classification"
-        #         else:
-        #             self.config.problem_type = "multi_label_classification"
-
-        #     ## obtaining the loss
-        #     if self.config.problem_type == "regression":
-        #         if self.use_huberloss:
-        #             loss_fct = HuberLoss()
-        #         else:
-        #             loss_fct = MSELoss()
-        #         if self.num_labels == 1:
-        #             loss = loss_fct(logits.squeeze(), labels.squeeze())
-        #         else:
-        #             loss = loss_fct(logits, labels)
-        #     elif self.config.problem_type == "single_label_classification":
-        #         loss_fct = CrossEntropyLoss()
-        #         loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-        #     elif self.config.problem_type == "multi_label_classification":
-        #         loss_fct = BCEWithLogitsLoss()
-        #         loss = loss_fct(logits, labels)
-
-        # payload = {
-        #     "loss" : loss,
-        #     "logits" : logits
-        # }
-
-        # return payload
-
-    def lm_model(self, inputs, conditional_tokens=None, attention_mask=None):
+    def forward(self, inputs, conditional_tokens=None, attention_mask=None):
         """LM model.
 
         Args:
@@ -239,14 +219,6 @@ class HeimdallTransformer(nn.Module):
             torch.tensor: The predicted outputs before cross entropy loss.
 
         """
-
-        # # Embedding layer
-        # if self.input_type == "learned":
-        #     input_embeds = self.input_embeddings(inputs)
-        # elif self.input_type == "predefined":
-        #     input_embeds = inputs
-        # else:
-        #     raise ValueError("input_type must be either 'learned' or 'predefined'")
 
         identity_inputs, expression_inputs = inputs
         input_embeds = self.fc.embed_cells(
@@ -296,7 +268,7 @@ class HeimdallTransformer(nn.Module):
         # Encoder
         encoder_output = self.encoder(input_embeds, src_key_padding_mask=attention_mask)
 
-        return self.head(encoder_output)
+        return encoder_output
 
 
 class CellPredHeadMixin:
