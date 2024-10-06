@@ -9,6 +9,7 @@ import torch.nn as nn
 from omegaconf import DictConfig
 
 from Heimdall.cell_representations import CellRepresentation
+from Heimdall.datasets import PairedInstanceDataset
 from Heimdall.utils import instantiate_from_config
 
 # try:
@@ -75,9 +76,8 @@ class HeimdallModel(nn.Module):
         )
         self.num_labels = data.num_tasks
         dim_in = model_config.d_model
-        if task_config.dataset_config.type.endswith(
-            "PairedInstanceDataset",
-        ):  # TODO: should we be able to check this somewhere else in the config?
+        if isinstance(data.datasets["full"], PairedInstanceDataset):
+            # TODO: should we be able to check this somewhere else in the config?
             dim_in *= 2
 
         self.head = instantiate_from_config(task_config.head_config, dim_in=dim_in, dim_out=self.num_labels)
