@@ -9,6 +9,7 @@ from torch.nn import Module
 
 from Heimdall.f_g import Fg
 from Heimdall.fe import Fe
+from Heimdall.utils import sample_without_replacement
 
 
 class Fc(ABC):
@@ -71,7 +72,7 @@ class Fc(ABC):
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
     ) -> Tensor:
-        """Embed cells using the embedding layers.
+        """Embed cell batch using the embedding layers.
 
         Args:
             identity_inputs: batched gene identity embedding indices
@@ -148,14 +149,19 @@ class GeneformerFc(Fc):
 class ScGPTFc(Fc):
     """Implementation of scGPT cell embedding."""
 
+    def __init__(self, fg: Fg | None, fe: Fe | None, adata: ad.AnnData, max_input_length: Optional[int] = None):
+        super().__init__(fg, fe, adata, max_input_length)
+        seed = 0  # TODO: make this configurable???
+        self.rng = np.random.default_rng(seed)
+
     def preprocess_cells(self):
         valid_mask = self.adata.var["identity_valid_mask"]
         valid_genes = self.adata.var_names[valid_mask].values
 
         cell_identity_embedding_indices = np.array(
-            [self.fg[valid_genes][: self.max_input_length] for _ in range(len(self.adata))],
+            [self.fg[valid_genes] for _ in range(len(self.adata))],
         )
-        cell_expression_embedding_indices = self.fe[:, : self.max_input_length]
+        cell_expression_embedding_indices = self.fe[:]
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
@@ -176,6 +182,19 @@ class ScGPTFc(Fc):
             expression_embedding_layer: # TODO fill out
 
         """
+
+        # Randomly sample self.max_input_length every iteration (iff there are too many genes)
+        # TODO: This means that the order of the gene embeddings for each cell's representation
+        # changes every iteration. Is this really what scGPT does? It seems like it would be hard
+        # to learn meaningful embeddings with this randomness. Or maybe I'm misunderstanding the
+        # masked language modeling pretraining task
+        batch_size, max_gene_index = identity_inputs.shape
+        if max_gene_index > self.max_input_length:
+            random_indices = sample_without_replacement(self.rng, max_gene_index, batch_size, self.max_input_length)
+            batch_indices = np.arange(batch_size).reshape((-1, 1))
+
+            identity_inputs = identity_inputs[batch_indices, random_indicess]
+            expression_inputs = expression_inputs[batch_indices, random_indicess]
 
         gene_embeddings = gene_embedding_layer(identity_inputs)
         expression_embeddings = expression_embedding_layer(expression_inputs)

@@ -17,6 +17,7 @@ import pandas as pd
 import requests
 import torch
 import torch.nn as nn
+from numpy.random import Generator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import default_collate
@@ -407,3 +408,23 @@ def _load_ensembl_table(
             symbol_to_ensembl = json.load(f)
 
     return symbol_to_ensembl
+
+
+def sample_without_replacement(rng: Generator, max_index: int, num_samples: int, sample_size: int):
+    """Generate random samples of indices without replacement using NumPy
+    vectorization.
+
+    Args:
+        rng: random number generator from which to sample
+        max_index: max index of which can be included in a sample
+        num_samples: number of index vectors to sample
+        sample_size: number of random indices (without replacement) per sample
+
+    Return:
+        randomly sampled indices without replacement
+
+    """
+    random_samples = rng.random((num_samples, max_index))
+    random_indices = np.argpartition(random_samples, sample_size - 1, axis=1)[:, :sample_size]
+
+    return random_indices

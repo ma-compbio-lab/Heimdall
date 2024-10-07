@@ -77,7 +77,12 @@ class DummyFe(Fe):
 
     def preprocess_embeddings(self):
         """Stand-in `fe` preprocessing; marks `expression_embedding_index` as
-        invalid."""
+        invalid.
+
+        TODO: maybe we should have the `None` value for `self.expression_embeddings` marked
+        with some other value to indicate that no embedding layer should be instantiated
+
+        """
         self.expression_embeddings = None
         dummy_indices = pd.array(np.full((len(self.adata), self.num_embeddings), np.nan))
         self.adata.obsm["processed_expression_values"] = dummy_indices
