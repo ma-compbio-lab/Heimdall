@@ -193,8 +193,8 @@ class ScGPTFc(Fc):
             random_indices = sample_without_replacement(self.rng, max_gene_index, batch_size, self.max_input_length)
             batch_indices = np.arange(batch_size).reshape((-1, 1))
 
-            identity_inputs = identity_inputs[batch_indices, random_indicess]
-            expression_inputs = expression_inputs[batch_indices, random_indicess]
+            identity_inputs = identity_inputs[batch_indices, random_indices]
+            expression_inputs = expression_inputs[batch_indices, random_indices]
 
         gene_embeddings = gene_embedding_layer(identity_inputs)
         expression_embeddings = expression_embedding_layer(expression_inputs)
