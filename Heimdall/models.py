@@ -1,6 +1,5 @@
 """Heimdall model."""
 
-import warnings
 from dataclasses import dataclass
 from typing import Callable, Optional, Sequence
 
@@ -89,12 +88,6 @@ class HeimdallModel(nn.Module):
 
         identity_inputs, expression_inputs = inputs
         if isinstance(identity_inputs, list):
-            # # TODO: replace with proper handling
-            # warnings.warn(
-            #     "Paired input model not setup corectly yet, only use for dev",
-            #     UserWarning,
-            #     stacklevel=2,
-            # )
             # inputs = list(zip(identity_inputs, expression_inputs))
             encoded_1, encoded_2 = (self.lm_model(inputs[i], conditional_tokens, attention_mask) for i in range(2))
 
