@@ -128,21 +128,21 @@ def paired_task_config(request, toy_paried_data_path):
         - 0.9
         - 0.95
         foreach: false
-    f_c:
-      type: Heimdall.f_c.GeneformerFc
+    fc:
+      type: Heimdall.fc.GeneformerFc
       args:
-        max_input_length: 128
+        max_input_length: 2048
     fe:
       type: Heimdall.fe.SortingFe
       args:
-        embedding_filepath: null
+        embedding_cls: torch.nn.Embedding
         num_embeddings: null
         d_embedding: 128
-    f_g:
-      name: IdentityFg
-      type: Heimdall.f_g.IdentityFg
+    fg:
+      name: "IdentityFg"
+      type: Heimdall.fg.IdentityFg
       args:
-        embedding_filepath: null
+        embedding_cls: torch.nn.Embedding
         d_embedding: 128
     loss:
       name: CrossEntropyLoss
@@ -223,21 +223,21 @@ def single_task_config(toy_single_data_path):
         - 0.9
         - 0.95
         foreach: false
-    f_c:
-      type: Heimdall.f_c.GeneformerFc
+    fc:
+      type: Heimdall.fc.GeneformerFc
       args:
-        max_input_length: 128
+        max_input_length: 2048
     fe:
       type: Heimdall.fe.SortingFe
       args:
-        embedding_filepath: null
+        embedding_cls: torch.nn.Embedding
         num_embeddings: null
         d_embedding: 128
-    f_g:
-      name: IdentityFg
-      type: Heimdall.f_g.IdentityFg
+    fg:
+      name: "IdentityFg"
+      type: Heimdall.fg.IdentityFg
       args:
-        embedding_filepath: null
+        embedding_cls: torch.nn.Embedding
         d_embedding: 128
     loss:
       name: CrossEntropyLoss

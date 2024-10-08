@@ -32,7 +32,7 @@ def mock_dataset():
 def identity_fg(mock_dataset):
     fg_config = OmegaConf.create(
         {
-            "embedding_filepath": None,
+            "embedding_cls": "torch.nn.Embedding",
             "d_embedding": 128,
         },
     )
@@ -45,7 +45,7 @@ def identity_fg(mock_dataset):
 def sorting_fe(mock_dataset):
     fe_config = OmegaConf.create(
         {
-            "embedding_filepath": None,
+            "embedding_cls": "torch.nn.Embedding",
             "num_embeddings": None,
             "d_embedding": 128,
         },
@@ -59,7 +59,7 @@ def sorting_fe(mock_dataset):
 def binning_fe(mock_dataset):
     fe_config = OmegaConf.create(
         {
-            "embedding_filepath": None,
+            "embedding_cls": "torch.nn.Embedding",
             "num_embeddings": int(np.max(mock_dataset.X)) + 1,
             "d_embedding": 128,
         },

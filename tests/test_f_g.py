@@ -31,7 +31,7 @@ def mock_dataset():
 def test_identity_fg(mock_dataset):
     config = OmegaConf.create(
         {
-            "embedding_filepath": None,
+            "embedding_cls": "torch.nn.Embedding",
             "d_embedding": 128,
         },
     )
@@ -48,6 +48,7 @@ def test_identity_fg(mock_dataset):
 def test_esm2_fg(mock_dataset):
     config = OmegaConf.create(
         {
+            "embedding_cls": "torch.nn.Embedding",
             "embedding_filepath": Path(
                 "/work/magroup/shared/Heimdall/data/pretrained_embeddings/ESM2/protein_map_human_ensembl.pt",
             ),
@@ -78,6 +79,7 @@ def test_esm2_fg(mock_dataset):
 def test_gene2vec_fg(mock_dataset):
     config = OmegaConf.create(
         {
+            "embedding_cls": "torch.nn.Embedding",
             "embedding_filepath": Path(
                 "/work/magroup/shared/Heimdall/data/pretrained_embeddings/gene2vec/gene2vec_genes.txt",
             ),

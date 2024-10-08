@@ -11,7 +11,7 @@ from torch import Tensor
 
 from Heimdall.cell_representations import CellRepresentation
 from Heimdall.datasets import PairedInstanceDataset
-from Heimdall.utils import instantiate_from_config
+from Heimdall.utils import get_name, instantiate_from_config
 
 # try:
 #     from flash_attn.models.bert import BertEncoder
@@ -145,22 +145,26 @@ class HeimdallTransformer(nn.Module):
         self.vocab_size = data.sequence_length + 2  # <PAD> and <MASK> TODO: data.vocab_size
         self.max_seq_length = data.sequence_length
 
-        # TODO: modify so that embedding layers can be MLPs (as in scGPT, etc.), etc.
-        gene_embedding_layer = data.fg.gene_embeddings
-        if gene_embedding_layer is not None:
-            self.gene_embeddings = nn.Embedding.from_pretrained(torch.tensor(gene_embedding_layer, dtype=torch.float32))
+        gene_embeddings = data.fg.gene_embeddings
+        gene_embedding_cls, _, _ = get_name(data.fg.embedding_cls)
+        if gene_embeddings is not None:
+            self.gene_embeddings = gene_embedding_cls.from_pretrained(
+                torch.tensor(gene_embeddings, dtype=torch.float32),
+            )
+            # self.gene_embeddings = nn.Embedding.from_pretrained(torch.tensor(gene_embedding_layer, dtype=torch.float32))
         elif data.fg.d_embedding is not None:
-            self.gene_embeddings = nn.Embedding(self.vocab_size, data.fg.d_embedding)
+            self.gene_embeddings = gene_embedding_cls(self.vocab_size, data.fg.d_embedding)
         else:
             self.gene_embeddings = None
 
-        expression_embedding_layer = data.fe.expression_embeddings
-        if expression_embedding_layer is not None:
-            self.expression_embeddings = nn.Embedding.from_pretrained(
-                torch.tensor(expression_embedding_layer, dtype=torch.float32),
+        expression_embeddings = data.fe.expression_embeddings
+        expression_embedding_cls, _, _ = get_name(data.fe.embedding_cls)
+        if expression_embeddings is not None:
+            self.expression_embeddings = expression_embedding_cls.from_pretrained(
+                torch.tensor(expression_embeddings, dtype=torch.float32),
             )
         elif data.fe.d_embedding is not None:
-            self.expression_embeddings = nn.Embedding(
+            self.expression_embeddings = expression_embedding_cls(
                 data.fe.num_embeddings or self.vocab_size,
                 data.fe.d_embedding,
             )

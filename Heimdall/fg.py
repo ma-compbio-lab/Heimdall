@@ -16,15 +16,20 @@ class Fg(ABC):
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         d_embedding: dimensionality of embedding for each gene entity
-        embedding_filepath: filepath from which to load pretrained embeddings
 
     """
 
-    def __init__(self, adata: ad.AnnData, d_embedding: int, embedding_filepath: Optional[str | PathLike] = None):
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        embedding_cls: str,
+        d_embedding: int,
+        embedding_filepath: Optional[str | PathLike] = None,
+    ):
         self.adata = adata
         _, self.num_genes = adata.shape
         self.d_embedding = d_embedding
-        self.embedding_filepath = embedding_filepath
+        self.embedding_cls = embedding_cls
 
     @abstractmethod
     def preprocess_embeddings(self):
@@ -85,10 +90,23 @@ class Fg(ABC):
 class PretrainedFg(Fg, ABC):
     """Abstraction for pretrained `Fg`s that can be loaded from disk.
 
+    Args:
+        embedding_filepath: filepath from which to load pretrained embeddings
+
     Raises:
         ValueError: if `config.d_embedding` is larger than embedding dimensionality given in filepath.
 
     """
+
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        embedding_cls: str,
+        d_embedding: int,
+        embedding_filepath: Optional[str | PathLike] = None,
+    ):
+        super().__init__(adata, embedding_cls, d_embedding)
+        self.embedding_filepath = embedding_filepath
 
     @abstractmethod
     def load_embeddings(self) -> Dict[str, NDArray]:

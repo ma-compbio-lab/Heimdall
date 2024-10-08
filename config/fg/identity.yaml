@@ -1,6 +1,5 @@
 name: "IdentityFg"
 type: Heimdall.fg.IdentityFg
-
 args:
-  embedding_filepath: null
+  embedding_cls: torch.nn.Embedding
   d_embedding: ${model.args.d_model}

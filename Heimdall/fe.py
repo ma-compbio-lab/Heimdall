@@ -18,22 +18,21 @@ class Fe(ABC):
         d_embedding: dimensionality of embedding for each expression entity
         num_embeddings: number of embeddings to generate for expression-based embedding,
             e.g. how many bins for binning, etc.
-        embedding_filepath: filepath from which to load pretrained embeddings
 
     """
 
     def __init__(
         self,
         adata: ad.AnnData,
+        embedding_cls: str,
         d_embedding: int,
         num_embeddings: Optional[int] = None,
-        embedding_filepath: Optional[str | PathLike] = None,
     ):
         self.adata = adata
         _, self.num_genes = adata.shape
+        self.embedding_cls = embedding_cls
         self.d_embedding = d_embedding
         self.num_embeddings = num_embeddings
-        self.embedding_filepath = embedding_filepath
 
     @abstractmethod
     def preprocess_embeddings(self):
