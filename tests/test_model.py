@@ -51,7 +51,7 @@ def toy_single_data_path(pytestconfig, plain_toy_data):
 
 
 @fixture(scope="module")
-def paired_task_config(toy_paried_data_path):
+def paired_task_config(request, toy_paried_data_path):
     config_string = f"""
     project_name: Cell_Cell_interaction
     run_name: run_name
@@ -99,6 +99,8 @@ def paired_task_config(toy_paried_data_path):
         batchsize: 32
         epochs: 10
         prediction_dim: 14
+        reduction:
+          type: {request.param}
         dataset_config:
           type: Heimdall.datasets.PairedInstanceDataset
         head_config:
@@ -245,15 +247,37 @@ def single_task_config(toy_single_data_path):
     return conf
 
 
-@pytest.mark.parametrize("config_fixture", ["single_task_config", "paired_task_config"])
-def test_model_instantiation(request, config_fixture):
-    config = request.getfixturevalue(config_fixture)
-    cr = CellRepresentation(config)  # takes in the whole config from hydra
+@pytest.mark.parametrize(
+    "paired_task_config",
+    [
+        "Heimdall.utils.SumReducer",
+        "Heimdall.utils.MeanReducer",
+        "Heimdall.utils.SymmetricConcatReducer",
+        "Heimdall.utils.AsymmetricConcatReducer",
+    ],
+    indirect=True,
+)
+def test_paired_task_model_instantiation(paired_task_config):
+    cr = CellRepresentation(paired_task_config)  # takes in the whole paired_task_config from hydra
 
     model = HeimdallModel(
         data=cr,
-        model_config=config.model.args,
-        task_config=config.tasks.args,
+        model_config=paired_task_config.model.args,
+        task_config=paired_task_config.tasks.args,
+    )
+
+    # Test execution
+    batch = next(iter(cr.dataloaders["train"]))
+    model(inputs=(batch["identity_inputs"], batch["expression_inputs"]), conditional_tokens=None)
+
+
+def test_single_task_model_instantiation(single_task_config):
+    cr = CellRepresentation(single_task_config)  # takes in the whole config from hydra
+
+    model = HeimdallModel(
+        data=cr,
+        model_config=single_task_config.model.args,
+        task_config=single_task_config.tasks.args,
     )
 
     # Test execution

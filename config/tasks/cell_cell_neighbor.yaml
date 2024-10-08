@@ -13,6 +13,8 @@ args:
   batchsize: 32
   epochs: 10
   rebalance: true
+  reduction:
+    type: Heimdall.utils.SymmetricConcatReducer
   dataset_config:
     type: Heimdall.datasets.PairedInstanceDataset
   head_config:

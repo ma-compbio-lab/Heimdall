@@ -4,6 +4,7 @@ import json
 import math
 import uuid
 import warnings
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import partial, wraps
@@ -19,6 +20,7 @@ import torch
 import torch.nn as nn
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
+from torch import Tensor
 from torch.utils.data import default_collate
 from tqdm.auto import tqdm
 
@@ -74,11 +76,11 @@ def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
     return binned_values
 
 
-def get_class(target: str):
+def get_name(target: str):
     module, obj = target.rsplit(".", 1)
-    cls = getattr(importlib.import_module(module, package=None), obj)
+    name = getattr(importlib.import_module(module, package=None), obj)
 
-    return cls, module, obj
+    return name, module, obj
 
 
 def instantiate_from_config(
@@ -95,7 +97,7 @@ def instantiate_from_config(
         return
 
     # Obtain target object and kwargs
-    cls, module, obj = get_class(config[_target_key])
+    cls, module, obj = get_name(config[_target_key])
     kwargs = config.get(_params_key, None) or {}
 
     if _catch_conflict:
@@ -407,3 +409,51 @@ def _load_ensembl_table(
             symbol_to_ensembl = json.load(f)
 
     return symbol_to_ensembl
+
+
+class Reducer(ABC):
+    """Reduce a list of `n` tensors into a single tensor.
+
+    Each tensor in the list must have dimensionality `(batch_size, dim_in)`. The
+    reduction may be symmetric or asymmetric.
+
+    """
+
+    def __init__(self, dim_in: int):
+        self.dim_in = dim_in
+
+    @abstractmethod
+    def reduce(self, tensors: list[Tensor]): ...
+
+
+class SumReducer(Reducer):
+    def reduce(self, tensors: list[Tensor]):
+        return torch.sum(torch.stack(tensors, axis=0), axis=0)
+
+
+class MeanReducer(Reducer):
+    def reduce(self, tensors: list[Tensor]):
+        return torch.mean(torch.stack(tensors, axis=0), axis=0)
+
+
+class AsymmetricConcatReducer(Reducer):
+    def __init__(self, dim_in: int):
+        super().__init__(dim_in=dim_in)
+        self.pair_embedder = nn.Linear(2 * dim_in, dim_in)
+
+    def reduce(self, tensors: list[Tensor]):
+        concatenated = torch.cat(tensors, dim=2)
+        return self.pair_embedder(concatenated)
+
+
+class SymmetricConcatReducer(Reducer):
+    def __init__(self, dim_in: int):
+        super().__init__(dim_in=dim_in)
+        self.pair_embedder = nn.Linear(2 * dim_in, dim_in)
+
+    def reduce(self, tensors: list[Tensor]):
+        concatenated_1 = torch.cat(tensors, dim=2)
+        concatenated_2 = torch.cat(list(reversed(tensors)), dim=2)
+
+        encoded = self.pair_embedder(concatenated_1) + self.pair_embedder(concatenated_2)
+        return encoded

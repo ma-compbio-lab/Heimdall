@@ -1,7 +1,7 @@
 """Heimdall model."""
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -36,7 +36,7 @@ class TransformerOutput:
             self.__dict__[key] = val.to(device)
 
     @classmethod
-    def reduce(cls, outputs: Sequence["TransformerOutput"], reduction: Callable = torch.sum):
+    def reduce(cls, outputs: list["TransformerOutput"], reduction: Callable = torch.sum):
         keys = cls.__dict__["__annotations__"].keys()
         reduced_output = TransformerOutput(
             **{
@@ -75,9 +75,13 @@ class HeimdallModel(nn.Module):
         )
         self.num_labels = data.num_tasks
         dim_in = model_config.d_model
+        self.reducer = self.reduction_name = None
         if isinstance(data.datasets["full"], PairedInstanceDataset):
-            # TODO: should we be able to check this somewhere else in the config?
-            dim_in *= 2
+            self.reducer, self.reduction_name = instantiate_from_config(
+                task_config.reduction,
+                dim_in=dim_in,
+                return_name=True,
+            )
 
         self.head = instantiate_from_config(task_config.head_config, dim_in=dim_in, dim_out=self.num_labels)
 
@@ -86,22 +90,15 @@ class HeimdallModel(nn.Module):
         if conditional_tokens is not None and len(conditional_tokens) == 0:
             conditional_tokens = None
 
-        identity_inputs, expression_inputs = inputs
-        if isinstance(identity_inputs, list):
-            # inputs = list(zip(identity_inputs, expression_inputs))
-            encoded_1, encoded_2 = (self.lm_model(inputs[i], conditional_tokens, attention_mask) for i in range(2))
-
-            # Combine paired encoded inputs before passing to decoder
-            concatenated_1 = torch.cat([encoded_1, encoded_2], dim=2)
-            concatenated_2 = torch.cat([encoded_2, encoded_1], dim=2)
-
-            outputs_1 = self.head(concatenated_1)
-            outputs_2 = self.head(concatenated_2)
-
-            outputs = TransformerOutput.reduce([outputs_1, outputs_2])
+        if self.reducer is not None:
+            encoded_cells = tuple(
+                self.lm_model(cell_inputs, conditional_tokens, attention_mask) for cell_inputs in inputs
+            )
+            encoded = self.reducer.reduce(encoded_cells)
         else:
             encoded = self.lm_model(inputs, conditional_tokens, attention_mask)
-            outputs = self.head(encoded)
+
+        outputs = self.head(encoded)
 
         return outputs
 
@@ -265,6 +262,7 @@ class HeimdallTransformer(nn.Module):
 
         # Encoder
         encoder_output = self.encoder(input_embeds, src_key_padding_mask=attention_mask)
+        print(encoder_output.size())
 
         return encoder_output
 
