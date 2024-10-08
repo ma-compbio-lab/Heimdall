@@ -1,6 +1,5 @@
 """Heimdall trainer."""
 
-import numpy as np
 import psutil
 import torch
 import torch.nn as nn
@@ -216,7 +215,7 @@ class HeimdallTrainer:
                 if val_metric > best_metric[f"best_val_{track_metric}"]:
                     best_metric[f"best_val_{track_metric}"] = val_metric
                     print(f"New best validation {track_metric}: {val_metric}")
-                    best_metric["reported_epoch"] = epoch  ## log the epoch for convenience
+                    best_metric["reported_epoch"] = epoch  # log the epoch for convenience
                     for metric in self.cfg.tasks.args.metrics:
                         best_metric[f"reported_test_{metric}"] = test_log.get(f"test_{metric}", float("-inf"))
                         print(f"Corresponding test {metric}: {best_metric[f'reported_test_{metric}']}")
@@ -225,7 +224,8 @@ class HeimdallTrainer:
                     patience_counter += 1
                     if early_stopping:
                         print(
-                            f"No improvement in validation {track_metric}. Patience counter: {patience_counter}/{early_stopping_patience}",
+                            f"No improvement in validation {track_metric}. "
+                            f"Patience counter: {patience_counter}/{early_stopping_patience}",
                         )
 
             # Check early stopping condition
@@ -239,7 +239,7 @@ class HeimdallTrainer:
             self.train_epoch(epoch)
 
         if self.run_wandb and self.accelerator.is_main_process:
-            if track_metric:  ## logging the best val score and the tracked test scores
+            if track_metric:  # logging the best val score and the tracked test scores
                 self.accelerator.log(best_metric)
 
             self.accelerator.end_training()
