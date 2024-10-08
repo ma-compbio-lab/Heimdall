@@ -264,7 +264,7 @@ class HeimdallTransformer(nn.Module):
 
         # Encoder
         encoder_output = self.encoder(input_embeds, src_key_padding_mask=attention_mask)
-        print(encoder_output.size())
+        # print(encoder_output.size())
 
         return encoder_output
 
