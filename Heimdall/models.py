@@ -145,25 +145,14 @@ class HeimdallTransformer(nn.Module):
         self.vocab_size = data.sequence_length + 2  # <PAD> and <MASK> TODO: data.vocab_size
         self.max_seq_length = data.sequence_length
 
-        # TODO: modify so that embedding layers can be MLPs (as in scGPT, etc.), etc.
-        gene_embedding_layer = data.fg.gene_embeddings
-        if gene_embedding_layer is not None:
-            self.gene_embeddings = nn.Embedding.from_pretrained(torch.tensor(gene_embedding_layer, dtype=torch.float32))
-        elif data.fg.d_embedding is not None:
-            self.gene_embeddings = nn.Embedding(self.vocab_size, data.fg.d_embedding)
+        # Setting up embedding layers
+        if data.fg.d_embedding is not None:
+            self.gene_embeddings = instantiate_from_config(data.fg.embedding_parameters)
         else:
             self.gene_embeddings = None
 
-        expression_embedding_layer = data.fe.expression_embeddings
-        if expression_embedding_layer is not None:
-            self.expression_embeddings = nn.Embedding.from_pretrained(
-                torch.tensor(expression_embedding_layer, dtype=torch.float32),
-            )
-        elif data.fe.d_embedding is not None:
-            self.expression_embeddings = nn.Embedding(
-                data.fe.num_embeddings or self.vocab_size,
-                data.fe.d_embedding,
-            )
+        if data.fe.d_embedding is not None:
+            self.expression_embeddings = instantiate_from_config(data.fe.embedding_parameters)
         else:
             self.expression_embeddings = None
 

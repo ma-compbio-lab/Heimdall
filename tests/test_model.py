@@ -13,8 +13,7 @@ from Heimdall.models import HeimdallModel
 @fixture(scope="module")
 def plain_toy_data():
     return ad.AnnData(
-        X=np.arange(15).reshape(5, 3),
-        obs=pd.DataFrame(index=range(5)),
+        X=np.arange(3 * 5).reshape(5, 3),
         var=pd.DataFrame(index=["ENSG00000142611", "ENSG00000157911", "ENSG00000274917"]),
     )
 
@@ -128,21 +127,28 @@ def paired_task_config(request, toy_paried_data_path):
         - 0.9
         - 0.95
         foreach: false
-    f_c:
-      type: Heimdall.f_c.GeneformerFc
+    fc:
+      type: Heimdall.fc.GeneformerFc
       args:
-        max_input_length: 128
+        max_input_length: 2048
     fe:
       type: Heimdall.fe.SortingFe
       args:
-        embedding_filepath: null
-        num_embeddings: null
+        embedding_parameters:
+          type: torch.nn.Embedding
+          args:
+            num_embeddings: "max_seq_length"
+            embedding_dim: 128
         d_embedding: 128
-    f_g:
+    fg:
       name: IdentityFg
-      type: Heimdall.f_g.IdentityFg
+      type: Heimdall.fg.IdentityFg
       args:
-        embedding_filepath: null
+        embedding_parameters:
+          type: torch.nn.Embedding
+          args:
+            num_embeddings: "vocab_size"
+            embedding_dim: 128
         d_embedding: 128
     loss:
       name: CrossEntropyLoss
@@ -223,21 +229,29 @@ def single_task_config(toy_single_data_path):
         - 0.9
         - 0.95
         foreach: false
-    f_c:
-      type: Heimdall.f_c.GeneformerFc
+    fc:
+      type: Heimdall.fc.ScGPTFc
       args:
-        max_input_length: 128
+        max_input_length: 2048
     fe:
-      type: Heimdall.fe.SortingFe
+      type: Heimdall.fe.BinningFe
       args:
-        embedding_filepath: null
-        num_embeddings: null
         d_embedding: 128
-    f_g:
+        num_bins: 10
+        embedding_parameters:
+          type: Heimdall.utils.FlexibleTypeLinear
+          args:
+            in_features: "max_seq_length"
+            out_features: 128
+    fg:
       name: IdentityFg
-      type: Heimdall.f_g.IdentityFg
+      type: Heimdall.fg.IdentityFg
       args:
-        embedding_filepath: null
+        embedding_parameters:
+          type: torch.nn.Embedding
+          args:
+            num_embeddings: "vocab_size"
+            embedding_dim: 128
         d_embedding: 128
     loss:
       name: CrossEntropyLoss
