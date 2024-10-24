@@ -7,6 +7,8 @@ import pandas as pd
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+from scipy.sparse import issparse
+from tqdm import tqdm
 
 from Heimdall.utils import searchsorted2d
 
@@ -58,8 +60,9 @@ class Fe(ABC):
 
         """
         embedding_indices = self.adata.obsm["processed_expression_values"][cell_indices]
+        padding_mask = self.adata.obsm["padding_mask"][cell_indices]
 
-        return embedding_indices
+        return embedding_indices, padding_mask
 
     def load_from_cache(self, processed_expression_values: NDArray, expression_embeddings: NDArray | None):
         """Load processed values from cache."""
@@ -152,6 +155,8 @@ class BinningFe(Fe):
 class SortingFe(Fe):
     """Sorting Fe."""
 
+    ## TODO: make it such that we mask out values with zero expression, because right now we don't
+    ## I think I can make a function in the Fe for it.
     def preprocess_embeddings(self):
         """Sort genes by expression per cell.
 
@@ -161,12 +166,37 @@ class SortingFe(Fe):
         self.expression_embeddings = None
 
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
-        expression = self.adata.X[:, valid_mask]
-        gene_medians = np.median(expression, axis=0)
-        normalized_expression = expression / gene_medians
+        self.adata = self.adata[:, valid_mask]
 
+        nonzero_mask = self.adata.layers["nonzero_mask"].toarray()
+
+        if issparse(self.adata.X):
+            expression = self.adata.X.toarray()  ## not needed if it is scaled
+        else:
+            expression = self.adata.X
+
+        # expression = self.adata.X[:, valid_mask].toarray()
+
+        # gene_medians = np.median(expression, axis=0)
+        # normalized_expression = expression / gene_medians
+
+        print("> WE CURRENTLY REMOVE THE MEDIAN PROCESSING BECAUSE WE GET 0's")
+        normalized_expression = expression
+        # normalized_expression[~nonzero_mask] =  0
         argsorted_expression = np.argsort(normalized_expression, axis=1)[:, ::-1]
 
+        padding_mask = np.zeros_like(argsorted_expression)
+
+        # Iterate over each cell (row)
+        for i in tqdm(range(nonzero_mask.shape[0])):
+            # Get indices where nonzero_mask is False for the current row
+            zero_indices = np.where(nonzero_mask[i] == False)[0]
+            mask = np.isin(argsorted_expression[i], zero_indices)
+            argsorted_expression[i][mask] = -1
+            padding_mask[i] = mask  ## constructing the padding mask
+
+        ## obsm is tied to the rows, but not to the columns
         self.adata.obsm["processed_expression_values"] = argsorted_expression
+        self.adata.obsm["padding_mask"] = padding_mask.astype(bool)
 
         self.replace_placeholders()

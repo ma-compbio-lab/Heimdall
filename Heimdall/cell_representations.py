@@ -216,6 +216,9 @@ class CellRepresentation(SpecialTokenMixin):
         self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
 
+        # save a mask of 0s or nonzero
+        self.adata.layers["nonzero_mask"] = self.adata.X != 0
+
         # convert gene names to ensembl ids
         if (self.adata.var.index.str.startswith("ENS").sum() / len(self.adata.var.index)) < 0.9:
             self.adata, symbol_to_ensembl_mapping = self.convert_to_ensembl_ids(
@@ -381,6 +384,7 @@ class CellRepresentation(SpecialTokenMixin):
 
             OmegaConf.save(cfg, processed_cfg_path)
 
+        breakpoint()
         self.fg.preprocess_embeddings()
         print(f"> Finished calculating fg with {self.fg_cfg.type}")
 
