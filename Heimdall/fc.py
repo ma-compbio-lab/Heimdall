@@ -3,6 +3,7 @@ from typing import Optional, Sequence, Union
 
 import anndata as ad
 import numpy as np
+import torch
 from numpy.typing import NDArray
 from torch import Tensor
 from torch.nn import Module
@@ -72,6 +73,7 @@ class Fc(ABC):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        attention_mask: Tensor | None,
     ) -> Tensor:
         """Embed cell batch using the embedding layers.
 
@@ -110,7 +112,6 @@ class GeneformerFc(Fc):
         valid_mask = self.adata.var["identity_valid_mask"]
         valid_genes = self.adata.var_names[valid_mask].values
 
-        breakpoint()
         cell_expression_embedding_indices, padding_mask = self.fe[:, : self.max_input_length]
 
         try:
@@ -135,6 +136,7 @@ class GeneformerFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        attention_mask: Tensor | None,
     ) -> Tensor:
         """Geneformer cell embedding function.
 
@@ -148,7 +150,7 @@ class GeneformerFc(Fc):
 
         embeddings = gene_embedding_layer(identity_inputs)
 
-        return embeddings
+        return embeddings, attention_mask
 
 
 class ScGPTFc(Fc):
@@ -166,10 +168,11 @@ class ScGPTFc(Fc):
         cell_identity_embedding_indices = np.array(
             [self.fg[valid_genes] for _ in range(len(self.adata))],
         )
-        cell_expression_embedding_indices = self.fe[:]
+        cell_expression_embedding_indices, padding_mask = self.fe[:]
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
+        self.adata.obsm["cell_expression_padding_mask"] = padding_mask
 
     def embed_cells(
         self,
@@ -177,6 +180,7 @@ class ScGPTFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        attention_mask: Tensor | None,
     ) -> Tensor:
         """ScGPT cell embedding callback.
 
@@ -188,20 +192,49 @@ class ScGPTFc(Fc):
 
         """
 
+        # breakpoint()
         # Randomly sample self.max_input_length every iteration (iff there are too many genes)
         # TODO: This means that the order of the gene embeddings for each cell's representation
         # changes every iteration. Is this really what scGPT does? It seems like it would be hard
         # to learn meaningful embeddings with this randomness. Or maybe I'm misunderstanding the
         # masked language modeling pretraining task
         batch_size, max_gene_index = identity_inputs.shape
-        if max_gene_index > self.max_input_length:
-            random_indices = sample_without_replacement(self.rng, max_gene_index, batch_size, self.max_input_length)
-            batch_indices = np.arange(batch_size).reshape((-1, 1))
 
-            identity_inputs = identity_inputs[batch_indices, random_indices]
-            expression_inputs = expression_inputs[batch_indices, random_indices]
+        ## TODO: set the torch generator for reproducibility, but it needs to be created WITH the device, and cannot change
+        # torch_rng = torch.Generator(device=attention_mask.device).manual_seed(42)  # Torch RNG with a fixed seed for reproducibility
+        # random_scores = torch.rand((batch_size, max_gene_index), generator=torch_rng, device=attention_mask.device)
 
-        gene_embeddings = gene_embedding_layer(identity_inputs)
-        expression_embeddings = expression_embedding_layer(expression_inputs)
+        random_scores = torch.rand((batch_size, max_gene_index), device=attention_mask.device)  # uniform distribution
+        masked_scores = torch.where(
+            attention_mask,
+            random_scores,
+            torch.tensor(float("-inf")),
+        )  # neg inf for masked positions
+        _, partitioned_indices = torch.topk(
+            masked_scores,
+            max_gene_index,
+            dim=1,
+            largest=True,
+        )  # sort based on score, all neg inf are by default included
+        reindexed_expression_inputs = torch.gather(expression_inputs, dim=1, index=partitioned_indices)
+        reindexed_identity_inputs = torch.gather(identity_inputs, dim=1, index=partitioned_indices)
 
-        return gene_embeddings + expression_embeddings
+        expression_embeddings = expression_embedding_layer(reindexed_expression_inputs.unsqueeze(-1))
+        gene_embeddings = gene_embedding_layer(reindexed_identity_inputs)
+
+        reindexed_attention_mask = reindexed_expression_inputs != 0
+
+        # breakpoint()
+        # if max_gene_index > self.max_input_length:
+        #     random_indices = sample_without_replacement(self.rng, max_gene_index, batch_size, self.max_input_length)
+        #     batch_indices = np.arange(batch_size).reshape((-1, 1))
+
+        #     identity_inputs = identity_inputs[batch_indices, random_indices]
+        #     expression_inputs = expression_inputs[batch_indices, random_indices]
+
+        # gene_embeddings = gene_embedding_layer(identity_inputs)
+        # expression_embeddings = expression_embedding_layer(expression_inputs)
+
+        # breakpoint()
+
+        return gene_embeddings + expression_embeddings, reindexed_attention_mask

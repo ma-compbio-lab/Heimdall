@@ -20,6 +20,7 @@ import torch.nn as nn
 from numpy.random import Generator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
+from torch import Tensor
 from torch.utils.data import default_collate
 from tqdm.auto import tqdm
 
@@ -410,7 +411,13 @@ def _load_ensembl_table(
     return symbol_to_ensembl
 
 
-def sample_without_replacement(rng: Generator, max_index: int, num_samples: int, sample_size: int):
+def sample_without_replacement(
+    rng: Generator,
+    max_index: int,
+    num_samples: int,
+    sample_size: int,
+    attention_mask: Tensor,
+):
     """Generate random samples of indices without replacement using NumPy
     vectorization.
 
@@ -424,6 +431,7 @@ def sample_without_replacement(rng: Generator, max_index: int, num_samples: int,
         randomly sampled indices without replacement
 
     """
+    attention_mask = np.array(attention_mask)
     random_samples = rng.random((num_samples, max_index))
     random_indices = np.argpartition(random_samples, sample_size - 1, axis=1)[:, :sample_size]
 

@@ -60,7 +60,11 @@ class Fe(ABC):
 
         """
         embedding_indices = self.adata.obsm["processed_expression_values"][cell_indices]
-        padding_mask = self.adata.obsm["padding_mask"][cell_indices]
+
+        if "padding_mask" in self.adata.obsm.keys():
+            padding_mask = self.adata.obsm["padding_mask"][cell_indices]
+        else:
+            padding_mask = None
 
         return embedding_indices, padding_mask
 
@@ -136,7 +140,14 @@ class BinningFe(Fe):
         self.expression_embeddings = None
 
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
-        expression = self.adata.X[:, valid_mask]
+        self.adata = self.adata[:, valid_mask]
+
+        if issparse(self.adata.X):
+            expression = self.adata.X.toarray()  ## not needed if it is scaled
+        else:
+            expression = self.adata.X
+
+        breakpoint()
 
         n_bins = self.num_bins
         if np.max(expression) == 0:
@@ -154,6 +165,9 @@ class BinningFe(Fe):
         binned_values[expression > 0] += 1
 
         self.adata.obsm["processed_expression_values"] = binned_values
+        self.adata.obsm["padding_mask"] = self.adata.layers[
+            "nonzero_mask"
+        ].toarray()  ## directly set the padding mask as the order has not changed
 
         self.replace_placeholders()
 

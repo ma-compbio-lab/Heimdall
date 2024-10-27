@@ -206,11 +206,14 @@ class HeimdallTransformer(nn.Module):
         """
 
         identity_inputs, expression_inputs = inputs
-        input_embeds = self.fc.embed_cells(
+
+        ## takes in attention_mask as it may need to be reprocessed if, for example, genes are sampled based on nonzero
+        input_embeds, attention_mask = self.fc.embed_cells(
             identity_inputs,
             self.gene_embeddings,
             expression_inputs,
             self.expression_embeddings,
+            attention_mask,
         )
 
         # Concatenate [CLS] token to the beginning of every sequence in the batch
