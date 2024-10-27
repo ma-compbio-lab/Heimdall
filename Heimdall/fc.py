@@ -62,7 +62,11 @@ class Fc(ABC):
 
         identity_inputs = self.adata.obsm["cell_identity_embedding_indices"][cell_indices].copy()
         expression_inputs = self.adata.obsm["cell_expression_embedding_indices"][cell_indices].copy()
-        expression_padding_mask = self.adata.obsm["cell_expression_padding_mask"][cell_indices].copy()
+
+        if "cell_expression_padding_mask" in self.adata.obsm.keys():
+            expression_padding_mask = self.adata.obsm["cell_expression_padding_mask"][cell_indices].copy()
+        else:
+            expression_padding_mask = None
 
         return identity_inputs, expression_inputs, expression_padding_mask
 
