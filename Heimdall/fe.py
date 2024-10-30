@@ -147,8 +147,6 @@ class BinningFe(Fe):
         else:
             expression = self.adata.X
 
-        breakpoint()
-
         n_bins = self.num_bins
         if np.max(expression) == 0:
             binned_values = np.zeros_like(expression)  # TODO: add correct typing (maybe add to config...?)
@@ -165,6 +163,47 @@ class BinningFe(Fe):
         binned_values[expression > 0] += 1
 
         self.adata.obsm["processed_expression_values"] = binned_values
+        self.adata.obsm["padding_mask"] = self.adata.layers[
+            "nonzero_mask"
+        ].toarray()  ## directly set the padding mask as the order has not changed
+
+        self.replace_placeholders()
+
+
+class RawVals(Fe):
+    """Directly passign the continuous values.
+
+    Args:
+        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
+        d_embedding: dimensionality of embedding for each expression entity
+        embedding_parameters: dimensionality of embedding for each expression entity
+        num_bins: number of bins to generate
+
+    """
+
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        embedding_parameters: OmegaConf,
+        d_embedding: int,
+    ):
+        super().__init__(adata, embedding_parameters, d_embedding)
+
+    def preprocess_embeddings(self):
+        """Compute bin identities of expression profiles in raw data."""
+        self.expression_embeddings = None
+
+        valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
+        self.adata = self.adata[:, valid_mask]
+
+        if issparse(self.adata.X):
+            expression = self.adata.X.toarray()  ## not needed if it is scaled
+        else:
+            expression = self.adata.X
+
+        breakpoint()
+
+        self.adata.obsm["processed_expression_values"] = expression
         self.adata.obsm["padding_mask"] = self.adata.layers[
             "nonzero_mask"
         ].toarray()  ## directly set the padding mask as the order has not changed
