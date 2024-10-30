@@ -317,7 +317,6 @@ class HeimdallTrainer:
         # print(metrics)
         loss = 0
 
-        # breakpoint()
         with torch.no_grad():
             for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
                 inputs = (batch["identity_inputs"], batch["expression_inputs"])

@@ -94,7 +94,8 @@ class HeimdallModel(nn.Module):
 
         if self.reducer is not None:
             encoded_cells = tuple(
-                self.lm_model(cell_inputs, conditional_tokens, attention_mask) for cell_inputs in inputs
+                self.lm_model(cell_inputs, conditional_tokens, attention_mask=mask)
+                for cell_inputs, mask in zip(inputs, attention_mask)
             )
             encoded = self.reducer(encoded_cells)
         else:
@@ -219,11 +220,13 @@ class HeimdallTransformer(nn.Module):
         # Concatenate [CLS] token to the beginning of every sequence in the batch
         batch_size = identity_inputs.size(0)
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # Expand to match batch size
-        cls_attention = torch.ones(
-            (batch_size, 1),
-            dtype=torch.bool,
-            device=attention_mask.device,
-        )  # Shape: (batch_size, 1)
+
+        if attention_mask is not None:
+            cls_attention = torch.ones(
+                (batch_size, 1),
+                dtype=torch.bool,
+                device=attention_mask.device,
+            )  # Shape: (batch_size, 1)
 
         # Positional Encoding
         seq_length = input_embeds.size(1)

@@ -260,11 +260,14 @@ class PairedInstanceDataset(Dataset):
         self.labels = labels
 
     def __getitem__(self, idx) -> Tuple[Tuple[CellFeatType, CellFeatType], LabelType]:
-        identity_inputs, expression_inputs = zip(*[self.data.fc[cell_idx] for cell_idx in self.idx[idx]])
+        identity_inputs, expression_inputs, expression_padding = zip(
+            *[self.data.fc[cell_idx] for cell_idx in self.idx[idx]],
+        )
 
         return {
             "identity_inputs": identity_inputs,
             "expression_inputs": expression_inputs,
+            "expression_padding": expression_padding,
             "labels": self.data.labels[idx],
         }
 
