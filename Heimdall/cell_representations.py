@@ -13,7 +13,7 @@ import pandas as pd
 import scanpy as sc
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
-from scipy.sparse import csr_array, csr_matrix, issparse
+from scipy.sparse import csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset

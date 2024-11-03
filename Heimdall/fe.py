@@ -6,6 +6,7 @@ import anndata as ad
 import awkward as ak
 import numpy as np
 import pandas as pd
+import torch
 from anndata._warnings import ExperimentalFeatureWarning
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
@@ -90,7 +91,7 @@ class Fe(ABC):
             elif value == "vocab_size":
                 value = self.vocab_size  # <PAD> and <MASK> TODO: data.vocab_size
             elif value == "expression_embeddings":
-                value = self.expression_embeddings
+                value = torch.tensor(self.expression_embeddings, dtype=torch.float32)
             else:
                 continue
 
@@ -212,8 +213,6 @@ class SortingFe(Fe):
 
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
         self.adata = self.adata[:, valid_mask].copy()
-
-        zero_counts = (self.adata.X == 0).sum(axis=1)
 
         expression = self.adata.X
         csc_expression = csc_array(expression)

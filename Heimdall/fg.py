@@ -87,7 +87,7 @@ class Fg(ABC):
             elif value == "vocab_size":
                 value = self.vocab_size  # <PAD> and <MASK> TODO: data.vocab_size
             elif value == "gene_embeddings":
-                value = self.gene_embeddings
+                value = torch.tensor(self.gene_embeddings, dtype=torch.float32)  # TODO: pick type correctly?
             else:
                 continue
 
@@ -163,7 +163,7 @@ class PretrainedFg(Fg, ABC):
         index_map[valid_indices] = np.arange(num_mapped_genes)
 
         self.adata.var["identity_embedding_index"] = index_map
-        self.adata.var["identity_valid_mask"] = valid_mask
+        self.adata.var["identity_valid_mask"] = valid_mask.to_numpy()
 
         self.gene_embeddings = np.zeros((num_mapped_genes, self.d_embedding), dtype=np.float64)
 

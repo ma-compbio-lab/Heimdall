@@ -2,7 +2,7 @@ name: "IdentityFg"
 type: Heimdall.fg.IdentityFg
 args:
   embedding_parameters:
-    type: Heimdall.utils.FlexibleTypeEmbedding.from_pretrained
+    type: Heimdall.utils.FlexibleTypeEmbedding
     args:
       num_embeddings: "vocab_size"
       embedding_dim: ${fg.args.d_embedding}

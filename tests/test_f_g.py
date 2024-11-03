@@ -56,7 +56,8 @@ def test_esm2_fg(mock_dataset):
     config = OmegaConf.create(
         {
             "embedding_parameters": {
-                "type": "torch.nn.Embedding.from_pretrained",
+                "type": "torch.nn.Embedding",
+                "constructor": "from_pretrained",
                 "args": {
                     "embeddings": "gene_embeddings",
                 },
@@ -93,7 +94,8 @@ def test_gene2vec_fg(mock_dataset):
     config = OmegaConf.create(
         {
             "embedding_parameters": {
-                "type": "torch.nn.Embedding.from_pretrained",
+                "type": "torch.nn.Embedding",
+                "constructor": "from_pretrained",
                 "args": {
                     "embeddings": "gene_embeddings",
                 },

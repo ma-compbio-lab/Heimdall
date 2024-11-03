@@ -92,7 +92,7 @@ class HeimdallModel(nn.Module):
         if conditional_tokens is not None and len(conditional_tokens) == 0:
             conditional_tokens = None
 
-        print(inputs, attention_mask)
+        # print(inputs, attention_mask)
         if self.reducer is not None:
             encoded_cells = tuple(
                 self.lm_model(cell_inputs, conditional_tokens, attention_mask=mask)

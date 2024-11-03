@@ -68,9 +68,6 @@ class Fc(ABC):
         identity_inputs = self.adata.obsm["cell_identity_embedding_indices"][cell_index]
         expression_inputs = self.adata.obsm["cell_expression_embedding_indices"][cell_index]
 
-        # print(f"(pretailor) identity: {identity_inputs}")
-        # print(f"(pretailor) expression: {expression_inputs}")
-
         # Padding and truncating
         identity_inputs = self.tailor(identity_inputs, self.fg.pad_value)
 
@@ -80,9 +77,6 @@ class Fc(ABC):
         expression_inputs = ak.to_numpy(expression_inputs)
 
         padding_mask = expression_inputs == self.fe.pad_value
-
-        # print(f"(posttailor) identity: {identity_inputs}")
-        # print(f"(posttailor) expression: {expression_inputs}")
 
         return identity_inputs, expression_inputs, padding_mask
 
