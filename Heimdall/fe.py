@@ -10,7 +10,7 @@ from anndata._warnings import ExperimentalFeatureWarning
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csc_array, csr_array, issparse
+from scipy.sparse import csc_array, csr_array
 
 from Heimdall.utils import searchsorted2d
 
