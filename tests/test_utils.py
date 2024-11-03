@@ -1,6 +1,31 @@
 from pathlib import Path
 
-from Heimdall.utils import symbol_to_ensembl, symbol_to_ensembl_from_ensembl
+import awkward as ak
+import numpy as np
+
+from Heimdall.utils import searchsorted2d, symbol_to_ensembl, symbol_to_ensembl_from_ensembl
+
+
+def test_searchsorted2d():
+    num_features = 4
+    values = np.arange(5 * num_features).reshape((5, num_features))
+
+    quantiles = np.linspace(0, 1, num_features)
+    bin_edges = ak.Array(
+        np.quantile(values, quantiles, axis=1).T,
+    )
+    results = searchsorted2d(bin_edges, values)
+    expected = np.array(
+        [
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
+        ],
+    )
+
+    assert np.allclose(expected, results)
 
 
 def test_symbol_to_ensembl(request):

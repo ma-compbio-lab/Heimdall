@@ -64,16 +64,17 @@ def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
 
     num_cells = len(expression)
     max_value = np.maximum(ak.ptp(bin_edges), ak.ptp(expression)) + 1
+
     cell_indices = np.arange(num_cells)[:, np.newaxis]
     offsets = ak.Array(max_value * cell_indices)
 
-    counts = ak.num(expression)
-
+    counts = ak.count(expression, axis=1)
     binned_values = np.searchsorted(ak.flatten(bin_edges + offsets), ak.flatten(expression + offsets), side=side)
 
     binned_values = ak.unflatten(binned_values, counts)
+    cumulative_counts = np.cumsum([0] + ak.to_list(counts))[:-1]
 
-    binned_values = binned_values - offsets
+    binned_values = binned_values - cumulative_counts
 
     return binned_values
 
