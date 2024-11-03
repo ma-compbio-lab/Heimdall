@@ -11,6 +11,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import awkward as ak
 import mygene
 import numpy as np
 import pandas as pd
@@ -61,17 +62,18 @@ def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
 
     """
 
-    num_cells, num_bin_edges = bin_edges.shape
-    max_value = np.maximum(bin_edges.ptp(), expression.ptp()) + 1
+    num_cells = len(expression)
+    max_value = np.maximum(ak.ptp(bin_edges), ak.ptp(expression)) + 1
     cell_indices = np.arange(num_cells)[:, np.newaxis]
+    offsets = ak.Array(max_value * cell_indices)
 
-    offsets = max_value * cell_indices
+    counts = ak.num(expression)
 
-    binned_values = np.searchsorted((bin_edges + offsets).ravel(), (expression + offsets).ravel(), side=side).reshape(
-        num_cells,
-        -1,
-    )
-    binned_values -= num_bin_edges * cell_indices
+    binned_values = np.searchsorted(ak.flatten(bin_edges + offsets), ak.flatten(expression + offsets), side=side)
+
+    binned_values = ak.unflatten(binned_values, counts)
+
+    binned_values = binned_values - offsets
 
     return binned_values
 
@@ -444,4 +446,9 @@ class FlexibleTypeLinear(nn.Linear):
         self.dtype = self.weight.dtype
 
     def forward(self, inputs: torch.Tensor):
-        return super().forward(inputs.type(self.dtype))
+        return super().forward(inputs.type(self.dtype).unsqueeze(-1))
+
+
+class FlexibleTypeEmbedding(nn.Embedding):
+    def forward(self, idx: torch.Tensor):
+        return super().forward(idx.type(torch.long))

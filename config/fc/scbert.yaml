@@ -1,4 +1,4 @@
-type: Heimdall.fc.ScBertFc
+type: Heimdall.fc.ScBERTFc
 
 args:
   max_input_length: 1200

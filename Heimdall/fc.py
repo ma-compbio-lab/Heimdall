@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Union
 
 import anndata as ad
+import awkward as ak
 import numpy as np
 import torch
 from numpy.typing import NDArray
@@ -21,11 +22,17 @@ class Fc(ABC):
         fe: `Fe` used for this `Fe` implementation.
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         max_input_length: maximum number of identity/expression tokens to consider for each cell.
-            Extra tokens are truncated.
+            Extra tokens are limitd.
 
     """
 
-    def __init__(self, fg: Fg | None, fe: Fe | None, adata: ad.AnnData, max_input_length: Optional[int] = None):
+    def __init__(
+        self,
+        fg: Fg | None,
+        fe: Fe | None,
+        adata: ad.AnnData,
+        max_input_length: Optional[int] = None,
+    ):
         self.fg = fg
         self.fe = fe
         self.adata = adata
@@ -49,9 +56,9 @@ class Fc(ABC):
 
         """
 
-    def __getitem__(self, cell_indices: Union[int, Sequence[int], slice]) -> tuple[NDArray, NDArray]:
-        """Retrieve `cell_identity_embedding_indices` and
-        `cell_expression_embedding_indices`.
+    def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray]:
+        """Retrieve `cell_identity_embedding_indices`,
+        `cell_expression_embedding_indices` and `padding_mask`.
 
         Can only be called after running `self.preprocess_cells()`.
 
@@ -60,15 +67,43 @@ class Fc(ABC):
 
         """
 
-        identity_inputs = self.adata.obsm["cell_identity_embedding_indices"][cell_indices].copy()
-        expression_inputs = self.adata.obsm["cell_expression_embedding_indices"][cell_indices].copy()
+        identity_inputs = self.adata.obsm["cell_identity_embedding_indices"][cell_index]
+        expression_inputs = self.adata.obsm["cell_expression_embedding_indices"][cell_index]
 
-        if "cell_expression_padding_mask" in self.adata.obsm.keys():
-            expression_padding_mask = self.adata.obsm["cell_expression_padding_mask"][cell_indices].copy()
-        else:
-            expression_padding_mask = None
+        # print(f"(pretailor) identity: {identity_inputs}")
+        # print(f"(pretailor) expression: {expression_inputs}")
 
-        return identity_inputs, expression_inputs, expression_padding_mask
+        # Padding and truncating
+        identity_inputs = self.tailor(identity_inputs, self.fg.pad_value)
+        identity_inputs = ak.to_numpy(identity_inputs)
+
+        expression_inputs = self.tailor(expression_inputs, self.fe.pad_value)
+        expression_inputs = ak.to_numpy(expression_inputs)
+
+        padding_mask = expression_inputs == self.fe.pad_value
+
+        # print(f"(posttailor) identity: {identity_inputs}")
+        # print(f"(posttailor) expression: {expression_inputs}")
+
+        return identity_inputs, expression_inputs, padding_mask
+
+    def pad(self, cell_tokenization: ak.Array, pad_value: int | float) -> ak.Array:
+        return ak.fill_none(ak.pad_none(cell_tokenization, self.max_input_length, axis=0), pad_value)
+
+    @abstractmethod
+    def limit(self, cell_tokenization: ak.Array) -> ak.Array:
+        """Ensure that none of the cell tokenizations exceed the maximum length.
+
+        Args:
+            cell_tokenization: a tokenization for each cell, represented as a ragged array.
+
+        """
+
+    def tailor(self, cell_tokenization: ak.Array, pad_value: int | float) -> ak.Array:
+        if len(cell_tokenization) > self.max_input_length:
+            return self.limit(cell_tokenization)
+
+        return self.pad(cell_tokenization, pad_value)
 
     @abstractmethod
     def embed_cells(
@@ -77,9 +112,11 @@ class Fc(ABC):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
-        attention_mask: Tensor | None,
     ) -> Tensor:
         """Embed cell batch using the embedding layers.
+
+        It can be assumed that both the identity inputs and the expression inputs have been padded/
+        limitd at this stage, i.e. they are square tensors.
 
         Args:
             identity_inputs: batched gene identity embedding indices
@@ -96,14 +133,12 @@ class Fc(ABC):
         self,
         cell_identity_embedding_indices: NDArray,
         cell_expression_embedding_indices: NDArray,
-        expression_padding: NDArray | None,
     ):
         """Load processed values from cache."""
         # TODO: add tests
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
-        self.adata.obsm["cell_expression_padding_mask"] = expression_padding
 
 
 class GeneformerFc(Fc):
@@ -111,28 +146,27 @@ class GeneformerFc(Fc):
 
     def preprocess_cells(self):
         # For Geneformer, we retrieve sorted indices based on expression. We then convert these to gene names.
-        # We then map these names back to indices in the gene embeddings. Finally, we pass it through the embedding
-        # layer to retrieve the embeddings.
+        # We then map these names back to indices (or other identity values).
         valid_mask = self.adata.var["identity_valid_mask"]
         valid_genes = self.adata.var_names[valid_mask].values
 
-        cell_expression_embedding_indices, padding_mask = self.fe[:, : self.max_input_length]
+        cell_expression_embedding_indices = self.fe[:]
 
         try:
-            gene_lists = valid_genes[cell_expression_embedding_indices]
+            gene_lists = [
+                valid_genes[expression_embedding_indices]
+                for expression_embedding_indices in cell_expression_embedding_indices
+            ]
         except IndexError:
             raise IndexError(
-                "It seems like you are using an Fe that indexes more outputs than are available in the Fg embedding"
+                "It seems like you are using an `Fe` that indexes more outputs than are available in the `Fg` embedding"
                 "layer, which is not compatible with Geneformer. Please use a valid combination of `Fe` and `Fg`.",
             )
 
-        cell_identity_embedding_indices = np.array(
-            [self.fg[gene_list][: self.max_input_length] for gene_list in gene_lists],
-        )
+        cell_identity_embedding_indices = ak.Array([self.fg[gene_list] for gene_list in gene_lists])
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
-        self.adata.obsm["cell_expression_padding_mask"] = padding_mask
 
     def embed_cells(
         self,
@@ -140,7 +174,6 @@ class GeneformerFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
-        attention_mask: Tensor | None,
     ) -> Tensor:
         """Geneformer cell embedding function.
 
@@ -154,13 +187,22 @@ class GeneformerFc(Fc):
 
         embeddings = gene_embedding_layer(identity_inputs)
 
-        return embeddings, attention_mask
+        return embeddings
+
+    def limit(self, cell_tokenization: ak.Array) -> ak.Array:
+        return cell_tokenization[: self.max_input_length]
 
 
 class ScGPTFc(Fc):
     """Implementation of scGPT cell embedding."""
 
-    def __init__(self, fg: Fg | None, fe: Fe | None, adata: ad.AnnData, max_input_length: Optional[int] = None):
+    def __init__(
+        self,
+        fg: Fg | None,
+        fe: Fe | None,
+        adata: ad.AnnData,
+        max_input_length: Optional[int] = None,
+    ):
         super().__init__(fg, fe, adata, max_input_length)
         seed = 0  # TODO: make this configurable???
         self.rng = np.random.default_rng(seed)
@@ -172,11 +214,14 @@ class ScGPTFc(Fc):
         cell_identity_embedding_indices = np.array(
             [self.fg[valid_genes] for _ in range(len(self.adata))],
         )
-        cell_expression_embedding_indices, padding_mask = self.fe[:]
+        cell_expression_embedding_indices = self.fe[:]
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
-        self.adata.obsm["cell_expression_padding_mask"] = padding_mask
+        # self.adata.obsm["cell_expression_padding_mask"] = padding_mask
+
+    def limit(self, cell_tokenization: ak.Array) -> ak.Array:
+        return self.rng.choice(cell_tokenization, self.max_input_length)
 
     def embed_cells(
         self,
@@ -184,7 +229,6 @@ class ScGPTFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
-        attention_mask: Tensor | None,
     ) -> Tensor:
         """ScGPT cell embedding callback.
 
@@ -193,62 +237,25 @@ class ScGPTFc(Fc):
         Args:
             gene_embedding_layer:  # TODO: fill out
             expression_embedding_layer: # TODO fill out
-            attention_mask: # TODO fill out
 
         """
 
-        # breakpoint()
-        # Randomly sample self.max_input_length every iteration (iff there are too many genes)
-        # TODO: This means that the order of the gene embeddings for each cell's representation
-        # changes every iteration. Is this really what scGPT does? It seems like it would be hard
-        # to learn meaningful embeddings with this randomness. Or maybe I'm misunderstanding the
-        # masked language modeling pretraining task
-        batch_size, max_gene_index = identity_inputs.shape
+        gene_embeddings = gene_embedding_layer(identity_inputs)
+        expression_embeddings = expression_embedding_layer(expression_inputs)
 
-        ## TODO: set the torch generator for reproducibility, but it needs to be created WITH the device, and cannot change
-        # torch_rng = torch.Generator(device=attention_mask.device).manual_seed(42)  # Torch RNG with a fixed seed for reproducibility
-        # random_scores = torch.rand((batch_size, max_gene_index), generator=torch_rng, device=attention_mask.device)
-
-        random_scores = torch.rand((batch_size, max_gene_index), device=attention_mask.device)  # uniform distribution
-        masked_scores = torch.where(
-            attention_mask,
-            random_scores,
-            torch.tensor(float("-inf")),
-        )  # neg inf for masked positions
-        _, partitioned_indices = torch.topk(
-            masked_scores,
-            max_gene_index,
-            dim=1,
-            largest=True,
-        )  # sort based on score, all neg inf are by default included
-        reindexed_expression_inputs = torch.gather(expression_inputs, dim=1, index=partitioned_indices)
-        reindexed_identity_inputs = torch.gather(identity_inputs, dim=1, index=partitioned_indices)
-
-        expression_embeddings = expression_embedding_layer(reindexed_expression_inputs.unsqueeze(-1))
-        gene_embeddings = gene_embedding_layer(reindexed_identity_inputs)
-
-        reindexed_attention_mask = reindexed_expression_inputs != 0
-
-        # breakpoint()
-        # if max_gene_index > self.max_input_length:
-        #     random_indices = sample_without_replacement(self.rng, max_gene_index, batch_size, self.max_input_length)
-        #     batch_indices = np.arange(batch_size).reshape((-1, 1))
-
-        #     identity_inputs = identity_inputs[batch_indices, random_indices]
-        #     expression_inputs = expression_inputs[batch_indices, random_indices]
-
-        # gene_embeddings = gene_embedding_layer(identity_inputs)
-        # expression_embeddings = expression_embedding_layer(expression_inputs)
-
-        # breakpoint()
-
-        return gene_embeddings + expression_embeddings, reindexed_attention_mask
+        return gene_embeddings + expression_embeddings
 
 
-class ScBertFc(Fc):
+class ScBERTFc(Fc):
     """Implementation of scBERT cell embedding."""
 
-    def __init__(self, fg: Fg | None, fe: Fe | None, adata: ad.AnnData, max_input_length: Optional[int] = None):
+    def __init__(
+        self,
+        fg: Fg | None,
+        fe: Fe | None,
+        adata: ad.AnnData,
+        max_input_length: Optional[int] = None,
+    ):
         super().__init__(fg, fe, adata, max_input_length)
         seed = 0  # TODO: make this configurable???
         self.rng = np.random.default_rng(seed)
@@ -260,11 +267,10 @@ class ScBertFc(Fc):
         cell_identity_embedding_indices = np.array(
             [self.fg[valid_genes] for _ in range(len(self.adata))],
         )
-        cell_expression_embedding_indices, padding_mask = self.fe[:]
+        cell_expression_embedding_indices = self.fe[:]
 
         self.adata.obsm["cell_identity_embedding_indices"] = cell_identity_embedding_indices
         self.adata.obsm["cell_expression_embedding_indices"] = cell_expression_embedding_indices
-        self.adata.obsm["cell_expression_padding_mask"] = padding_mask
 
     def embed_cells(
         self,
@@ -272,7 +278,6 @@ class ScBertFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
-        attention_mask: Tensor | None,
     ) -> Tensor:
         """ScGPT cell embedding callback.
 
@@ -281,12 +286,11 @@ class ScBertFc(Fc):
         Args:
             gene_embedding_layer:  # TODO: fill out
             expression_embedding_layer: # TODO fill out
-            attention_mask: # TODO fill out
 
         """
         batch_size, max_gene_index = identity_inputs.shape
 
-        expression_embeddings = expression_embedding_layer(expression_inputs.unsqueeze(-1))
+        expression_embeddings = expression_embedding_layer(expression_inputs)
         gene_embeddings = gene_embedding_layer(identity_inputs)
 
-        return gene_embeddings + expression_embeddings, attention_mask
+        return gene_embeddings + expression_embeddings

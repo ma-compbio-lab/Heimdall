@@ -38,6 +38,7 @@ def test_identity_fg(mock_dataset):
                     "out_features": "128",
                 },
             },
+            "vocab_size": 6,
             "d_embedding": 128,
         },
     )
@@ -60,10 +61,11 @@ def test_esm2_fg(mock_dataset):
                     "embeddings": "gene_embeddings",
                 },
             },
+            "vocab_size": 6,
+            "d_embedding": 128,
             "embedding_filepath": Path(
                 "/work/magroup/shared/Heimdall/data/pretrained_embeddings/ESM2/protein_map_human_ensembl.pt",
             ),
-            "d_embedding": 128,
         },
     )
     if not config.embedding_filepath.is_file():
@@ -96,10 +98,11 @@ def test_gene2vec_fg(mock_dataset):
                     "embeddings": "gene_embeddings",
                 },
             },
+            "vocab_size": 6,
+            "d_embedding": 128,
             "embedding_filepath": Path(
                 "/work/magroup/shared/Heimdall/data/pretrained_embeddings/gene2vec/gene2vec_genes.txt",
             ),
-            "d_embedding": 128,
         },
     )
     if not config.embedding_filepath.is_file():

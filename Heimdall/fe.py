@@ -1,13 +1,16 @@
+import warnings
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence
 
 import anndata as ad
+import awkward as ak
 import numpy as np
 import pandas as pd
+from anndata._warnings import ExperimentalFeatureWarning
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import issparse
+from scipy.sparse import csc_array, csr_array, issparse
 from tqdm import tqdm
 
 from Heimdall.utils import searchsorted2d
@@ -27,11 +30,15 @@ class Fe(ABC):
         adata: ad.AnnData,
         embedding_parameters: DictConfig,
         d_embedding: int,
+        vocab_size: int,
+        pad_value: int = None,
     ):
         self.adata = adata
         _, self.num_genes = adata.shape
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.d_embedding = d_embedding
+        self.vocab_size = vocab_size
+        self.pad_value = vocab_size - 2 if pad_value is None else pad_value
 
     @abstractmethod
     def preprocess_embeddings(self):
@@ -59,25 +66,20 @@ class Fe(ABC):
             Index of value in the expression embeddings, or `pd.NA` if the gene has no mapping.
 
         """
-        embedding_indices = self.adata.obsm["processed_expression_values"][cell_indices]
 
-        if "padding_mask" in self.adata.obsm.keys():
-            padding_mask = self.adata.obsm["padding_mask"][cell_indices]
-        else:
-            padding_mask = None
+        subset = self.adata[cell_indices]
+        embedding_indices = subset.obsm["processed_expression_values"]
 
-        return embedding_indices, padding_mask
+        return embedding_indices
 
     def load_from_cache(
         self,
         processed_expression_values: NDArray,
-        expression_padding_mask: NDArray,
         expression_embeddings: NDArray | None,
     ):
         """Load processed values from cache."""
         # TODO: add tests
         self.adata.obsm["processed_expression_values"] = processed_expression_values
-        self.adata.obsm["padding_mask"] = expression_padding_mask
         self.expression_embeddings = expression_embeddings
         self.replace_placeholders()
 
@@ -87,7 +89,7 @@ class Fe(ABC):
             if value == "max_seq_length":
                 value = len(self.adata.var)
             elif value == "vocab_size":
-                value = len(self.adata.var) + 2  # <PAD> and <MASK> TODO: data.vocab_size
+                value = self.vocab_size  # <PAD> and <MASK> TODO: data.vocab_size
             elif value == "expression_embeddings":
                 value = self.expression_embeddings
             else:
@@ -130,9 +132,11 @@ class BinningFe(Fe):
         adata: ad.AnnData,
         embedding_parameters: OmegaConf,
         d_embedding: int,
+        vocab_size: int,
         num_bins: Optional[int],
+        pad_value: int = None,
     ):
-        super().__init__(adata, embedding_parameters, d_embedding)
+        super().__init__(adata, embedding_parameters, d_embedding, vocab_size, pad_value)
         self.num_bins = num_bins
 
     def preprocess_embeddings(self):
@@ -140,33 +144,35 @@ class BinningFe(Fe):
         self.expression_embeddings = None
 
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
-        self.adata = self.adata[:, valid_mask]
+        self.adata = self.adata[:, valid_mask].copy()
 
-        if issparse(self.adata.X):
-            expression = self.adata.X.toarray()  ## not needed if it is scaled
-        else:
-            expression = self.adata.X
+        expression = self.adata.X
+        csr_expression = csr_array(expression)
+        cellwise_nonzero_expression = np.split(csr_expression.data, csr_expression.indptr[1:-1])
 
         n_bins = self.num_bins
         if np.max(expression) == 0:
-            binned_values = np.zeros_like(expression)  # TODO: add correct typing (maybe add to config...?)
+            binned_values = csr_array(expression.shape)  # TODO: add correct typing (maybe add to config...?)
 
-        masked_expression = expression.astype(np.float64)
-        masked_expression[masked_expression == 0] = np.nan
-        bin_edges = np.nanquantile(masked_expression, np.linspace(0, 1, n_bins - 1), axis=1).T
+        # masked_expression = expression.astype(np.float64)
+        # masked_expression[masked_expression == 0] = np.nan
+        print(f"cellwise_nonzero_expression: {cellwise_nonzero_expression}")
+        print(np.linspace(0, 1, n_bins))
+        quantiles = np.linspace(0, 1, n_bins)
+        bin_edges = ak.Array(
+            [np.quantile(nonzero_expression, quantiles) for nonzero_expression in cellwise_nonzero_expression],
+        )  # First axis is quantiles, second is cells
+
+        print(f"bin_edges: {bin_edges}")
 
         binned_values = searchsorted2d(
             bin_edges,
-            expression,
+            cellwise_nonzero_expression,
             side="left",
-        )  # TODO: now that we do binning per cell, how to efficiently vectorize digitization???
-        binned_values[expression > 0] += 1
+        )
+        binned_values = binned_values + 1
 
         self.adata.obsm["processed_expression_values"] = binned_values
-        self.adata.obsm["padding_mask"] = self.adata.layers[
-            "nonzero_mask"
-        ].toarray()  ## directly set the padding mask as the order has not changed
-
         self.replace_placeholders()
 
 
@@ -186,6 +192,7 @@ class RawVals(Fe):
         adata: ad.AnnData,
         embedding_parameters: OmegaConf,
         d_embedding: int,
+        vocab_size: int,
     ):
         super().__init__(adata, embedding_parameters, d_embedding)
 
@@ -194,19 +201,14 @@ class RawVals(Fe):
         self.expression_embeddings = None
 
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
-        self.adata = self.adata[:, valid_mask]
+        self.adata = self.adata[:, valid_mask].copy()
 
         if issparse(self.adata.X):
             expression = self.adata.X.toarray()  ## not needed if it is scaled
         else:
             expression = self.adata.X
 
-        breakpoint()
-
         self.adata.obsm["processed_expression_values"] = expression
-        self.adata.obsm["padding_mask"] = self.adata.layers[
-            "nonzero_mask"
-        ].toarray()  ## directly set the padding mask as the order has not changed
 
         self.replace_placeholders()
 
@@ -214,59 +216,35 @@ class RawVals(Fe):
 class SortingFe(Fe):
     """Sorting Fe."""
 
-    ## TODO: make it such that we mask out values with zero expression, because right now we don't
-    ## I think I can make a function in the Fe for it.
     def preprocess_embeddings(self):
         """Sort genes by expression per cell.
 
         Uses median normalization before sorting (Geneformer style).
 
         """
+        warnings.filterwarnings("ignore", category=ExperimentalFeatureWarning)  # Ignore warnings for Awkward Arrays
         self.expression_embeddings = None
 
         valid_mask = self.adata.var["identity_valid_mask"]  # TODO: assumes that Fg is run first. Is that okay?
-        self.adata = self.adata[:, valid_mask]
+        self.adata = self.adata[:, valid_mask].copy()
 
-        nonzero_mask = self.adata.layers["nonzero_mask"].toarray()
+        zero_counts = (self.adata.X == 0).sum(axis=1)
 
-        if issparse(self.adata.X):
-            expression = self.adata.X.toarray()  ## not needed if it is scaled
-        else:
-            expression = self.adata.X
+        expression = self.adata.X
+        csc_expression = csc_array(expression)
+        genewise_nonzero_expression = np.split(csc_expression.data, csc_expression.indptr[1:-1])
 
-        # expression = self.adata.X[:, valid_mask].toarray()
+        gene_medians = np.array([np.median(gene_nonzeros) for gene_nonzeros in genewise_nonzero_expression])
 
-        # gene_medians = np.median(expression, axis=0)
-        # normalized_expression = expression / gene_medians
-
-        ## Taking the nonzero medians
-        gene_medians = np.array([np.median(gene[gene != 0]) for gene in expression.T])
         normalized_expression = expression / gene_medians
-        argsorted_expression = np.argsort(normalized_expression, axis=1)[:, ::-1]
+        argsorted_expression = np.argsort(normalized_expression, axis=1)
 
-        # breakpoint()
-
-        # a = nonzero_mask
-        # b = argsorted_expression
-        # pmask = np.vstack([a[i, b[i]] for i in range(a.shape[0])]) == False
-
-        padding_mask = (
-            np.vstack([nonzero_mask[i, argsorted_expression[i]] for i in range(nonzero_mask.shape[0])]) == True
+        processed_expression_values = ak.Array(
+            [
+                processed_cell[zero_count:][::-1]
+                for zero_count, processed_cell in zip(zero_counts, argsorted_expression)
+            ],
         )
 
-        # breakpoint()
-        # # Iterate over each cell (row)
-        # padding_mask = np.zeros_like(argsorted_expression)
-        # for i in tqdm(range(nonzero_mask.shape[0])):
-        #     # Get indices where nonzero_mask is False for the current row
-        #     zero_indices = np.where(nonzero_mask[i] == False)[0]
-        #     mask = np.isin(argsorted_expression[i], zero_indices)
-        #     argsorted_expression[i][mask] = -1
-        #     padding_mask[i] = mask  ## constructing the padding mask
-
-        ## obsm is tied to the rows, but not to the columns
-        self.adata.obsm["processed_expression_values"] = argsorted_expression
-        self.adata.obsm["padding_mask"] = padding_mask.astype(bool)
-
-        # breakpoint()
+        self.adata.obsm["processed_expression_values"] = processed_expression_values
         self.replace_placeholders()

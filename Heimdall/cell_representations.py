@@ -13,7 +13,7 @@ import pandas as pd
 import scanpy as sc
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import csr_array, csr_matrix, issparse
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset
@@ -217,7 +217,7 @@ class CellRepresentation(SpecialTokenMixin):
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
 
         # save a mask of 0s or nonzero
-        self.adata.layers["nonzero_mask"] = self.adata.X != 0
+        self.adata.layers["zero_expression_mask"] = csr_array(self.adata.X == 0)
 
         # convert gene names to ensembl ids
         if (self.adata.var.index.str.startswith("ENS").sum() / len(self.adata.var.index)) < 0.9:
@@ -341,9 +341,21 @@ class CellRepresentation(SpecialTokenMixin):
         self.fg: Fg
         self.fe: Fe
         self.fc: Fc
-        self.fg, fg_name = instantiate_from_config(self.fg_cfg, self.adata, return_name=True)
-        self.fe, fe_name = instantiate_from_config(self.fe_cfg, self.adata, return_name=True)
+        print(self.fc_cfg)
+        self.fg, fg_name = instantiate_from_config(
+            self.fg_cfg,
+            self.adata,
+            vocab_size=self.sequence_length + 2,
+            return_name=True,
+        )
+        self.fe, fe_name = instantiate_from_config(
+            self.fe_cfg,
+            self.adata,
+            vocab_size=self.sequence_length + 2,
+            return_name=True,
+        )
         self.fc, fc_name = instantiate_from_config(self.fc_cfg, self.fg, self.fe, self.adata, return_name=True)
+        print(self.fc.max_input_length)
 
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             cfg = DictConfig(
@@ -367,21 +379,15 @@ class CellRepresentation(SpecialTokenMixin):
                         identity_embedding_index,
                         identity_valid_mask,
                         processed_expression_values,
-                        expression_padding_mask_fe,
                         gene_embeddings,
                         expression_embeddings,
                         identity_reps,
                         expression_reps,
-                        expression_padding,
                     ) = pkl.load(rep_file)
 
                     self.fg.load_from_cache(identity_embedding_index, identity_valid_mask, gene_embeddings)
-                    self.fe.load_from_cache(
-                        processed_expression_values,
-                        expression_padding_mask_fe,
-                        expression_embeddings,
-                    )
-                    self.fc.load_from_cache(identity_reps, expression_reps, expression_padding)
+                    self.fe.load_from_cache(processed_expression_values, expression_embeddings)
+                    self.fc.load_from_cache(identity_reps, expression_reps)
 
                     self.processed_fcfg = True
                     # TODO: caching should also load other things, such as var["identity_valid_mask"],
@@ -414,12 +420,10 @@ class CellRepresentation(SpecialTokenMixin):
                     identity_embedding_index,
                     identity_valid_mask,
                     processed_expression_values,
-                    expression_padding_mask_fe,
                     gene_embeddings,
                     expression_embeddings,
                     identity_reps,
                     expression_reps,
-                    expression_padding,
                 )
                 pkl.dump(cache_representation, rep_file)
                 print(f"Finished writing cell representations at {processed_data_path}")
