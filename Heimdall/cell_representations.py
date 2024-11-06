@@ -348,7 +348,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.fe.adata = self.adata
         self.fc.adata = self.adata
 
-        preprocessed_data_path = self.get_preprocessed_data_path()
+        preprocessed_data_path, *_ = self.get_preprocessed_data_path()
         if preprocessed_data_path is not None:
             self.anndata_to_cache(preprocessed_data_path)
 
