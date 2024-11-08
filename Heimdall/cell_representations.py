@@ -100,10 +100,10 @@ class CellRepresentation(SpecialTokenMixin):
 
         super().__init__()
 
-    @property
-    @check_states(adata=True, processed_fcfg=True)
-    def cell_representations(self) -> NDArray[np.float32]:
-        return self.fc[:]
+    # @property
+    # @check_states(adata=True, processed_fcfg=True)
+    # def cell_representations(self) -> NDArray[np.float32]:
+    #     return self.fc[:]
 
     @property
     @check_states(labels=True)
