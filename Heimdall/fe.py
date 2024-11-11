@@ -32,9 +32,6 @@ class Fe(ABC):
         d_embedding: int,
         pad_value: int = None,
     ):
-        print(vocab_size)
-        print(embedding_parameters)
-        print(d_embedding)
         self.adata = adata
         self.num_cells, self.num_genes = adata.shape
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)

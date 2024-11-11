@@ -76,10 +76,6 @@ class HeimdallModel(nn.Module):
             conditional_input_types,
         )
 
-        # self.lm_model = HeimdallTransformer(
-        #     data=data,
-        #     conditional_input_types=conditional_input_types,
-        # )
         self.num_labels = data.num_tasks
         dim_in = self.lm_model.d_encoded
 
@@ -145,7 +141,6 @@ class HeimdallTransformer(nn.Module):
         data: CellRepresentation,
         conditional_input_types: Optional[dict],
         d_model: int,
-        # config: DictConfig,
         pos_enc: str,
         nhead: int,
         hidden_dropout_prob: float,

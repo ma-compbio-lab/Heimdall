@@ -61,7 +61,8 @@ def paired_task_config(request, toy_paried_data_path):
     cache_preprocessed_dataset_dir: null
     entity: Heimdall
     model:
-      type: transformer
+      type: Heimdall.models.HeimdallTransformer
+      name: transformer
       args:
         d_model: 128
         pos_enc: BERT
@@ -70,8 +71,8 @@ def paired_task_config(request, toy_paried_data_path):
         hidden_act: gelu
         hidden_dropout_prob: 0.1
         attention_probs_dropout_prob: 0.1
-        use_flash_attn: false
-        pooling: cls_pooling
+        use_flash_attn: False
+        pooling: cls_pooling # or "mean_pooling"
     dataset:
       dataset_name: zeng_merfish_ccc_subset
       preprocess_args:
@@ -170,17 +171,8 @@ def single_task_config(toy_single_data_path):
     cache_preprocessed_dataset_dir: null
     entity: Heimdall
     model:
-      type: transformer
-      args:
-        d_model: 128
-        pos_enc: BERT
-        num_encoder_layers: 2
-        nhead: 2
-        hidden_act: gelu
-        hidden_dropout_prob: 0.1
-        attention_probs_dropout_prob: 0.1
-        use_flash_attn: false
-        pooling: cls_pooling
+      type: Heimdall.models.ExpressionOnly
+      name: logistic_regression
     dataset:
       dataset_name: cell_type_classification
       preprocess_args:
@@ -205,7 +197,7 @@ def single_task_config(toy_single_data_path):
         dataset_config:
           type: Heimdall.datasets.SingleInstanceDataset
         head_config:
-          type: Heimdall.models.LinearCellPredHead
+          type: Heimdall.models.ExpressionOnlyCellPredHead
           args: null
     scheduler:
       name: cosine
@@ -230,35 +222,48 @@ def single_task_config(toy_single_data_path):
         - 0.95
         foreach: false
     fc:
-      type: Heimdall.fc.ScGPTFc
-      args:
-        max_input_length: 2048
+      type: Heimdall.fc.DummyFc
     fe:
-      type: Heimdall.fe.BinningFe
+      type: Heimdall.fe.DummyFe
       args:
-        d_embedding: 128
-        num_bins: 10
         embedding_parameters:
-          type: Heimdall.utils.FlexibleTypeLinear
-          args:
-            in_features: 1
-            out_features: 128
+          type: torch.nn.Module
+        d_embedding: null
     fg:
       name: IdentityFg
       type: Heimdall.fg.IdentityFg
       args:
         embedding_parameters:
-          type: Heimdall.utils.FlexibleTypeEmbedding
-          args:
-            num_embeddings: "vocab_size"
-            embedding_dim: 128
-        d_embedding: 128
+          type: torch.nn.module
+        d_embedding: null
     loss:
       name: CrossEntropyLoss
     """
     conf = OmegaConf.create(config_string)
 
     return conf
+
+
+def instantiate_and_run_model(config):
+    cr = CellRepresentation(config)  # takes in the whole config from hydra
+
+    model = HeimdallModel(
+        data=cr,
+        model_config=config.model,
+        task_config=config.tasks.args,
+    )
+
+    # Test execution
+    batch = next(iter(cr.dataloaders["train"]))
+    model(
+        inputs=(batch["identity_inputs"], batch["expression_inputs"]),
+        attention_mask=batch["expression_padding"],
+        conditional_tokens=None,
+    )
+
+
+def test_single_task_model_instantiation(single_task_config):
+    instantiate_and_run_model(single_task_config)
 
 
 @pytest.mark.parametrize(
@@ -272,36 +277,4 @@ def single_task_config(toy_single_data_path):
     indirect=True,
 )
 def test_paired_task_model_instantiation(paired_task_config):
-    cr = CellRepresentation(paired_task_config)  # takes in the whole paired_task_config from hydra
-
-    model = HeimdallModel(
-        data=cr,
-        model_config=paired_task_config.model.args,
-        task_config=paired_task_config.tasks.args,
-    )
-
-    # Test execution
-    batch = next(iter(cr.dataloaders["train"]))
-    model(
-        inputs=(batch["identity_inputs"], batch["expression_inputs"]),
-        attention_mask=batch["expression_padding"],
-        conditional_tokens=None,
-    )
-
-
-def test_single_task_model_instantiation(single_task_config):
-    cr = CellRepresentation(single_task_config)  # takes in the whole config from hydra
-
-    model = HeimdallModel(
-        data=cr,
-        model_config=single_task_config.model.args,
-        task_config=single_task_config.tasks.args,
-    )
-
-    # Test execution
-    batch = next(iter(cr.dataloaders["train"]))
-    model(
-        inputs=(batch["identity_inputs"], batch["expression_inputs"]),
-        attention_mask=batch["expression_padding"],
-        conditional_tokens=None,
-    )
+    instantiate_and_run_model(paired_task_config)
