@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC, abstractmethod
-from typing import Optional, Sequence
+from typing import Sequence
 
 import anndata as ad
 import awkward as ak
