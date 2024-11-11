@@ -5,14 +5,12 @@ from typing import Optional, Sequence
 import anndata as ad
 import awkward as ak
 import numpy as np
-from scipy.sparse import issparse
-import pandas as pd
 import torch
 from anndata._warnings import ExperimentalFeatureWarning
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csc_array, csr_array
+from scipy.sparse import csc_array, csr_array, issparse
 
 from Heimdall.utils import searchsorted2d
 
@@ -102,6 +100,7 @@ class Fe(ABC):
 
             self.embedding_parameters["args"][key] = value
 
+
 class BinningFe(Fe):
     """Value-binning Fe from scGPT.
 
@@ -185,6 +184,7 @@ class NonzeroIdentityFe(Fe):
         self.adata.obsm["processed_expression_indices"] = cellwise_nonzero_indices
 
         self.replace_placeholders()
+
 
 class DummyFe(Fe):
     """Directly pass the continuous values.

@@ -75,7 +75,7 @@ class HeimdallModel(nn.Module):
             data,
             conditional_input_types,
         )
-        
+
         # self.lm_model = HeimdallTransformer(
         #     data=data,
         #     conditional_input_types=conditional_input_types,
@@ -98,7 +98,6 @@ class HeimdallModel(nn.Module):
         if conditional_tokens is not None and len(conditional_tokens) == 0:
             conditional_tokens = None
 
-        # print(inputs, attention_mask)
         if self.reducer is not None:
             encoded_cells = tuple(
                 self.lm_model(cell_inputs, conditional_tokens, attention_mask=mask)
@@ -108,8 +107,6 @@ class HeimdallModel(nn.Module):
         else:
             encoded = self.lm_model(inputs, conditional_tokens, attention_mask)
 
-        print(f'{encoded.dtype=}')
-        print(f'{self.head.decoder[0].weight.dtype=}')
         outputs = self.head(encoded)
 
         return outputs
@@ -137,9 +134,9 @@ class ExpressionOnly(nn.Module):
         _, self.d_encoded = data.adata.shape
 
     def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
-        _, outputs = inputs # extract expression only
+        _, outputs = inputs  # extract expression only
 
-        return outputs.to(torch.float32) # TODO: better way to align dtype
+        return outputs.to(torch.float32)  # TODO: better way to align dtype
 
 
 class HeimdallTransformer(nn.Module):
@@ -283,7 +280,6 @@ class HeimdallTransformer(nn.Module):
             ), "This was not initialized properly, there are no conditional embeddings to add to the input"
             for name, embed in self.conditional_embeddings.items():
                 if embed is not None:
-                    # print(conditional_tokens[name])
                     input_embeds += embed(conditional_tokens[name])
                 else:
                     input_embeds += conditional_tokens[name]
@@ -310,7 +306,6 @@ class HeimdallTransformer(nn.Module):
             input_embeds,
             src_key_padding_mask=attention_mask,
         )
-        # print(encoder_output.size())
 
         return encoder_output
 
@@ -335,6 +330,7 @@ class SeqPredHeadMixin:
             cls_embeddings=encoder_output[:, 0, :],
         )
 
+
 class ExpressionPredHeadMixin:
     def forward(self, encoder_output) -> TransformerOutput:
         logits = self.decoder(encoder_output)
@@ -343,6 +339,7 @@ class ExpressionPredHeadMixin:
             sequence_embeddings=logits,
             cls_embeddings=logits,
         )
+
 
 class LinearDecoderMixin(nn.Module):
     def __init__(self, dim_in: int, dim_out: Optional[int] = None, dropout: float = 0.0, **kwargs):
@@ -353,6 +350,7 @@ class LinearDecoderMixin(nn.Module):
             nn.Linear(dim_in, dim_out, **kwargs),
             nn.Dropout(dropout),
         )
+
 
 class FFN(nn.Module):
     def __init__(self, dim_in: int, dim_out: Optional[int] = None, mult: int = 4, dropout: float = 0.0):
@@ -388,8 +386,14 @@ class PreNormResidual(nn.Module):
 class LinearCellPredHead(CellPredHeadMixin, LinearDecoderMixin):
     """Linear cell prediction head."""
 
+
 class ExpressionOnlyCellPredHead(ExpressionPredHeadMixin, LinearDecoderMixin):
-     """Logistic regression prediction head. Put expression be the input"""
+    """Logistic regression prediction head.
+
+    Put expression be the input
+
+    """
+
 
 class LinearSeqPredHead(SeqPredHeadMixin, LinearDecoderMixin):
     """Linear sequence prediction head."""
