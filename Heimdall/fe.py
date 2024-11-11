@@ -161,7 +161,7 @@ class BinningFe(Fe):
 
 
 class NonzeroIdentityFe(Fe):
-    """Directly pass the continuous values.
+    """Directly pass the continuous values. Remove zeros.
 
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
@@ -172,7 +172,6 @@ class NonzeroIdentityFe(Fe):
     """
 
     def preprocess_embeddings(self):
-        """Compute bin identities of expression profiles in raw data."""
         self.expression_embeddings = None
 
         expression = self.adata.X
@@ -190,8 +189,6 @@ class DummyFe(Fe):
     """Directly pass the continuous values. Does not remove zero expression
     elements.
 
-    TODO: should we formulate a "sparse" baseline instead?
-
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         d_embedding: dimensionality of embedding for each expression entity
@@ -200,11 +197,9 @@ class DummyFe(Fe):
     """
 
     def preprocess_embeddings(self):
-        """Compute bin identities of expression profiles in raw data."""
         self.expression_embeddings = None
 
         expression = self.adata.X.todense() if issparse(self.adata.X) else self.adata.X
-        csr_expression = csr_array(expression)
 
         self.adata.obsm["processed_expression_values"] = expression
         self.adata.obsm["processed_expression_indices"] = np.tile(np.arange(self.num_genes), (self.num_cells, 1))
