@@ -32,6 +32,9 @@ class Fe(ABC):
         d_embedding: int,
         pad_value: int = None,
     ):
+        print(vocab_size)
+        print(embedding_parameters)
+        print(d_embedding)
         self.adata = adata
         self.num_cells, self.num_genes = adata.shape
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
@@ -115,13 +118,10 @@ class BinningFe(Fe):
     def __init__(
         self,
         adata: ad.AnnData,
-        embedding_parameters: OmegaConf,
-        d_embedding: int,
-        vocab_size: int,
-        num_bins: Optional[int],
-        pad_value: int = None,
+        num_bins: int,
+        **fe_kwargs,
     ):
-        super().__init__(adata, embedding_parameters, d_embedding, vocab_size, pad_value)
+        super().__init__(adata, **fe_kwargs)
         self.num_bins = num_bins
 
     def preprocess_embeddings(self):

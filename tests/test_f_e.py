@@ -132,16 +132,17 @@ def zero_expression_sorting_fe(zero_expression_mock_dataset):
 def binning_fe(mock_dataset):
     fe_config = OmegaConf.create(
         {
+            "vocab_size": 6,
             "embedding_parameters": {
-                "type": "torch.nn.Embedding",
+                "type": "Heimdall.utils.FlexibleTypeLinear",
                 "args": {
-                    "num_embeddings": int(np.max(mock_dataset.X)),
-                    "embedding_dim": 128,
+                    "in_features": 1,  # Replace later
+                    "out_features": 128,
                 },
             },
-            "vocab_size": 6,
-            "num_bins": int(np.max(mock_dataset.X)),
             "d_embedding": 128,
+            "pad_value": 0,
+            "num_bins": int(np.max(mock_dataset.X)),
         },
     )
     binning_fe = BinningFe(mock_dataset, **fe_config)
@@ -153,16 +154,17 @@ def binning_fe(mock_dataset):
 def zero_expression_binning_fe(zero_expression_mock_dataset):
     fe_config = OmegaConf.create(
         {
+            "vocab_size": 6,
             "embedding_parameters": {
-                "type": "torch.nn.Embedding",
+                "type": "Heimdall.utils.FlexibleTypeLinear",
                 "args": {
-                    "num_embeddings": int(np.ptp(zero_expression_mock_dataset.X)),
-                    "embedding_dim": 128,
+                    "in_features": 1,  # Replace later
+                    "out_features": 128,
                 },
             },
-            "vocab_size": 6,
-            "num_bins": int(np.ptp(zero_expression_mock_dataset.X)),
             "d_embedding": 128,
+            "pad_value": 0,
+            "num_bins": int(np.max(zero_expression_mock_dataset.X)),
         },
     )
     binning_fe = BinningFe(zero_expression_mock_dataset, **fe_config)
