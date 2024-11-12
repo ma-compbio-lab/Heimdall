@@ -264,6 +264,7 @@ class PairedInstanceDataset(Dataset):
             *[self.data.fc[cell_idx] for cell_idx in self.idx[idx]],
         )
 
+        print(identity_inputs, expression_inputs, expression_padding)
         return {
             "identity_inputs": identity_inputs,
             "expression_inputs": expression_inputs,
@@ -277,10 +278,12 @@ class PretrainDataset(SingleInstanceDataset, ABC):
         super().__init__(*args, **kwargs)
 
     def _setup_labels_and_pre_splits(self):
-        # FIX: not necessarily the case,e.g., UCE.....
-        # FIX: probably doesn't work after we changed fg/fe/fc implementation...
-        identity_inputs, expression_inputs = self.data.fc[:]
-        self.labels = identity_inputs.copy()
+        # # FIX: not necessarily the case,e.g., UCE.....
+        # # FIX: probably doesn't work after we changed fg/fe/fc implementation...
+        # identity_inputs, expression_inputs = self.data.fc[:]
+        identity_inputs = [self.data.fc[i][0] for i in range(len(self.data.adata))]
+        identity_inputs = np.vstack(identity_inputs).astype(int)
+        self.labels = identity_inputs
         # self.labels = self.data.fc.copy()
 
     def __getitem__(self, idx):
