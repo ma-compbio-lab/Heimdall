@@ -13,12 +13,13 @@ from Heimdall.cell_representations import CellRepresentation
 from Heimdall.datasets import PairedInstanceDataset
 from Heimdall.utils import instantiate_from_config
 
-# try:
-#     from flash_attn.models.bert import BertEncoder
-#
-#     print("FlashAttention Library Successfully Loaded")
-# except ImportError:
-#     print("Warning: FlashAttention Not Installed, when initializing model make sure to use default Transformers")
+try:
+    from flash_attn.models.bert import BertEncoder
+    from transformers import BertConfig
+
+    print("FlashAttention Library Successfully Loaded")
+except ImportError:
+    print("Warning: FlashAttention Not Installed, when initializing model make sure to use default Transformers")
 
 
 @dataclass
@@ -70,10 +71,12 @@ class HeimdallModel(nn.Module):
             conditional_input_types: Conditional input types specification.
 
         """
+        use_FA = model_config.use_flash_attn
         self.lm_model = HeimdallTransformer(
             data=data,
             config=model_config,
             conditional_input_types=conditional_input_types,
+            use_FA=use_FA,
         )
         self.num_labels = data.num_tasks
         dim_in = model_config.d_model
@@ -113,6 +116,7 @@ class HeimdallTransformer(nn.Module):
         data: CellRepresentation,
         config: DictConfig,
         conditional_input_types: Optional[dict] = None,
+        use_FA=False,
     ):
         super().__init__()
         """Heimdall transformer model.
@@ -143,6 +147,7 @@ class HeimdallTransformer(nn.Module):
         self.conditional_input_types = conditional_input_types
 
         self.fc = data.fc
+        self.use_FA = use_FA
 
         self.vocab_size = data.sequence_length + 2  # <PAD> and <MASK> TODO: data.vocab_size
 
@@ -187,17 +192,30 @@ class HeimdallTransformer(nn.Module):
                 else:
                     raise ValueError(f"conditional_input_types.{name}['type'] must be either 'learned' or 'predefined'")
 
-        # Encoder layers
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=config.d_model,
-            nhead=config.nhead,
-            dim_feedforward=config.d_model * 4,
-            dropout=config.hidden_dropout_prob,
-            activation=config.hidden_act,
-            batch_first=True,
-            norm_first=True,  # BERT uses LayerNorm before self-attention and feedforward networks
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.num_encoder_layers)
+        if use_FA:
+            FA_config = BertConfig(
+                hidden_size=config.d_model,
+                num_hidden_layers=config.num_encoder_layers,
+                num_attention_heads=config.nhead,
+                intermediate_size=config.d_model * 4,
+                hidden_act="gelu",
+                hidden_dropout_prob=config.hidden_dropout_prob,
+                attention_probs_dropout_prob=config.hidden_dropout_prob,
+                use_flash_attn=True,  ### use this to toggle between flash attention and not
+            )
+            self.encoder = BertEncoder(FA_config)
+        else:
+            # Encoder layers
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=config.d_model,
+                nhead=config.nhead,
+                dim_feedforward=config.d_model * 4,
+                dropout=config.hidden_dropout_prob,
+                activation=config.hidden_act,
+                batch_first=True,
+                norm_first=True,  # BERT uses LayerNorm before self-attention and feedforward networks
+            )
+            self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.num_encoder_layers)
 
         # Initialize the [CLS] token as a learnable parameter
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
@@ -273,10 +291,17 @@ class HeimdallTransformer(nn.Module):
             attention_mask = torch.cat([cls_attention, attention_mask], dim=1)  # Shape: (batch_size, seq_len + 1)
 
         # Encoder
-        encoder_output = self.encoder(
-            input_embeds,
-            src_key_padding_mask=attention_mask,
-        )
+        # Pass through the Transformer encoder layers
+        if self.use_FA:
+            encoder_output = self.encoder(
+                input_embeds,
+                key_padding_mask=~attention_mask,
+            )
+        else:
+            encoder_output = self.encoder(
+                input_embeds,
+                src_key_padding_mask=attention_mask,
+            )
         # print(encoder_output.size())
 
         return encoder_output

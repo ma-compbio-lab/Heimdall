@@ -18,8 +18,8 @@ defaults:
 # Set the specific parameters you would like to change from the defaults
 ####
 
-project_name: cta_pancreas # project name for WandB
-run_name: ${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}_${model.args.pooling} # what is set for WandB
+project_name: cta_pancreas_debug # project name for WandB
+run_name: ${fg.type}_${fe.type}_${fg.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}_${model.args.pooling} # what is set for WandB
 work_dir: work_dir # set your custom working directory
 
 seed: 55
