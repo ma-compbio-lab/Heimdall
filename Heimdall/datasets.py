@@ -264,7 +264,6 @@ class PairedInstanceDataset(Dataset):
             *[self.data.fc[cell_idx] for cell_idx in self.idx[idx]],
         )
 
-        print(identity_inputs, expression_inputs, expression_padding)
         return {
             "identity_inputs": identity_inputs,
             "expression_inputs": expression_inputs,
