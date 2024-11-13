@@ -1,4 +1,3 @@
-name: "IdentityFg"
 type: Heimdall.fg.IdentityFg
 args:
   embedding_parameters:

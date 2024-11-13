@@ -208,6 +208,37 @@ class GeneformerFc(Fc):
         return embeddings
 
 
+class DummyFc(Fc):
+    """Dummy `Fc` that does not tailor the size of the input."""
+
+    def tailor(
+        self,
+        gene_tokenization: ak.Array,
+        expression_tokenization: ak.Array,
+    ) -> NDArray | ak.Array:
+
+        cell_tokenization = np.stack(
+            [ak.to_numpy(gene_tokenization), ak.to_numpy(expression_tokenization)],
+            axis=0,
+        )  # This returns a ak.Array
+        _, input_length = cell_tokenization.shape
+
+        return cell_tokenization
+
+    def limit(self, cell_tokenization: NDArray) -> NDArray:
+        pass
+
+    def embed_cells(
+        self,
+        identity_inputs: Tensor,
+        gene_embedding_layer: Module | None,
+        expression_inputs: Tensor,
+        expression_embedding_layer: Module | None,
+    ) -> Tensor:
+
+        pass
+
+
 class ScGPTFc(Fc):
     """Implementation of scGPT cell embedding."""
 

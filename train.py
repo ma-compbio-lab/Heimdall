@@ -45,7 +45,7 @@ def main(config):
 
     model = HeimdallModel(
         data=cr,
-        model_config=config.model.args,
+        model_config=config.model,
         task_config=config.tasks.args,
         conditional_input_types=conditional_input_types,
     )

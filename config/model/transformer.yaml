@@ -1,4 +1,5 @@
-type: transformer
+type: Heimdall.models.HeimdallTransformer
+name: transformer
 args:
   d_model: 128
   pos_enc: BERT
