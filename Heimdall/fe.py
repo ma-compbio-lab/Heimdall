@@ -196,7 +196,7 @@ class DummyFe(Fe):
     def preprocess_embeddings(self):
         self.expression_embeddings = None
 
-        expression = self.adata.X.todense() if issparse(self.adata.X) else self.adata.X
+        expression = self.adata.X.toarray() if issparse(self.adata.X) else self.adata.X
 
         self.adata.obsm["processed_expression_values"] = expression
         self.adata.obsm["processed_expression_indices"] = np.tile(np.arange(self.num_genes), (self.num_cells, 1))
