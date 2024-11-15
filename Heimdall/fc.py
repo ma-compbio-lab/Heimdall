@@ -52,6 +52,7 @@ class Fc(ABC):
                 Gene expression embedding indices for all cells.
 
         """
+
         gene_names = self.adata.var_names
 
         processed_expression_values, processed_expression_indices = self.fe[:]

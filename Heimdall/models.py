@@ -137,7 +137,7 @@ class ExpressionOnly(nn.Module):
     def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
         _, outputs = inputs  # extract expression only
 
-        return outputs.to(torch.float32)  # TODO: better way to align dtype
+        return outputs
 
 
 class HeimdallTransformer(nn.Module):
