@@ -45,6 +45,9 @@ class HeimdallTrainer:
             **accelerator_log_kwargs,
         )
 
+        if hasattr(model.lm_model, "use_flash_attn") and model.lm_model.use_flash_attn:
+            assert self.accelerator.mixed_precision == "bf16", "If using Flash Attention, mixed precision must be bf16"
+
         self.optimizer = self._initialize_optimizer()
         self.loss_fn = self._get_loss_function()
 
