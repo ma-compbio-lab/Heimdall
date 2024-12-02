@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import torch
 from numpy.typing import NDArray
+from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 from pandas.api.typing import NAType
 
 
@@ -16,23 +18,35 @@ class Fg(ABC):
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         d_embedding: dimensionality of embedding for each gene entity
-        embedding_filepath: filepath from which to load pretrained embeddings
 
     """
 
-    def __init__(self, adata: ad.AnnData, d_embedding: int, embedding_filepath: Optional[str | PathLike] = None):
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        embedding_parameters: DictConfig,
+        d_embedding: int,
+        vocab_size: int,
+        pad_value: int = None,
+        embedding_filepath: Optional[str | PathLike] = None,
+    ):
         self.adata = adata
         _, self.num_genes = adata.shape
         self.d_embedding = d_embedding
-        self.embedding_filepath = embedding_filepath
+        self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
+        self.vocab_size = vocab_size
+        self.pad_value = vocab_size - 2 if pad_value is None else pad_value
 
     @abstractmethod
-    def preprocess_embeddings(self):
+    def preprocess_embeddings(self, float_dtype: str = "float32"):
         """Preprocess gene embeddings and store them for use during model
         inference.
 
         Preprocessing may include anything from downloading gene embeddings from
         a URL to generating embeddings from scratch.
+
+        Args:
+            float_dtype: dtype to be used for identity embedding state.
 
         Returns:
             Sets `self.gene_embeddings`.
@@ -68,6 +82,21 @@ class Fg(ABC):
         else:
             return embedding_indices
 
+    def replace_placeholders(self):
+        """Replace config placeholders with values after preprocessing."""
+        args = self.embedding_parameters.get("args", {})
+        for key, value in args.items():
+            if value == "max_seq_length":
+                value = len(self.adata.var)
+            elif value == "vocab_size":
+                value = self.vocab_size  # <PAD> and <MASK> TODO: data.vocab_size
+            elif value == "gene_embeddings":
+                value = torch.tensor(self.gene_embeddings)  # TODO: type is inherited from NDArray
+            else:
+                continue
+
+            self.embedding_parameters["args"][key] = value
+
     def load_from_cache(
         self,
         identity_embedding_index: NDArray,
@@ -81,14 +110,31 @@ class Fg(ABC):
         self.adata.var["identity_valid_mask"] = identity_valid_mask
         self.gene_embeddings = gene_embeddings
 
+        self.replace_placeholders()
+
 
 class PretrainedFg(Fg, ABC):
     """Abstraction for pretrained `Fg`s that can be loaded from disk.
+
+    Args:
+        embedding_filepath: filepath from which to load pretrained embeddings
 
     Raises:
         ValueError: if `config.d_embedding` is larger than embedding dimensionality given in filepath.
 
     """
+
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        embedding_parameters: OmegaConf,
+        d_embedding: int,
+        vocab_size: int,
+        pad_value: int = None,
+        embedding_filepath: Optional[str | PathLike] = None,
+    ):
+        super().__init__(adata, embedding_parameters, d_embedding, pad_value, vocab_size)
+        self.embedding_filepath = embedding_filepath
 
     @abstractmethod
     def load_embeddings(self) -> Dict[str, NDArray]:
@@ -99,7 +145,7 @@ class PretrainedFg(Fg, ABC):
 
         """
 
-    def preprocess_embeddings(self):
+    def preprocess_embeddings(self, float_dtype: str = "float32"):
         embedding_map = self.load_embeddings()
 
         first_embedding = next(iter(embedding_map.values()))
@@ -121,14 +167,16 @@ class PretrainedFg(Fg, ABC):
         index_map[valid_indices] = np.arange(num_mapped_genes)
 
         self.adata.var["identity_embedding_index"] = index_map
-        self.adata.var["identity_valid_mask"] = valid_mask
+        self.adata.var["identity_valid_mask"] = valid_mask.to_numpy()
 
-        self.gene_embeddings = np.zeros((num_mapped_genes, self.d_embedding), dtype=np.float64)
+        self.gene_embeddings = np.zeros((num_mapped_genes, self.d_embedding), dtype=float_dtype)
 
         for gene_name in self.adata.var_names:
             embedding_index = self.adata.var.loc[gene_name, "identity_embedding_index"]
             if not pd.isna(embedding_index):
                 self.gene_embeddings[embedding_index] = embedding_map[gene_name][: self.d_embedding]
+
+        self.replace_placeholders()
 
         print(f"Found {len(valid_indices)} genes with mappings out of {len(self.adata.var_names)} genes.")
 
@@ -142,10 +190,12 @@ class IdentityFg(Fg):
 
     """
 
-    def preprocess_embeddings(self):
+    def preprocess_embeddings(self, float_dtype: str = "float32"):
         self.gene_embeddings = None
         self.adata.var["identity_embedding_index"] = np.arange(self.num_genes)
         self.adata.var["identity_valid_mask"] = np.full(self.num_genes, True)
+
+        self.replace_placeholders()
 
 
 class ESM2Fg(PretrainedFg):

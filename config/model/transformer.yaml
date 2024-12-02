@@ -1,4 +1,5 @@
-type: transformer
+type: Heimdall.models.HeimdallTransformer
+name: transformer
 args:
   d_model: 128
   pos_enc: BERT
@@ -9,6 +10,3 @@ args:
   attention_probs_dropout_prob: 0.1
   use_flash_attn: False
   pooling: cls_pooling # or "mean_pooling"
-  head_config:
-    type: Heimdall.models.LinearCellPredHead
-    args: null
