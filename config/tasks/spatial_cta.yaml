@@ -5,8 +5,12 @@ args:
     - Accuracy
     - MatthewsCorrCoef
   train_split: 0.8
+  early_stopping_patience: 6
   shuffle: True
   batchsize: 32
-  epochs: 10
+  epochs: 50
   dataset_config:
     type: Heimdall.datasets.SingleInstanceDataset
+  head_config:
+    type: Heimdall.models.LinearCellPredHead
+    args: null
