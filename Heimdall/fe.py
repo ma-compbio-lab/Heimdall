@@ -1,6 +1,5 @@
 import warnings
-from abc import ABC, abstractmethod
-from typing import Sequence
+from typing import Sequence, Union
 
 import anndata as ad
 import awkward as ak
@@ -12,10 +11,10 @@ from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from scipy.sparse import csc_array, csr_array, issparse
 
-from Heimdall.utils import searchsorted2d
+from Heimdall.utils import deprecate, searchsorted2d
 
 
-class Fe(ABC):
+class Fe:
     """Abstraction for expression-based embedding.
 
     Args:
@@ -39,7 +38,6 @@ class Fe(ABC):
         self.vocab_size = vocab_size
         self.pad_value = vocab_size - 2 if pad_value is None else pad_value
 
-    @abstractmethod
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         """Preprocess expression embeddings and store them for use during model
         inference.
@@ -48,13 +46,13 @@ class Fe(ABC):
         a URL to generating embeddings from scratch.
 
         Returns:
-            Sets `self.expression_embeddings`.
-            Sets the following fields of `self.adata`:
-            `.obsm['processed_expression_values']` : :class:`~numpy.ndarray` (shape `(self.adata.n_obs, -1)`)
-                Processed expression values, for later use in calculation of expression-based embeddings.
+            TODO: Update this docstring
 
         """
+        self.expression_embeddings = None
+        self.replace_placeholders()
 
+    @deprecate
     def __getitem__(self, cell_indices: Sequence[int]) -> NDArray:
         """Get the indices of genes in the expression embedding array.
 
@@ -65,13 +63,12 @@ class Fe(ABC):
             Index of value in the expression embeddings, or `pd.NA` if the gene has no mapping.
 
         """
-
         subset = self.adata[cell_indices]
         expression_values = subset.obsm["processed_expression_values"]
         expression_indices = subset.obsm["processed_expression_indices"]
-        # breakpoint()
         return expression_values, expression_indices
 
+    @deprecate
     def load_from_cache(
         self,
         processed_expression_values: NDArray,
@@ -143,7 +140,89 @@ class BinningFe(Fe):
         super().__init__(adata, **fe_kwargs)
         self.num_bins = num_bins
 
-    def preprocess_embeddings(self, float_dtype: str = "float32"):
+    def _digitize(self, x: np.ndarray, bins: np.ndarray, side="both") -> np.ndarray:
+        """
+        https://github.com/bowang-lab/scGPT/blob/7301b51a72f5db321fccebb51bc4dd1380d99023/scgpt/preprocess.py#L239
+        Digitize the data into bins. This method spreads data uniformly when bins
+        have same values.
+
+        Args:
+
+        x (:class:`np.ndarray`):
+            The data to digitize.
+        bins (:class:`np.ndarray`):
+            The bins to use for digitization, in increasing order.
+        side (:class:`str`, optional):
+            The side to use for digitization. If "one", the left side is used. If
+            "both", the left and right side are used. Default to "one".
+
+        Returns:
+
+        :class:`np.ndarray`:
+            The digitized data.
+        """
+        assert x.ndim == 1 and bins.ndim == 1
+
+        left_digits = np.digitize(x, bins)
+        if side == "one":
+            return left_digits
+
+        right_difits = np.digitize(x, bins, right=True)
+
+        rands = np.random.rand(len(x))  # uniform random numbers
+
+        digits = rands * (right_difits - left_digits) + left_digits
+        digits = np.ceil(digits).astype(np.int64)
+        return digits
+
+    def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
+        """Binning the row into n_bins.
+
+        https://github.com/bowang-lab/scGPT/blob/7301b51a72f5db321fccebb51bc4dd1380d99023/scgpt/preprocess.py#L274
+
+        """
+        dtype = row.dtype
+        return_np = False if isinstance(row, torch.Tensor) else True
+        row = row.cpu().numpy() if isinstance(row, torch.Tensor) else row
+        # TODO: use torch.quantile and torch.bucketize
+
+        if row.max() == 0:
+            return np.zeros_like(row, dtype=dtype) if return_np else torch.zeros_like(row, dtype=dtype)
+
+        if row.min() <= 0:
+            non_zero_ids = row.nonzero()
+            non_zero_row = row[non_zero_ids]
+            bins = np.quantile(non_zero_row, np.linspace(0, 1, n_bins - 1))
+            non_zero_digits = self._digitize(non_zero_row, bins)
+            binned_row = np.zeros_like(row, dtype=np.int64)
+            binned_row[non_zero_ids] = non_zero_digits
+        else:
+            bins = np.quantile(row, np.linspace(0, 1, n_bins - 1))
+            binned_row = self._digitize(row, bins)
+        return torch.from_numpy(binned_row) if not return_np else binned_row.astype(dtype)
+
+    def forward(self, row_idx):
+        """Input is an adata indexed at cell [idx]
+
+        returns two vectors of cell_expression_inputs and cell_identity_inputs
+        where cell_expression_inputs is a vector of cell expression values and
+        cell_identity_inputs is a vector of corresponding gene indices
+
+        """
+        csr_matrix = self.adata.X
+        start = csr_matrix.indptr[row_idx]
+        end = csr_matrix.indptr[row_idx + 1]
+        cell_expression_inputs = csr_matrix.data[start:end]
+        cell_identity_inputs = csr_matrix.indices[start:end]
+
+        # Bin the cell expression values
+        n_bins = self.num_bins  # Number of bins specified
+        cell_expression_inputs_binned = self.binning(cell_expression_inputs, n_bins)
+
+        return cell_identity_inputs, cell_expression_inputs_binned
+
+    @deprecate
+    def old_forward(self, float_dtype: str = "float32"):
         """Compute bin identities of expression profiles in raw data."""
         self.expression_embeddings = None
 
@@ -190,7 +269,16 @@ class NonzeroIdentityFe(Fe):
 
     """
 
-    def preprocess_embeddings(self, float_dtype: str = "float32"):
+    def forward(self, row_idx):
+        csr_matrix = self.adata.X
+        start = csr_matrix.indptr[row_idx]
+        end = csr_matrix.indptr[row_idx + 1]
+        cell_expression_inputs = csr_matrix.data[start:end]
+        cell_identity_inputs = csr_matrix.indices[start:end]
+        return cell_identity_inputs, cell_expression_inputs
+
+    @deprecate
+    def old_forward(self, float_dtype: str = "float32"):
         self.expression_embeddings = None
 
         expression = self.adata.X
@@ -200,7 +288,6 @@ class NonzeroIdentityFe(Fe):
 
         self.adata.obsm["processed_expression_values"] = cellwise_nonzero_expression.astype(float_dtype)
         self.adata.obsm["processed_expression_indices"] = cellwise_nonzero_indices
-
         self.replace_placeholders()
 
 
@@ -215,21 +302,55 @@ class DummyFe(Fe):
 
     """
 
-    def preprocess_embeddings(self, float_dtype: str = "float32"):
+    def forward(self, row_idx):
+        """Input is an adata indexed at cell [idx]
+
+        returns two vectors of cell_expression_inputs and cell_identity_inputs
+        where cell_expression_inputs is a vector of cell expression values and
+        cell_identity_inputs is a vector of corresponding gene indices
+
+        """
+        # breakpoint()
+        cell_expression_inputs = self.adata.X[row_idx].toarray().flatten()  # making it dense
+        cell_identity_inputs = np.arange(self.adata.shape[1])
+        return cell_identity_inputs, cell_expression_inputs
+
+    @deprecate
+    def old_forward(self, float_dtype: str = "float32"):
         self.expression_embeddings = None
-
         expression = self.adata.X.toarray() if issparse(self.adata.X) else self.adata.X
-
         self.adata.obsm["processed_expression_values"] = expression.astype(float_dtype)
         self.adata.obsm["processed_expression_indices"] = np.tile(np.arange(self.num_genes), (self.num_cells, 1))
-
         self.replace_placeholders()
 
 
 class SortingFe(Fe):
     """Sorting Fe."""
 
-    def preprocess_embeddings(self, float_dtype: str = "float32"):
+    def forward(self, row_idx):
+        """Input is an adata indexed at cell [idx]
+
+        returns two vectors of cell_expression_inputs and cell_identity_inputs
+        where cell_expression_inputs is a vector of cell expression values and
+        cell_identity_inputs is a vector of corresponding gene indices
+
+        """
+
+        csr_matrix = self.adata.X
+        start = csr_matrix.indptr[row_idx]
+        end = csr_matrix.indptr[row_idx + 1]
+        nonzero_values = csr_matrix.data[start:end]
+        nonzero_indices = csr_matrix.indices[start:end]
+
+        # Sort non-zero values in descending order
+        sorted_order = np.argsort(nonzero_values)[::-1]  # Indices for sorting descending
+        cell_expression_inputs = nonzero_values[sorted_order]
+        cell_identity_inputs = nonzero_indices[sorted_order]
+
+        return cell_identity_inputs, cell_expression_inputs
+
+    @deprecate
+    def old_forward(self, float_dtype: str = "float32"):
         """Sort genes by expression per cell.
 
         Uses median normalization before sorting (Geneformer style).

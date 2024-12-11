@@ -5,11 +5,13 @@ import anndata as ad
 import awkward as ak
 import numpy as np
 from numpy.typing import NDArray
+from scipy.sparse import csr_matrix, issparse
 from torch import Tensor
 from torch.nn import Module
 
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
+from Heimdall.utils import deprecate
 
 
 class Fc(ABC):
@@ -37,24 +39,24 @@ class Fc(ABC):
         self.max_input_length = max_input_length
 
     def preprocess_cells(self, float_dtype: str = "float32"):
+        # breakpoint()
+        if issparse(self.adata.X) and not isinstance(self.adata.X, csr_matrix):
+            self.adata.X = self.adata.X.tocsr()
+        return
+
+    def old_forward(self, float_dtype: str = "float32"):
         """Using the `fg` and `fe`, preprocess input cells, retrieve indices of
         both gene and expression embeddings.
 
         This function can be deterministic, or may involve random sampling.
 
         Returns:
-            Sets the following fields of `self.adata`:
-            `.obsm['cell_identity_inputs']` : :class:`~numpy.ndarray`
-                (shape `(self.adata.n_obs, self.max_input_length)`)
-                Gene identity embedding indices for all cells.
-            `.obsm['cell_expression_inputs']` : :class:`~numpy.ndarray`
-                (shape `(self.adata.n_obs, self.max_input_length)`)
-                Gene expression embedding indices for all cells.
+            TODO: Update this Docstring
 
         """
 
+        # breakpoint()
         gene_names = self.adata.var_names
-
         processed_expression_values, processed_expression_indices = self.fe[:]
 
         gene_lists = ak.Array(
@@ -78,13 +80,18 @@ class Fc(ABC):
             A tuple of gene identity embedding indices and gene expression embedding indices for all cells.
 
         """
+        # breakpoint()
+        identity_indices, expression_inputs = self.fe.forward(cell_index)
 
-        identity_inputs = self.adata.obsm["cell_identity_inputs"][cell_index]
-        expression_inputs = self.adata.obsm["cell_expression_inputs"][cell_index]
+        # identity_indices = self.adata.obsm["cell_identity_inputs"][cell_index]
+        # expression_inputs = self.adata.obsm["cell_expression_inputs"][cell_index]
+
+        gene_list = self.adata.var_names[identity_indices]  # convert to ENSEMBL Gene Names
+        identity_inputs = self.fg[gene_list]  # convert the genes into fg
 
         assert len(identity_inputs) == len(
             expression_inputs,
-        ), "Gene identity and expression inputs do not have the same shape"  # TODO: do we really want to enforce this?
+        ), "Gene identity and expression inputs do not have the same shape"
 
         # Padding and truncating
         identity_inputs, expression_inputs = self.tailor(
@@ -132,18 +139,13 @@ class Fc(ABC):
 
     def tailor(
         self,
-        gene_tokenization: ak.Array,
-        expression_tokenization: ak.Array,
+        gene_tokenization,
+        expression_tokenization,
     ) -> NDArray | ak.Array:
-
-        cell_tokenization = np.stack(
-            [ak.to_numpy(gene_tokenization), ak.to_numpy(expression_tokenization)],
-            axis=0,
-        )  # This returns a ak.Array
+        cell_tokenization = np.stack([gene_tokenization, expression_tokenization], axis=0)
         _, input_length = cell_tokenization.shape
         if input_length > self.max_input_length:
             return self.limit(cell_tokenization)
-
         return self.pad(cell_tokenization)
 
     @abstractmethod
@@ -170,6 +172,7 @@ class Fc(ABC):
 
         """
 
+    @deprecate
     def load_from_cache(
         self,
         cell_identity_inputs: NDArray,
@@ -205,7 +208,6 @@ class GeneformerFc(Fc):
 
         """
         embeddings = gene_embedding_layer(identity_inputs)
-
         return embeddings
 
 
@@ -214,8 +216,8 @@ class DummyFc(Fc):
 
     def tailor(
         self,
-        gene_tokenization: ak.Array,
-        expression_tokenization: ak.Array,
+        gene_tokenization,
+        expression_tokenization,
     ) -> NDArray | ak.Array:
 
         cell_tokenization = np.stack(
@@ -257,7 +259,6 @@ class ScGPTFc(Fc):
     def limit(self, cell_tokenization: NDArray) -> NDArray:
         _, input_length = cell_tokenization.shape
         sample_indices = self.rng.choice(input_length, self.max_input_length, replace=False)
-
         return cell_tokenization[:, sample_indices]
 
     def embed_cells(
@@ -276,7 +277,6 @@ class ScGPTFc(Fc):
             expression_embedding_layer: # TODO fill out
 
         """
-
         gene_embeddings = gene_embedding_layer(identity_inputs)
         expression_embeddings = expression_embedding_layer(expression_inputs)
 

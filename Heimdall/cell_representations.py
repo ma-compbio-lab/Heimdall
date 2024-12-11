@@ -291,7 +291,8 @@ class CellRepresentation(SpecialTokenMixin):
             self.datasets[split] = Subset(full_dataset, split_idx)
 
         # Set up data loaders
-        dataloader_kwargs = {}  # TODO: we can parse additional data loader kwargs from config
+        # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
+        dataloader_kwargs = {"num_workers": 4}  # TODO: we can parse additional data loader kwargs from config
         self.dataloaders = {
             split: DataLoader(
                 dataset,
@@ -346,6 +347,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.adata.raw = self.adata.copy()
         self.adata = self.adata[:, valid_mask].copy()
 
+        # setting up some pointers so that they all reference the same anndata object
         self.fe.adata = self.adata
         self.fc.adata = self.adata
 
@@ -425,7 +427,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.fg.preprocess_embeddings()
         print(f"> Finished calculating fg with {self.fg_cfg.type}")
 
-        self.drop_invalid_genes()
+        self.drop_invalid_genes()  # TODO: remove this if necessary
         print("> Finished dropping invalid genes from AnnData")
 
         self.fe.preprocess_embeddings()
