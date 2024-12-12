@@ -129,8 +129,7 @@ class ExpressionOnly(nn.Module):
 
     def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
         _, outputs = inputs  # extract expression only
-
-        return outputs
+        return outputs.to(torch.float32)  # convert to float32?
 
 
 class HeimdallTransformerEncoder(nn.Module):
@@ -395,6 +394,7 @@ class SeqPredHeadMixin:
 
 class ExpressionPredHeadMixin:
     def forward(self, encoder_output) -> TransformerOutput:
+        # breakpoint()
         logits = self.decoder(encoder_output)
         return TransformerOutput(
             logits=logits,

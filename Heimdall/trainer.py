@@ -374,21 +374,7 @@ class HeimdallTrainer:
                         labels = no_nans_flattened_labels.to(torch.int)
                         logits = no_nans_flattened_logits
 
-                    # breakpoint()
                     metric.update(logits, labels)
-                    # if callable(metric):
-                    #     # Custom metric
-                    #     print("entered custom")
-                    #     metric_value = metric(logits, labels)
-                    #     if isinstance(metric_value, torch.Tensor):
-                    #         metric_value = metric_value.item()
-                    #     metrics[metric_name] = metric_value
-                    # else:
-                    #     # Built-in metric
-                    #     print(metric)
-                    #     print(metric_name)
-                    #     metric.update(logits, labels)
-
                 if self.cfg.trainer.fastdev:
                     break
 
