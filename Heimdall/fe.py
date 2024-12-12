@@ -116,7 +116,6 @@ class Fe:
                 self.mask_value = value - 1
             else:
                 continue
-
             self.embedding_parameters["args"][key] = value
 
 
@@ -341,6 +340,10 @@ class SortingFe(Fe):
         end = csr_matrix.indptr[row_idx + 1]
         nonzero_values = csr_matrix.data[start:end]
         nonzero_indices = csr_matrix.indices[start:end]
+
+        # breakpoint()
+        if "medians" in self.adata.var:
+            nonzero_values = nonzero_values - self.adata.var["medians"].iloc[nonzero_indices].values
 
         # Sort non-zero values in descending order
         sorted_order = np.argsort(nonzero_values)[::-1]  # Indices for sorting descending

@@ -13,6 +13,7 @@ import pandas as pd
 import scanpy as sc
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
+from scipy.sparse import csc_array
 from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset
 
@@ -271,6 +272,14 @@ class CellRepresentation(SpecialTokenMixin):
             sc.pp.scale(self.adata, max_value=10)
         else:
             print("> Not Scaling the data...")
+
+        if get_value(self.dataset_preproc_cfg, "get_medians"):
+            # Get medians
+            print("> Getting nonzero medians...")
+            csc_expression = csc_array(self.adata.X)
+            genewise_nonzero_expression = np.split(csc_expression.data, csc_expression.indptr[1:-1])
+            gene_medians = np.array([np.median(gene_nonzeros) for gene_nonzeros in genewise_nonzero_expression])
+            self.adata.var["medians"] = gene_medians
 
         print("> Finished Processing Anndata Object")
 

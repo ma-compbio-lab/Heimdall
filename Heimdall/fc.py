@@ -80,7 +80,6 @@ class Fc(ABC):
             A tuple of gene identity embedding indices and gene expression embedding indices for all cells.
 
         """
-        # breakpoint()
         identity_indices, expression_inputs = self.fe.forward(cell_index)
 
         # identity_indices = self.adata.obsm["cell_identity_inputs"][cell_index]
