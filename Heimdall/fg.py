@@ -223,11 +223,12 @@ class Gene2VecFg(PretrainedFg):
 
         return raw_gene_embedding_map
 
+
 class HyenaDNAFg(PretrainedFg):
-    """Mapping of gene names to pretrained HyenaDNA embeddings. 
-    
+    """Mapping of gene names to pretrained HyenaDNA embeddings.
+
     Embeddings are stored in the same format as ESM2.
-    
+
     """
 
     def load_embeddings(self):
