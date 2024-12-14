@@ -459,6 +459,18 @@ def get_dtype(dtype_name: str, backend: str = "torch"):
     return dtype
 
 
+class TwoLayerNN(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.linear1 = nn.Linear(in_features, out_features)
+        self.nonlinear = nn.ReLU()
+        self.linear2 = nn.Linear(out_features, out_features)
+        self.dtype = self.linear1.weight.dtype
+
+    def forward(self, inputs: torch.Tensor):
+        return self.linear2(self.nonlinear(self.linear1(inputs.type(self.dtype).unsqueeze(-1))))
+
+
 class FlexibleTypeLinear(nn.Linear):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

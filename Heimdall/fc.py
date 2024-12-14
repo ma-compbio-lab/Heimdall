@@ -219,10 +219,7 @@ class DummyFc(Fc):
         expression_tokenization,
     ) -> NDArray | ak.Array:
 
-        cell_tokenization = np.stack(
-            [ak.to_numpy(gene_tokenization), ak.to_numpy(expression_tokenization)],
-            axis=0,
-        )  # This returns a ak.Array
+        cell_tokenization = np.stack([gene_tokenization, expression_tokenization], axis=0)
         _, input_length = cell_tokenization.shape
 
         return cell_tokenization
