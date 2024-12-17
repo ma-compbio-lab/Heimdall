@@ -137,7 +137,7 @@ def paired_task_config(request, toy_paried_data_path):
       type: Heimdall.fe.SortingFe
       args:
         embedding_parameters:
-          type: Heimdall.utils.FlexibleTypeEmbedding
+          type: Heimdall.embedding.FlexibleTypeEmbedding
           args:
             num_embeddings: "max_seq_length"
             embedding_dim: 128
@@ -147,7 +147,7 @@ def paired_task_config(request, toy_paried_data_path):
       type: Heimdall.fg.IdentityFg
       args:
         embedding_parameters:
-          type: Heimdall.utils.FlexibleTypeEmbedding
+          type: Heimdall.embedding.FlexibleTypeEmbedding
           args:
             num_embeddings: "vocab_size"
             embedding_dim: 128

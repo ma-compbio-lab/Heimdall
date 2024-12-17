@@ -31,6 +31,7 @@ class Fe(ABC):
         embedding_parameters: DictConfig,
         d_embedding: int,
         pad_value: int = None,
+        mask_value: int = None,
     ):
         self.adata = adata
         self.num_cells, self.num_genes = adata.shape
@@ -38,6 +39,7 @@ class Fe(ABC):
         self.d_embedding = d_embedding
         self.vocab_size = vocab_size
         self.pad_value = vocab_size - 2 if pad_value is None else pad_value
+        self.mask_value = vocab_size - 1 if mask_value is None else mask_value
 
     @abstractmethod
     def preprocess_embeddings(self, float_dtype: str = "float32"):
@@ -83,9 +85,9 @@ class Fe(ABC):
         self.adata.obsm["processed_expression_values"] = processed_expression_values
         self.adata.obsm["processed_expression_indices"] = processed_expression_indices
         self.expression_embeddings = expression_embeddings
-        self.replace_placeholders()
+        self.prepare_embedding_parameters()
 
-    def replace_placeholders(self):
+    def prepare_embedding_parameters(self):
         """Replace config placeholders with values after preprocessing."""
         args = self.embedding_parameters.get("args", {})
         for key, value in args.items():
@@ -95,28 +97,9 @@ class Fe(ABC):
                 value = self.vocab_size  # <PAD> and <MASK> TODO: data.vocab_size
             elif value == "expression_embeddings":
                 expression_embeddings = torch.tensor(self.expression_embeddings)  # TODO: type is inherited from NDArray
-                pad_vector = torch.zeros(
-                    1,
-                    expression_embeddings.shape[1],
-                )  # Create a dummy vector with shape (1, dim) for padding
-                mask_vector = torch.zeros(
-                    1,
-                    expression_embeddings.shape[1],
-                )  # Create a dummy vector with shape (1, dim) for a mask vector if used
-                value = torch.cat(
-                    (expression_embeddings, pad_vector, mask_vector),
-                    dim=0,
-                )  # Concatenate along the num_genes x dimension
-                self.pad_value = value.shape[0] - 2
-                self.mask_value = value.shape[0] - 1
-                print(
-                    f"> Loading Pretrained Fe Embeddings... Padding Pad and Mask Embeds,"
-                    f" Fe Embedding SHAPE: {value.shape}",
-                )
-            elif value == "num_bins":
-                value = self.num_bins + 2
-                self.pad_value = value - 2
-                self.mask_value = value - 1
+                pad_vector = torch.zeros(1, self.d_embedding)
+                mask_vector = torch.zeros(1, self.d_embedding)
+                value = torch.cat((expression_embeddings, pad_vector, mask_vector), dim=0)
             else:
                 continue
 
@@ -140,7 +123,9 @@ class BinningFe(Fe):
         num_bins: int,
         **fe_kwargs,
     ):
-        super().__init__(adata, **fe_kwargs)
+        fe_kwargs.pop("vocab_size", None)
+        vocab_size = num_bins + 2  # Accounting for mask and pad tokens
+        super().__init__(adata, vocab_size=vocab_size, **fe_kwargs)
         self.num_bins = num_bins
 
     def preprocess_embeddings(self, float_dtype: str = "float32"):
@@ -176,7 +161,7 @@ class BinningFe(Fe):
         self.adata.obsm["processed_expression_values"] = binned_values
         self.adata.obsm["processed_expression_indices"] = nonzero_indices
 
-        self.replace_placeholders()
+        self.prepare_embedding_parameters()
 
 
 class NonzeroIdentityFe(Fe):
@@ -201,7 +186,7 @@ class NonzeroIdentityFe(Fe):
         self.adata.obsm["processed_expression_values"] = cellwise_nonzero_expression.astype(float_dtype)
         self.adata.obsm["processed_expression_indices"] = cellwise_nonzero_indices
 
-        self.replace_placeholders()
+        self.prepare_embedding_parameters()
 
 
 class DummyFe(Fe):
@@ -223,7 +208,7 @@ class DummyFe(Fe):
         self.adata.obsm["processed_expression_values"] = expression.astype(float_dtype)
         self.adata.obsm["processed_expression_indices"] = np.tile(np.arange(self.num_genes), (self.num_cells, 1))
 
-        self.replace_placeholders()
+        self.prepare_embedding_parameters()
 
 
 class SortingFe(Fe):
@@ -264,4 +249,4 @@ class SortingFe(Fe):
             processed_expression_values,
             np.int64,
         )  # both are the same in this case
-        self.replace_placeholders()
+        self.prepare_embedding_parameters()
