@@ -1,7 +1,6 @@
 import hashlib
 import importlib
 import json
-import math
 import uuid
 import warnings
 from collections import defaultdict
@@ -16,7 +15,6 @@ import mygene
 import numpy as np
 import pandas as pd
 import requests
-import torch
 from numpy.random import Generator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
