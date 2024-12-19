@@ -274,7 +274,7 @@ def flash_attention_config(toy_single_data_path):
         pos_enc: BERT
         pooling: cls_pooling
         encoder_layer_parameters:
-          type: Heimdall.model.FlashAttentionTransformerEncoderLayer
+          type: Heimdall.models.FlashAttentionTransformerEncoderLayer
           args:
             d_model: 128
             nhead: 4
@@ -284,7 +284,7 @@ def flash_attention_config(toy_single_data_path):
             batch_first: True
             norm_first: True
         encoder_parameters:
-          type: Heimdall.model.FlashAttentionTransformerEncoder
+          type: Heimdall.models.FlashAttentionTransformerEncoder
           args:
             num_layers: 6
     dataset:
@@ -380,7 +380,7 @@ def test_single_task_model_instantiation(single_task_config):
     instantiate_and_run_model(single_task_config)
 
 
-def flash_attention_instantiation(flash_attention_config):
+def test_flash_attention_instantiation(flash_attention_config):
     instantiate_and_run_model(flash_attention_config)
 
 

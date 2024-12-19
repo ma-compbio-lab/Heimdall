@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable, Optional
 
 import torch
@@ -206,76 +207,185 @@ class ExpressionOnly(nn.Module):
 #         return encoder_output
 
 
+# class FlashAttentionTransformerEncoderLayer(nn.Module):
+#     def __init__(
+#         self,
+#         d_model,
+#         nhead,
+#         dim_feedforward: int = 2048,
+#         dropout: float = 0.1,
+#         norm_first: bool = False,
+#         batch_first: bool = False,
+#     ):
+#
+#         super().__init__()
+#
+#         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
+#         self.linear1 = nn.Linear(d_model, dim_feedforward)
+#         self.dropout = nn.Dropout(dropout)
+#         self.linear2 = nn.Linear(dim_feedforward, d_model)
+#
+#         self.norm1 = nn.LayerNorm(d_model)
+#         self.norm2 = nn.LayerNorm(d_model)
+#         self.dropout1 = nn.Dropout(dropout)
+#         self.dropout2 = nn.Dropout(dropout)
+#
+#         self.norm_first = norm_first
+#         self.batch_first = batch_first
+#
+#     def forward(self, src, src_mask=None, src_key_padding_mask=None):
+#         if self.norm_first:
+#             src = self.norm1(src)
+#             with torch.backends.cuda.sdp_kernel(enable_flash=True):
+#                 src2 = self.self_attn(
+#                     src,
+#                     src,
+#                     src,
+#                     attn_mask=src_mask,
+#                     key_padding_mask=src_key_padding_mask,
+#                 )[0]
+#             src = src + self.dropout1(src2)
+#
+#             src = self.norm2(src)
+#             src2 = self.linear2(self.dropout(torch.nn.F.relu(self.linear1(src))))
+#             src = src + self.dropout2(src2)
+#         else:
+#             with torch.backends.cuda.sdp_kernel(enable_flash=True):
+#                 src2 = self.self_attn(
+#                     src,
+#                     src,
+#                     src,
+#                     attn_mask=src_mask,
+#                     key_padding_mask=src_key_padding_mask,
+#                 )[0]
+#             src = src + self.dropout1(src2)
+#             src = self.norm1(src)
+#             src2 = self.linear2(self.dropout(torch.nn.F.relu(self.linear1(src))))
+#             src = src + self.dropout2(src2)
+#             src = self.norm2(src)
+#
+#         return src
+
+
+# https://gist.github.com/kklemon/98e491ff877c497668c715541f1bf478
 class FlashAttentionTransformerEncoderLayer(nn.Module):
     def __init__(
         self,
         d_model,
         nhead,
-        dim_feedforward: int = 2048,
+        dim_feedforward: Optional[int] = None,
         dropout: float = 0.1,
         norm_first: bool = False,
         batch_first: bool = False,
+        activation: Callable = torch.nn.functional.gelu,
+        rotary_emb_dim: int = 0,
     ):
+        # Note: batch_first doesn't do anything (it's always true)
 
-        super().__init__()
+        try:
+            from flash_attn.modules.block import Block
+            from flash_attn.modules.mha import MHA
+            from flash_attn.modules.mlp import Mlp
+        except ImportError:
+            raise ImportError("Please install flash_attn from https://github.com/Dao-AILab/flash-attention")
 
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
+        if dim_feedforward is None:
+            dim_feedforward = d_model * 4
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
+        mixer_cls = partial(
+            MHA,
+            num_heads=nhead,
+            use_flash_attn=True,
+            rotary_emb_dim=rotary_emb_dim,
+        )
 
-        self.norm_first = norm_first
-        self.batch_first = batch_first
+        mlp_cls = partial(Mlp, hidden_features=dim_feedforward)
 
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
-        if self.norm_first:
-            src = self.norm1(src)
-            with torch.backends.cuda.sdp_kernel(enable_flash=True):
-                src2 = self.self_attn(
-                    src,
-                    src,
-                    src,
-                    attn_mask=src_mask,
-                    key_padding_mask=src_key_padding_mask,
-                )[0]
-            src = src + self.dropout1(src2)
+        self.block = Block(
+            d_model,
+            mixer_cls=mixer_cls,
+            mlp_cls=mlp_cls,
+            resid_dropout1=dropout,
+            resid_dropout2=dropout,
+            prenorm=norm_first,
+        )
 
-            src = self.norm2(src)
-            src2 = self.linear2(self.dropout(torch.nn.F.relu(self.linear1(src))))
-            src = src + self.dropout2(src2)
-        else:
-            with torch.backends.cuda.sdp_kernel(enable_flash=True):
-                src2 = self.self_attn(
-                    src,
-                    src,
-                    src,
-                    attn_mask=src_mask,
-                    key_padding_mask=src_key_padding_mask,
-                )[0]
-            src = src + self.dropout1(src2)
-            src = self.norm1(src)
-            src2 = self.linear2(self.dropout(torch.nn.F.relu(self.linear1(src))))
-            src = src + self.dropout2(src2)
-            src = self.norm2(src)
-
-        return src
+    def forward(self, x, **kwargs):
+        return self.block(x, **kwargs)
 
 
 class FlashAttentionTransformerEncoder(nn.Module):
     def __init__(self, encoder_layer, num_layers):
         super().__init__()
+
+        try:
+            from flash_attn.bert_padding import pad_input, unpad_input
+        except ImportError:
+            raise ImportError("Please install flash_attn from https://github.com/Dao-AILab/flash-attention")
+
+        self._pad_input = pad_input
+        self._unpad_input = unpad_input
+
         self.layers = nn.ModuleList([encoder_layer for _ in range(num_layers)])
 
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
-        output = src
-        for layer in self.layers:
-            output = layer(output, src_mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-        return output
+    def forward(self, x, src_key_padding_mask=None):
+        batch, seqlen = x.shape[:2]
+
+        if src_key_padding_mask is None:
+            for layer in self.layers:
+                x = layer(x)
+        else:
+            x, indices, cu_seqlens, max_seqlen_in_batch = self._unpad_input(x, ~src_key_padding_mask)
+
+            mixer_kwargs = {
+                "cu_seqlens": cu_seqlens,
+                "max_seqlen": max_seqlen_in_batch,
+            }
+
+            for layer in self.layers:
+                x = layer(x, mixer_kwargs=mixer_kwargs)
+
+            x = self._pad_input(x, indices, batch, seqlen)
+
+        return x
+
+
+# class FlashAttentionTransformerEncoder(nn.Module):
+#     def __init__(
+#         self,
+#         num_layers,
+#     ):
+#         super().__init__()
+#
+#         try:
+#             from flash_attn.bert_padding import pad_input, unpad_input
+#             from flash_attn.modules.block import Block
+#             from flash_attn.modules.mha import MHA
+#             from flash_attn.modules.mlp import Mlp
+#         except ImportError:
+#             raise ImportError('Please install flash_attn from https://github.com/Dao-AILab/flash-attention')
+#
+#         self._pad_input = pad_input
+#         self._unpad_input = unpad_input
+#
+#     def forward(self, x, src_key_padding_mask=None):
+#         batch, seqlen = x.shape[:2]
+#
+#         if src_key_padding_mask is None:
+#             for layer in self.layers:
+#                 x = layer(x)
+#         else:
+#             x, indices, cu_seqlens, max_seqlen_in_batch = self._unpad_input(x, ~src_key_padding_mask)
+#
+#             for layer in self.layers:
+#                 x = layer(x, mixer_kwargs=dict(
+#                     cu_seqlens=cu_seqlens,
+#                     max_seqlen=max_seqlen_in_batch
+#                 ))
+#
+#             x = self._pad_input(x, indices, batch, seqlen)
+#
+#         return x
 
 
 class HeimdallTransformer(nn.Module):
@@ -337,12 +447,12 @@ class HeimdallTransformer(nn.Module):
             self.expression_embeddings = None
 
         # Setting up explicit Positional Encodings
-        if pos_enc == "BERT":
+        if self.fc.max_input_length is None or (pos_enc in ("none", "NONE")):
+            self.position_embeddings = None
+        elif pos_enc == "BERT":
             self.position_embeddings = nn.Embedding(self.fc.max_input_length + 1, d_model)  # +1 cuz of CLS
         elif pos_enc == "sincos":
             raise NotImplementedError("Sine-Cosine Positional Encodings are not implemented yet")
-        elif pos_enc == "none" or pos_enc == "NONE":
-            self.position_embeddings = None
         else:
             raise ValueError("pos_enc canonly be: BERT")
 
