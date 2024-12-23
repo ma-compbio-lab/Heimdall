@@ -37,8 +37,6 @@ Make sure to edit the global file `config/global_vars.yaml` based on your set up
 python scripts/create_sweep.py --experiment-name cta_pancreas --project-name Pancreas-Celltype-Classification
 ```
 
-# Model Documentation
-
 # Dev Notes
 
 ## Dev installation
