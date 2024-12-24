@@ -209,7 +209,7 @@ class IdentityFg(Fg):
         self.prepare_embedding_parameters()
 
 
-class ESM2Fg(PretrainedFg):
+class TorchTensorFg(PretrainedFg):
     """Mapping of gene names to pretrained ESM2 embeddings."""
 
     def load_embeddings(self):
@@ -233,3 +233,11 @@ class Gene2VecFg(PretrainedFg):
         }
 
         return raw_gene_embedding_map
+
+
+class ESM2Fg(TorchTensorFg):
+    """Mapping of gene names to pretrained ESM2 embeddings."""
+
+
+class HyenaDNAFg(TorchTensorFg):
+    """Mapping of gene names to pretrained HyenaDNA embeddings."""
