@@ -198,7 +198,7 @@ class IdentityFg(Fg):
         self.replace_placeholders()
 
 
-class ESM2Fg(PretrainedFg):
+class TorchTensorFg(PretrainedFg):
     """Mapping of gene names to pretrained ESM2 embeddings."""
 
     def load_embeddings(self):
@@ -224,18 +224,9 @@ class Gene2VecFg(PretrainedFg):
         return raw_gene_embedding_map
 
 
-class HyenaDNAFg(PretrainedFg):
-    """Mapping of gene names to pretrained HyenaDNA embeddings.
+class ESM2Fg(TorchTensorFg):
+    """Mapping of gene names to pretrained ESM2 embeddings."""
 
-    Embeddings are stored in the same format as ESM2.
 
-    """
-
-    def load_embeddings(self):
-        raw_gene_embedding_map = torch.load(self.embedding_filepath)
-
-        raw_gene_embedding_map = {
-            gene_name: embedding.detach().cpu().numpy() for gene_name, embedding in raw_gene_embedding_map.items()
-        }
-
-        return raw_gene_embedding_map
+class HyenaDNAFg(TorchTensorFg):
+    """Mapping of gene names to pretrained HyenaDNA embeddings."""
