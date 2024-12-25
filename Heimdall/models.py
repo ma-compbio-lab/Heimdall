@@ -317,7 +317,6 @@ class SeqPredHeadMixin:
 
 class ExpressionPredHeadMixin:
     def forward(self, encoder_output) -> TransformerOutput:
-        # breakpoint()
         logits = self.decoder(encoder_output)
         return TransformerOutput(
             logits=logits,
