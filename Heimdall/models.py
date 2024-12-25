@@ -132,73 +132,6 @@ class ExpressionOnly(nn.Module):
         return outputs.to(torch.float32)  # convert to float32?
 
 
-class HeimdallTransformerEncoder(nn.Module):
-
-    def __init__(
-        self,
-        d_model: int,
-        nhead: int,
-        num_attention_heads: int,
-        hidden_dropout_prob: float,
-        use_flash_attn: bool,
-        num_encoder_layers: int,
-        hidden_act: str = "gelu",
-    ):
-        super().__init__()
-
-        self.use_flash_attn = use_flash_attn
-
-        if self.use_flash_attn:
-            try:
-                from flash_attn.models.bert import BertEncoder as FABertEncoder
-                from transformers import BertConfig
-
-                print("FlashAttention Library Successfully Loaded")
-            except ImportError:
-                print(
-                    "Warning: FlashAttention Not Installed, "
-                    "when initializing model make sure to use default Transformers",
-                )
-
-            fa_config = BertConfig(
-                hidden_size=d_model,
-                num_hidden_layers=num_encoder_layers,
-                num_attention_heads=nhead,
-                intermediate_size=d_model * 4,
-                hidden_act=hidden_act,
-                hidden_dropout_prob=hidden_dropout_prob,
-                attention_probs_dropout_prob=hidden_dropout_prob,
-                use_flash_attn=True,  # use this to toggle between flash attention and not
-            )
-            self.encoder = FABertEncoder(fa_config)
-        else:
-            # Encoder layers
-            encoder_layer = nn.TransformerEncoderLayer(
-                d_model=d_model,
-                nhead=nhead,
-                dim_feedforward=d_model * 4,
-                dropout=hidden_dropout_prob,
-                activation=hidden_act,
-                batch_first=True,
-                norm_first=True,  # BERT uses LayerNorm before self-attention and feedforward networks
-            )
-            self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_encoder_layers)
-
-    def forward(self, input_embeds, attention_mask):
-        # Encoder
-        if self.use_flash_attn:
-            encoder_output = self.encoder(
-                input_embeds,
-                key_padding_mask=~attention_mask,  # FA uses a flipped mask
-            )
-        else:
-            encoder_output = self.encoder(
-                input_embeds,
-                src_key_padding_mask=attention_mask,
-            )
-        return encoder_output
-
-
 class HeimdallTransformer(nn.Module):
     def __init__(
         self,
@@ -239,7 +172,7 @@ class HeimdallTransformer(nn.Module):
         self.conditional_input_types = conditional_input_types
 
         self.fc = data.fc
-        self.use_flash_attn = use_flash_attn
+        self.use_flash_attn = "flash_attention_models" in encoder_parameters.type
 
         self.vocab_size = data.sequence_length + 2  # <PAD> and <MASK> TODO: data.vocab_size
 

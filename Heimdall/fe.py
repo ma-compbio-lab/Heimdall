@@ -52,7 +52,7 @@ class Fe:
 
         """
         self.expression_embeddings = None
-        self.replace_placeholders()
+        self.prepare_embedding_parameters()
 
     @deprecate
     def __getitem__(self, cell_indices: Sequence[int]) -> NDArray:

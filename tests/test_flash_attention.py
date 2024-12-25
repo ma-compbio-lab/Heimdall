@@ -175,6 +175,8 @@ def test_flash_attention_instantiation(flash_attention_config):
             allow_module_level=True,
         )
 
+    assert model.encoder.use_flash_attn
+
     # Test execution
     batch = next(iter(cr.dataloaders["train"]))
     model(
