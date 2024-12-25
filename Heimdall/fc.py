@@ -46,7 +46,7 @@ class Fc(ABC):
                 "> Data was provided dense format, converting to CSR."
                 " Please consider pre-computing it to save memory.",
             )
-        
+
         self.adata.X = csr_array(self.adata.X)
 
     @deprecate
