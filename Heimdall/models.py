@@ -63,14 +63,14 @@ class HeimdallModel(nn.Module):
             conditional_input_types: Conditional input types specification.
 
         """
-        self.lm_model = instantiate_from_config(
+        self.encoder = instantiate_from_config(
             model_config,
             data,
             conditional_input_types,
         )
 
         self.num_labels = data.num_tasks
-        dim_in = self.lm_model.d_encoded
+        dim_in = self.encoder.d_encoded
 
         self.reducer = self.reduction_name = None
         if isinstance(data.datasets["full"], PairedInstanceDataset):
@@ -93,13 +93,13 @@ class HeimdallModel(nn.Module):
             first_cell_mask, second_cell_mask = attention_mask
 
             encoded_cells = tuple(
-                self.lm_model(cell_inputs, conditional_tokens, attention_mask=cell_mask)
+                self.encoder(cell_inputs, conditional_tokens, attention_mask=cell_mask)
                 for cell_inputs, cell_mask in zip(all_cell_inputs, attention_mask)
             )
 
             encoded = self.reducer(encoded_cells)
         else:
-            encoded = self.lm_model(inputs, conditional_tokens, attention_mask)
+            encoded = self.encoder(inputs, conditional_tokens, attention_mask)
 
         outputs = self.head(encoded)
 
@@ -206,13 +206,9 @@ class HeimdallTransformer(nn.Module):
         conditional_input_types: Optional[dict],
         d_model: int,
         pos_enc: str,
-        nhead: int,
-        hidden_dropout_prob: float,
-        attention_probs_dropout_prob: float,
         pooling: str,
-        hidden_act: str,
-        use_flash_attn: bool,
-        num_encoder_layers: int,
+        encoder_layer_parameters: dict,
+        encoder_parameters: dict,
     ):
         super().__init__()
         """Heimdall transformer model.
@@ -263,7 +259,9 @@ class HeimdallTransformer(nn.Module):
             self.expression_embeddings = None
 
         # Setting up explicit Positional Encodings
-        if pos_enc == "BERT":
+        if self.fc.max_input_length is None or (pos_enc in ("none", "NONE")):
+            self.position_embeddings = None
+        elif pos_enc == "BERT":
             self.position_embeddings = nn.Embedding(self.fc.max_input_length + 1, d_model)  # +1 cuz of CLS
         elif pos_enc == "sincos":
             raise NotImplementedError("Sine-Cosine Positional Encodings are not implemented yet")
@@ -283,16 +281,8 @@ class HeimdallTransformer(nn.Module):
                 else:
                     raise ValueError(f"conditional_input_types.{name}['type'] must be either 'learned' or 'predefined'")
 
-        # # Encoder
-        self.encoder = HeimdallTransformerEncoder(
-            d_model=d_model,
-            nhead=nhead,
-            num_attention_heads=num_encoder_layers,
-            hidden_dropout_prob=hidden_dropout_prob,
-            use_flash_attn=use_flash_attn,
-            hidden_act=hidden_act,
-            num_encoder_layers=num_encoder_layers,
-        )
+        encoder_layer = instantiate_from_config(encoder_layer_parameters)
+        self.transformer_encoder = instantiate_from_config(encoder_parameters, encoder_layer)
 
         # Initialize the [CLS] token as a learnable parameter
         self.cls_token = nn.Parameter(torch.zeros(1, 1, d_model))
@@ -367,8 +357,8 @@ class HeimdallTransformer(nn.Module):
             attention_mask = torch.cat([cls_attention, attention_mask], dim=1)  # Shape: (batch_size, seq_len + 1)
 
         # Encoder
-        encoder_output = self.encoder(input_embeds, attention_mask)
-        return encoder_output
+        transformer_encoder_output = self.transformer_encoder(input_embeds, src_key_padding_mask=attention_mask)
+        return transformer_encoder_output
 
 
 class CellPredHeadMixin:

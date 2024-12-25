@@ -45,7 +45,7 @@ class HeimdallTrainer:
             **accelerator_log_kwargs,
         )
 
-        if hasattr(model.lm_model, "use_flash_attn") and model.lm_model.use_flash_attn:
+        if hasattr(model.encoder, "use_flash_attn") and model.encoder.use_flash_attn:
             assert self.accelerator.mixed_precision == "bf16", "If using Flash Attention, mixed precision must be bf16"
 
         self.optimizer = self._initialize_optimizer()
@@ -373,7 +373,6 @@ class HeimdallTrainer:
                         no_nans_flattened_logits = flattened_logits[mask]
                         labels = no_nans_flattened_labels.to(torch.int)
                         logits = no_nans_flattened_logits
-
                     metric.update(logits, labels)
                 if self.cfg.trainer.fastdev:
                     break

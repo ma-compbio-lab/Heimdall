@@ -5,7 +5,7 @@ import anndata as ad
 import awkward as ak
 import numpy as np
 from numpy.typing import NDArray
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import csr_array, issparse
 from torch import Tensor
 from torch.nn import Module
 
@@ -32,27 +32,25 @@ class Fc(ABC):
         fe: Fe | None,
         adata: ad.AnnData,
         max_input_length: Optional[int] = None,
+        float_dtype: str = "float32",
     ):
         self.fg = fg
         self.fe = fe
         self.adata = adata
         self.max_input_length = max_input_length
+        self.float_dtype = float_dtype
 
-    def preprocess_cells(self, float_dtype: str = "float32"):
-        # assert issparse(self.adata.X), "Input data must be sparse, either CSR or CSC to conserve mem, please check"
+    def preprocess_cells(self):
         if not issparse(self.adata.X):
             print(
-                "> Data was provided NOT in sparse format, converting to CSR."
+                "> Data was provided dense format, converting to CSR."
                 " Please consider pre-computing it to save memory.",
             )
-            self.adata.X = csr_matrix(self.adata.X)
-
-        if issparse(self.adata.X) and not isinstance(self.adata.X, csr_matrix):
-            self.adata.X = self.adata.X.tocsr()
-        return
+        
+        self.adata.X = csr_array(self.adata.X)
 
     @deprecate
-    def old_forward(self, float_dtype: str = "float32"):
+    def old_preprocess_cells(self):
         """Using the `fg` and `fe`, preprocess input cells, retrieve indices of
         both gene and expression embeddings.
 
@@ -63,7 +61,6 @@ class Fc(ABC):
 
         """
 
-        # breakpoint()
         gene_names = self.adata.var_names
         processed_expression_values, processed_expression_indices = self.fe[:]
 
@@ -75,8 +72,8 @@ class Fc(ABC):
             [self.fg[gene_list] for gene_list in gene_lists],
         )
 
-        self.adata.obsm["cell_identity_inputs"] = ak.values_astype(cell_identity_inputs, float_dtype)
-        self.adata.obsm["cell_expression_inputs"] = ak.values_astype(processed_expression_values, float_dtype)
+        self.adata.obsm["cell_identity_inputs"] = ak.values_astype(cell_identity_inputs, self.float_dtype)
+        self.adata.obsm["cell_expression_inputs"] = ak.values_astype(processed_expression_values, self.float_dtype)
 
     def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray]:
         """Retrieve `cell_identity_inputs`, `cell_expression_inputs` and
@@ -103,7 +100,6 @@ class Fc(ABC):
         # Padding and truncating
         identity_inputs, expression_inputs = self.tailor(
             identity_inputs,
-            # using @hydra.main so that we can take in command line arguments
             expression_inputs,
         )
 
@@ -116,14 +112,14 @@ class Fc(ABC):
 
         Args:
             cell_tokenization: the stacked gene identity- and gene expression-based tokenization
-                of a cell.
+                dof a cell.
 
         """
 
         _, input_length = cell_tokenization.shape
         pad_widths = ((0, 0), (0, self.max_input_length - input_length))
         padded = np.pad(
-            cell_tokenization.astype(np.float64),
+            cell_tokenization.astype(self.float_dtype),
             pad_widths,
             "constant",
             constant_values=(0, np.nan),
