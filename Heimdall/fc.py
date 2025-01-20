@@ -45,21 +45,26 @@ class Fc(ABC):
             A tuple of gene identity embedding indices and gene expression embedding indices for all cells.
 
         """
-        identity_indices, expression_inputs = self.fe[cell_index]
 
-        gene_list = self.adata.var_names[identity_indices]  # convert to ENSEMBL Gene Names
-        identity_inputs = self.fg[gene_list]  # convert the genes into fg
+        if cell_index == -1:  # Dummy `cell_index`
+            identity_inputs = np.full(self.max_input_length, self.fg.pad_value)
+            expression_inputs = np.full(self.max_input_length, self.fe.pad_value)
+        else:
+            identity_indices, expression_inputs = self.fe[cell_index]
 
-        if len(identity_inputs) != len(expression_inputs):
-            raise ValueError(
-                "Gene identity and expression inputs do not have the same shape; `Fg` and `Fe` are incompatible.",
+            gene_list = self.adata.var_names[identity_indices]  # convert to ENSEMBL Gene Names
+            identity_inputs = self.fg[gene_list]  # convert the genes into fg
+
+            if len(identity_inputs) != len(expression_inputs):
+                raise ValueError(
+                    "Gene identity and expression inputs do not have the same shape; `Fg` and `Fe` are incompatible.",
+                )
+
+            # Padding and truncating
+            identity_inputs, expression_inputs = self.tailor(
+                identity_inputs,
+                expression_inputs,
             )
-
-        # Padding and truncating
-        identity_inputs, expression_inputs = self.tailor(
-            identity_inputs,
-            expression_inputs,
-        )
 
         padding_mask = expression_inputs == self.fe.pad_value
 
