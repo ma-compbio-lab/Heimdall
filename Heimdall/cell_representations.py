@@ -57,7 +57,7 @@ def check_states(
         if splits:
             assert (
                 getattr(self, "_splits", None) is not None
-            ), "splits not setup yet, run prepare_datase_loaders() first"
+            ), "splits not setup yet, run prepare_dataset_loaders() first"
 
         return meth(self, *args, **kwargs)
 
