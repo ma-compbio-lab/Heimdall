@@ -175,32 +175,66 @@ class BinningFe(Fe):
         digits = np.ceil(digits).astype(np.int64)
         return digits
 
+    # def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
+    #     """Binning the row into n_bins.
+
+    #     https://github.com/bowang-lab/scGPT/blob/7301b51a72f5db321fccebb51bc4dd1380d99023/scgpt/preprocess.py#L274
+
+    #     """
+    #     dtype = row.dtype
+    #     return_np = False if isinstance(row, torch.Tensor) else True
+    #     row = row.cpu().numpy() if isinstance(row, torch.Tensor) else row
+    #     # TODO: use torch.quantile and torch.bucketize
+
+    #     if row.max() == 0:
+    #         return np.zeros_like(row, dtype=dtype) if return_np else torch.zeros_like(row, dtype=dtype)
+
+    #     if row.min() <= 0:
+    #         non_zero_ids = row.nonzero()
+    #         non_zero_row = row[non_zero_ids]
+    #         bins = np.quantile(non_zero_row, np.linspace(0, 1, n_bins - 1))
+    #         non_zero_digits = self._digitize(non_zero_row, bins)
+    #         binned_row = np.zeros_like(row, dtype=np.int64)
+    #         binned_row[non_zero_ids] = non_zero_digits
+    #     else:
+    #         bins = np.quantile(row, np.linspace(0, 1, n_bins - 1))
+    #         binned_row = self._digitize(row, bins)
+
+    #     return torch.from_numpy(binned_row) if not return_np else binned_row.astype(dtype)
+
     def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
-        """Binning the row into n_bins.
-
-        https://github.com/bowang-lab/scGPT/blob/7301b51a72f5db321fccebb51bc4dd1380d99023/scgpt/preprocess.py#L274
-
-        """
+        """Binning the row into n_bins, placing zeros into bin 0, preserving NaNs."""
         dtype = row.dtype
-        return_np = False if isinstance(row, torch.Tensor) else True
+        return_np = not isinstance(row, torch.Tensor)
         row = row.cpu().numpy() if isinstance(row, torch.Tensor) else row
-        # TODO: use torch.quantile and torch.bucketize
 
-        if row.max() == 0:
-            return np.zeros_like(row, dtype=dtype) if return_np else torch.zeros_like(row, dtype=dtype)
+        nan_mask = np.isnan(row)
+        zero_mask = (row == 0) & ~nan_mask  # Only consider valid 0s
+        nonzero_mask = ~zero_mask & ~nan_mask
+        nonzero_vals = row[nonzero_mask]
 
-        if row.min() <= 0:
-            non_zero_ids = row.nonzero()
-            non_zero_row = row[non_zero_ids]
-            bins = np.quantile(non_zero_row, np.linspace(0, 1, n_bins - 1))
-            non_zero_digits = self._digitize(non_zero_row, bins)
-            binned_row = np.zeros_like(row, dtype=np.int64)
-            binned_row[non_zero_ids] = non_zero_digits
+        # Handle case where all non-NaNs are zero
+        if np.all(zero_mask | nan_mask):
+            binned = np.zeros_like(row, dtype=np.float32)
+            binned[nan_mask] = np.nan
+            return torch.from_numpy(binned).to(dtype) if not return_np else binned.astype(dtype)
+
+        # Compute bin edges from non-zero, non-NaN values
+        if len(nonzero_vals) > 0:
+            bins = np.quantile(nonzero_vals, np.linspace(0, 1, n_bins + 1)[1:-1])
+            nonzero_binned = self._digitize(nonzero_vals, bins)
+            nonzero_binned += 1  # Shift for bin 0 reserved for zeros
         else:
-            bins = np.quantile(row, np.linspace(0, 1, n_bins - 1))
-            binned_row = self._digitize(row, bins)
+            nonzero_binned = np.array([], dtype=np.int64)
 
-        return torch.from_numpy(binned_row) if not return_np else binned_row.astype(dtype)
+        # Construct full binned output
+        binned = np.zeros_like(row, dtype=np.float32)
+        binned[nonzero_mask] = nonzero_binned
+        binned[nan_mask] = np.nan  # Preserve NaNs
+
+        return torch.from_numpy(binned).to(dtype) if not return_np else binned.astype(dtype)
+
+
 
     def __getitem__(self, cell_index: int):
         """Input is an adata indexed at cell [idx]

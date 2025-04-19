@@ -29,13 +29,6 @@ tasks:
       col: split
 
 
-dataset:
-  preprocess_args:
-    normalize: false
-    log_1p: false
-    data_path: "${data_path}/ovarian_cancer/pairs_1_3.h5ad"
-
-
 seed: 55
 
 optimizer:

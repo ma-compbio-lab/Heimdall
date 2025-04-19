@@ -10,7 +10,7 @@ from torch.nn import Module
 
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
-
+import torch
 
 class Fc(ABC):
     """Abstraction for cell embedding.
@@ -56,13 +56,13 @@ class Fc(ABC):
             )
 
         # Padding and truncating
+        # breakpoint()
         identity_inputs, expression_inputs = self.tailor(
             identity_inputs,
             expression_inputs,
         )
 
         padding_mask = expression_inputs == self.fe.pad_value
-
         return identity_inputs, expression_inputs, padding_mask
 
     def pad(self, cell_tokenization: ak.Array) -> tuple[ak.Array, ak.Array]:
@@ -103,7 +103,16 @@ class Fc(ABC):
         gene_tokenization,
         expression_tokenization,
     ) -> NDArray | ak.Array:
-        cell_tokenization = np.stack([gene_tokenization, expression_tokenization], axis=0)
+
+        # first, drop any NaN values here
+        # Assuming gene_tokenization is a pandas Series and expression_tokenization is a numpy array
+        valid_mask = ~np.isnan(expression_tokenization)
+
+        filtered_gene_tokenization = gene_tokenization[valid_mask]
+        filtered_expression_tokenization = expression_tokenization[valid_mask]
+
+        cell_tokenization = np.stack([filtered_gene_tokenization.values, filtered_expression_tokenization], axis=0)
+        # cell_tokenization = np.stack([gene_tokenization, expression_tokenization], axis=0)
         _, input_length = cell_tokenization.shape
 
         if input_length > self.max_input_length:
@@ -259,8 +268,16 @@ class ScGPTFc(Fc):
             expression_embedding_layer: # TODO fill out
 
         """
+        # Convert str float_dtype -> actual torch dtype
+        # torch_dtype = getattr(torch, self.float_dtype)
+        
+        # Cast expression_inputs to float_dtype
+        expression_inputs = expression_inputs.to(torch.float32)
+
         gene_embeddings = gene_embedding_layer(identity_inputs)
         expression_embeddings = expression_embedding_layer(expression_inputs)
+
+
 
         return gene_embeddings + expression_embeddings
 

@@ -28,12 +28,6 @@ tasks:
     splits:
       col: split
 
-# dataset:
-#   preprocess_args:
-#     normalize: true
-#     log_1p: true
-#     data_path: "${data_path}/ovarian_cancer/pairs_0_1.h5ad"
-
 
 seed: 55
 

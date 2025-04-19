@@ -255,8 +255,6 @@ class HeimdallTrainer:
                 )
                 break
 
-            # Training for the current epoch
-            epoch = 0
             self.train_epoch(epoch)
 
         if self.run_wandb and self.accelerator.is_main_process:
@@ -299,6 +297,7 @@ class HeimdallTrainer:
 
                 lr = self.lr_scheduler.get_last_lr()[0]
                 with self.accelerator.accumulate(self.model):
+
                     inputs = (batch["identity_inputs"], batch["expression_inputs"])
                     outputs = self.model(
                         inputs=inputs,
@@ -349,6 +348,7 @@ class HeimdallTrainer:
             for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
                 inputs = (batch["identity_inputs"], batch["expression_inputs"])
 
+                # breakpoint()
                 outputs = self.model(
                     inputs=inputs,
                     conditional_tokens=batch.get("conditional_tokens"),
