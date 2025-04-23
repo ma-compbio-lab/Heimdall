@@ -278,7 +278,6 @@ class ScGPTFc(Fc):
         expression_embeddings = expression_embedding_layer(expression_inputs)
 
 
-
         return gene_embeddings + expression_embeddings
 
 

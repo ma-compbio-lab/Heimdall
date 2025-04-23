@@ -20,7 +20,7 @@ defaults:
 
 
 run_name: ${fg.type}_${fe.type}_${fc.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
-work_dir: 'work_dir'  ## set your custom working directory
+work_dir: 'results/${fg.type}_${fe.type}_${fc.type}'  ## set your custom working directory
 
 project_name: 'new_sctab_split1' #project name for WandB
 tasks:
