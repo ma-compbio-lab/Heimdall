@@ -296,13 +296,15 @@ class HeimdallTrainer:
         # self.save_checkpoint(epoch)
         # self.print_r0(f"> Saved final checkpoint at epoch {epoch}")
 
-        self.save_adata_umap(best_val_embed, best_test_embed)
-        self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
 
         if self.run_wandb and self.accelerator.is_main_process:
             if track_metric:  # logging the best val score and the tracked test scores
                 self.accelerator.log(best_metric, step=self.step)
             self.accelerator.end_training()
+
+        if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
+            self.save_adata_umap(best_test_embed, best_val_embed)
+            self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
 
         if self.accelerator.is_main_process:
             self.print_r0("> Model has finished Training")
@@ -381,13 +383,19 @@ class HeimdallTrainer:
                     break
 
     # Add these methods to the HeimdallTrainer class
-    def save_adata_umap(self, best_val_embed, best_test_embed):
-        ## pull the adata from the 
-        test_adata = self.data.adata[self.data.adata.obs["split"] == "test"].copy()
-        val_adata = self.data.adata[self.data.adata.obs["split"] == "val"].copy()
+    def save_adata_umap(self, best_test_embed, best_val_embed):
 
-        val_adata.obsm["heimdall_latents"] = best_val_embed
+        ## only do this for predefined ones
+        if self.cfg.tasks.args.splits.type != "predefined":
+            return 
+
+        ## pull the adata from the 
+        test_adata = self.data.adata[self.data.adata.obs[self.cfg.tasks.args.splits.col] == self.cfg.tasks.args.splits.keys_.test].copy()
+        val_adata = self.data.adata[self.data.adata.obs[self.cfg.tasks.args.splits.col] == self.cfg.tasks.args.splits.keys_.val].copy()
+
+        # breakpoint()
         test_adata.obsm["heimdall_latents"] = best_test_embed
+        val_adata.obsm["heimdall_latents"] = best_val_embed
 
         sc.pp.neighbors(test_adata, use_rep="heimdall_latents")
         sc.tl.leiden(test_adata)
@@ -564,7 +572,9 @@ class HeimdallTrainer:
 
                 logits = outputs.logits
                 labels = batch["labels"].to(outputs.device)
-                encoded_list.append(outputs.cls_embeddings.detach().cpu().numpy())
+
+                if self.cfg.model.name != "logistic_regression":
+                    encoded_list.append(outputs.cls_embeddings.detach().cpu().numpy())
 
                 if (masks := batch.get("masks")) is not None:
                     masks = masks.to(outputs.device)
@@ -598,7 +608,9 @@ class HeimdallTrainer:
                 if self.cfg.trainer.fastdev:
                     break
 
-        all_encoded = np.concatenate(encoded_list, axis=0)
+        all_encoded = None
+        if self.cfg.model.name != "logistic_regression":
+            all_encoded = np.concatenate(encoded_list, axis=0)
 
         loss = loss / len(dataloader)
         if self.accelerator.num_processes > 1:
