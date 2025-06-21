@@ -332,7 +332,7 @@ class WeightedSamplingFe(Fe):
         sample_size: int,
         **fe_kwargs,
     ):
-        super().__init__(adata, vocab_size=vocab_size, **fe_kwargs)
+        super().__init__(adata, **fe_kwargs)
         self.sample_size = sample_size
 
     # def preprocess_embeddings(self):

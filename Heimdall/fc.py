@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Optional
 
 import anndata as ad
 import awkward as ak
 import numpy as np
+import pandas as pd
 import torch
 from numpy.typing import NDArray
 from torch import Tensor
@@ -316,7 +318,7 @@ class ChromosomeAwareFc(Fc):
             self.gene_metadata["species"] + "_" + self.gene_metadata["chromosome"],
         )
 
-        spec_chrom = gene_to_chrom_pos[gene_to_chrom_pos["species"] == species].set_index("gene_symbol")
+        spec_chrom = self.metagene_metadata[self.metagene_metadata["species"] == species].set_index("gene_symbol")
         gene_chrom = spec_chrom.loc[[k.upper() for k in self.adata.var_names]]
 
         dataset_chroms = gene_chrom["spec_chrom"].cat.codes  # now this is correctely indexed by species and chromosome
@@ -406,7 +408,7 @@ class ChromosomeAwareFc(Fc):
         self.unique_chromosomes = np.unique(new_chrom)
         np.random.shuffle(self.unique_chromosomes)
 
-        for chromosome in unique_chromosomes:
+        for chromosome in self.unique_chromosomes:
             grouped_gene_tokenization[sequence_index] = self.placeholder_id
             grouped_expression_tokenization[sequence_index] = self.placeholder_id
             # ordered_choice_idx[i] = int(chrom) + args.CHROM_TOKEN_OFFSET # token of this chromosome # i = 1 next token is a chrom open
@@ -471,7 +473,7 @@ class ChromosomeAwareFc(Fc):
             )
             placeholder_position += 2
 
-        return expression_embeddings
+        return gene_embeddings
 
 
 class ScBERTFc(ScGPTFc):
