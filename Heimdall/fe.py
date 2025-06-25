@@ -222,7 +222,8 @@ class BinningFe(Fe):
 
         # Compute bin edges from non-zero, non-NaN values
         if len(nonzero_vals) > 0:
-            bins = np.quantile(nonzero_vals, np.linspace(0, 1, n_bins + 1)[1:-1])
+            percentiles = np.linspace(0, 1, n_bins)[1:-1]
+            bins = np.quantile(nonzero_vals, percentiles)
             nonzero_binned = self._digitize(nonzero_vals, bins)
             nonzero_binned += 1  # Shift for bin 0 reserved for zeros
         else:
