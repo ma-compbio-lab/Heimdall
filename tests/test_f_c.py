@@ -14,6 +14,10 @@ def geneformer_fc(zero_expression_mock_dataset, zero_expression_identity_fg, zer
     fc_config = OmegaConf.create(
         {
             "max_input_length": 4,
+            "num_metadata_tokens": 0,
+            "embedding_parameters": {
+                "type": "torch.nn.Module",
+            },
         },
     )
     zero_expression_identity_fg.preprocess_embeddings()
@@ -34,6 +38,10 @@ def scgpt_fc(zero_expression_mock_dataset, zero_expression_identity_fg, zero_exp
     fc_config = OmegaConf.create(
         {
             "max_input_length": 2,
+            "num_metadata_tokens": 0,
+            "embedding_parameters": {
+                "type": "torch.nn.Module",
+            },
         },
     )
     zero_expression_identity_fg.preprocess_embeddings()
