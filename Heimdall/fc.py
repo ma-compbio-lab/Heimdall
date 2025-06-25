@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import torch
 from numpy.typing import NDArray
+from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.nn import Module
 
@@ -32,6 +34,8 @@ class Fc(ABC):
         fg: Fg | None,
         fe: Fe | None,
         adata: ad.AnnData,
+        embedding_parameters: DictConfig,
+        num_metadata_tokens: int = 0,
         max_input_length: Optional[int] = None,
         float_dtype: str = "float32",
     ):
@@ -40,6 +44,7 @@ class Fc(ABC):
         self.adata = adata
         self.max_input_length = max_input_length
         self.float_dtype = float_dtype
+        self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
 
     def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray]:
         """Retrieve `identity_inputs`, `expression_inputs` and `padding_mask`.
@@ -226,10 +231,10 @@ class ScGPTFc(Fc):
         fg: Fg | None,
         fe: Fe | None,
         adata: ad.AnnData,
-        max_input_length: Optional[int] = None,
-        float_dtype: str = "float32",
+        embedding_parameters: OmegaConf,
+        **fc_kwargs,
     ):
-        super().__init__(fg, fe, adata, max_input_length, float_dtype)
+        super().__init__(fg, fe, adata, embedding_parameters, **fc_kwargs)
         seed = 0  # TODO: make this configurable???
         self.rng = np.random.default_rng(seed)
 
@@ -295,18 +300,19 @@ class ChromosomeAwareFc(Fc):
         fg: Fg | None,
         fe: Fe | None,
         adata: ad.AnnData,
+        embedding_parameters: OmegaConf,
         gene_metadata_filepath: str | Path,
         species: str,
         # chroms: Optional[NDArray] = None,
         # starts: Optional[NDArray] = None,
-        max_input_length: Optional[int] = None,
+        **fc_kwargs,
     ):
         """
         Args:
             chroms: Chromosome IDs for each gene.
             starts: Genomic start positions of genes on their chromosomes.
         """
-        super().__init__(fg, fe, adata, max_input_length)
+        super().__init__(fg, fe, adata, embedding_parameters, **fc_kwargs)
 
         # https://github.com/snap-stanford/UCE/blob/8227a65cdd021b9186ef86671d2aef5c895c8e4b/data_proc/data_utils.py#L155
         # TODO: load chromosome one-hot encoding and start positions for all genes
