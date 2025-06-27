@@ -15,6 +15,7 @@ from torch.nn import Module
 
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
+from Heimdall.utils import symbol_to_ensembl_from_ensembl
 
 
 class Fc(ABC):
@@ -292,7 +293,7 @@ class ScGPTFc(Fc):
         return gene_embeddings + expression_embeddings
 
 
-class ChromosomeAwareFc(Fc):
+class UCEFc(Fc):
     """Chromosome-aware implementation of cell embedding."""
 
     def __init__(
@@ -302,6 +303,7 @@ class ChromosomeAwareFc(Fc):
         adata: ad.AnnData,
         embedding_parameters: OmegaConf,
         gene_metadata_filepath: str | Path,
+        ensembl_dir: str | Path,
         species: str,
         # chroms: Optional[NDArray] = None,
         # starts: Optional[NDArray] = None,
@@ -313,21 +315,35 @@ class ChromosomeAwareFc(Fc):
             starts: Genomic start positions of genes on their chromosomes.
         """
         super().__init__(fg, fe, adata, embedding_parameters, **fc_kwargs)
+        seed = 0  # TODO: make this configurable???
+        self.rng = np.random.default_rng(seed)
 
         # https://github.com/snap-stanford/UCE/blob/8227a65cdd021b9186ef86671d2aef5c895c8e4b/data_proc/data_utils.py#L155
         # TODO: load chromosome one-hot encoding and start positions for all genes
 
         self.gene_metadata = pd.read_csv(gene_metadata_filepath)
+        self.ensembl_dir = ensembl_dir
         self.species = species
 
         self.gene_metadata["spec_chrom"] = pd.Categorical(
             self.gene_metadata["species"] + "_" + self.gene_metadata["chromosome"],
         )
 
-        spec_chrom = self.metagene_metadata[self.metagene_metadata["species"] == species].set_index("gene_symbol")
-        gene_chrom = spec_chrom.loc[[k.upper() for k in self.adata.var_names]]
+        spec_chrom = self.gene_metadata[self.gene_metadata["species"] == self.species].set_index("gene_symbol")
 
-        dataset_chroms = gene_chrom["spec_chrom"].cat.codes  # now this is correctely indexed by species and chromosome
+        symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
+            data_dir=self.ensembl_dir,
+            genes=spec_chrom.index.tolist(),
+            species=self.species,
+        )
+        spec_chrom.index = spec_chrom.index.map(symbol_to_ensembl_mapping.mapping_reduced)
+
+        try:
+            gene_chrom = spec_chrom.loc[[k.upper() for k in self.adata.var_names]]
+        except KeyError as e:
+            raise ValueError("Input AnnData cannot contain gene names that are unmapped in the chromosome metadata.")
+
+        dataset_chroms = gene_chrom["spec_chrom"].cat.codes  # now this is correctly indexed by species and chromosome
         print("Max Code:", max(dataset_chroms))
         dataset_pos = gene_chrom["start"].values
 
@@ -336,52 +352,9 @@ class ChromosomeAwareFc(Fc):
 
         self.placeholder_id = -1
         self.chrom_token_right_idx = 0
-        # TODO: revise preprocess_emebddings so that it takes in information from the `Fc` that way, we can be include chromosome tokens and other tokens in the `gene_embeddings` and `expression_embeddings`
-        # nn.Embedding()
 
-    # def preprocess_cells(self):
-    #     """Using the `fg` and `fe`, preprocess input cells with chromosome-aware
-    #     sorting."""
-    #     gene_names = self.adata.var_names
-    #     processed_expression_values, processed_expression_indices = self.fe[:]
-
-    #     gene_lists = ak.Array(
-    #         [gene_names[cell_indices] for cell_indices in processed_expression_indices],
-    #     )
-
-    #     cell_identity_inputs = []
-    #     for cell_idx, gene_indices in enumerate(processed_expression_indices):
-    #         if self.chroms is not None and self.starts is not None:
-    #             # Perform chromosome-aware sorting
-    #             sorted_indices = self._chromosome_sort(gene_indices)
-    #             cell_identity_inputs.append(self.fg[gene_names[sorted_indices]])
-    #         else:
-    #             # Default behavior
-    #             cell_identity_inputs.append(self.fg[gene_lists[cell_idx]])
-
-    #     # Store processed values
-    #     self.adata.obsm["cell_identity_inputs"] = ak.Array(cell_identity_inputs)
-    #     self.adata.obsm["cell_expression_inputs"] = processed_expression_values
-
-    # def _chromosome_sort(self, gene_indices):
-    #     """Sort genes by chromosome and genomic start positions."""
-    #     chroms = self.chroms[gene_indices]
-    #     starts = self.starts[gene_indices]
-
-    #     # Group by chromosome
-    #     chrom_sort_order = np.argsort(chroms)
-    #     sorted_indices = gene_indices[chrom_sort_order]
-    #     sorted_chroms = chroms[chrom_sort_order]
-    #     sorted_starts = starts[chrom_sort_order]
-
-    #     # Within each chromosome, sort by start position
-    #     chrom_groups = np.split(sorted_indices, np.unique(sorted_chroms, return_index=True)[1][1:])
-    #     sorted_sequence = []
-    #     for group in chrom_groups:
-    #         group_starts = sorted_starts[group]
-    #         sorted_sequence.extend(group[np.argsort(group_starts)])
-
-    #     return np.array(sorted_sequence)
+    def limit(self, cell_tokenization: NDArray) -> NDArray:
+        return cell_tokenization[:, : self.max_input_length]
 
     def tailor(
         self,
@@ -406,13 +379,16 @@ class ChromosomeAwareFc(Fc):
         new_chrom = self.chroms[gene_tokenization]
         choosen_starts = self.starts[gene_tokenization]
 
-        grouped_gene_tokenization = np.full((self.max_input_length), self.fg.pad_value)
-        grouped_expression_tokenization = np.full((self.max_input_length), self.fe.pad_value)
+        self.unique_chromosomes = np.unique(new_chrom)
+        self.rng.shuffle(self.unique_chromosomes)
+
+        num_chromosomes = len(self.unique_chromosomes)
+        raw_sequence_length = len(new_chrom) + 2 * num_chromosomes
+
+        grouped_gene_tokenization = np.full(raw_sequence_length, self.fg.pad_value)
+        grouped_expression_tokenization = np.full(raw_sequence_length, self.fe.pad_value)
 
         sequence_index = 0
-
-        self.unique_chromosomes = np.unique(new_chrom)
-        np.random.shuffle(self.unique_chromosomes)
 
         for chromosome in self.unique_chromosomes:
             grouped_gene_tokenization[sequence_index] = self.placeholder_id

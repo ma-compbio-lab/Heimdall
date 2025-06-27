@@ -336,6 +336,9 @@ class WeightedSamplingFe(Fe):
         super().__init__(adata, **fe_kwargs)
         self.sample_size = sample_size
 
+        seed = 0  # TODO: make this configurable???
+        self.rng = np.random.default_rng(seed)
+
     # def preprocess_embeddings(self):
     #     """Preprocess and create weighted sampling embeddings."""
     #     self.expression_embeddings = None
@@ -377,7 +380,7 @@ class WeightedSamplingFe(Fe):
         weights = np.log1p(cell_expression_inputs)
         weights /= np.sum(weights)
 
-        resampled_gene_indices = np.random.choice(
+        resampled_gene_indices = self.rng.choice(
             cell_identity_inputs,
             size=self.sample_size,
             p=weights,
