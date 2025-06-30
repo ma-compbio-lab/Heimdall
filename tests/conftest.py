@@ -12,6 +12,7 @@ from scipy.sparse import csr_array
 from Heimdall.fc import GeneformerFc, ScGPTFc, UCEFc
 from Heimdall.fe import BinningFe, DummyFe, NonzeroIdentityFe, SortingFe, WeightedSamplingFe
 from Heimdall.fg import IdentityFg
+from Heimdall.utils import instantiate_from_config
 
 load_dotenv()
 
@@ -338,6 +339,8 @@ def geneformer_fc(zero_expression_mock_dataset, zero_expression_identity_fg, zer
         **fc_config,
     )
 
+    metadata_embeddings = instantiate_from_config(geneformer_fc.embedding_parameters)
+
     return geneformer_fc
 
 
@@ -362,6 +365,8 @@ def scgpt_fc(zero_expression_mock_dataset, zero_expression_identity_fg, zero_exp
         **fc_config,
     )
 
+    metadata_embeddings = instantiate_from_config(scgpt_fc.embedding_parameters)
+
     return scgpt_fc
 
 
@@ -379,7 +384,7 @@ def uce_fc(mock_dataset_all_valid_genes, identity_fg_all_valid_genes, weighted_s
             "gene_metadata_filepath": f"{os.environ['DATA_PATH']}/gene_metadata/species_chrom.csv",
             "embedding_parameters": {
                 "type": "torch.nn.Module",
-                "type": "Heimdall.embedding.FlexibleTypeEmbedding",
+                "type": "Heimdall.embedding.GaussianInitEmbedding",
                 "args": {
                     "num_embeddings": 50,
                     "embedding_dim": 128,
@@ -401,5 +406,7 @@ def uce_fc(mock_dataset_all_valid_genes, identity_fg_all_valid_genes, weighted_s
         mock_dataset_all_valid_genes,
         **fc_config,
     )
+
+    metadata_embeddings = instantiate_from_config(uce_fc.embedding_parameters)
 
     return uce_fc

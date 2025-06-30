@@ -47,6 +47,12 @@ class FlexibleTypeEmbedding(nn.Embedding):
         return super().forward(idx.type(torch.long))
 
 
+class GaussianInitEmbedding(FlexibleTypeEmbedding):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        nn.init.normal_(self.weight, mean=0.0, std=1.0)
+
+
 # https://github.com/bowang-lab/scGPT/blob/7301b51a72f5db321fccebb51bc4dd1380d99023/scgpt/model/model.py#L795
 class ScGPTCategoryValueEncoder(nn.Module):
     def __init__(

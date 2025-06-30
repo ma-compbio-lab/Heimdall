@@ -5,7 +5,7 @@ args:
   species: ${dataset.preprocess_args.species}
   num_metadata_tokens: 50
   embedding_parameters:
-    type: Heimdall.embedding.FlexibleTypeEmbedding
+    type: Heimdall.embedding.GaussianInitEmbedding
     args:
       num_embeddings: ${args.num_metadata_tokens}
       embedding_dim: ${fg.args.d_embedding}
