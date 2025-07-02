@@ -447,13 +447,13 @@ class UCEFc(Fc):
     ) -> Tensor:
         """Embed cells using chromosome-aware sequences."""
 
-        chrom_token_mask = expression_inputs < 0
-        chrom_token_indices = expression_inputs[expression_inputs < 0]
+        chrom_token_mask = identity_inputs < 0
+        chrom_token_indices = identity_inputs[identity_inputs < 0]
         chrom_token_indices = -chrom_token_indices - self.chrom_token_offset
 
-        expression_inputs[chrom_token_mask] = 0
+        identity_inputs[chrom_token_mask] = 0
 
-        gene_embeddings = gene_embedding_layer(expression_inputs)
+        gene_embeddings = gene_embedding_layer(identity_inputs)
         # TODO: want to use bins with this, but currently ignoring
         # print(chrom_token_indices.cpu())
 
