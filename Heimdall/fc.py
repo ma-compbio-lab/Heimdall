@@ -331,29 +331,34 @@ class UCEFc(Fc):
 
         spec_chrom = self.gene_metadata[self.gene_metadata["species"] == self.species].set_index("gene_symbol")
 
-        symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
-            data_dir=self.ensembl_dir,
-            genes=spec_chrom.index.tolist(),
-            species=self.species,
-        )
-        spec_chrom.index = spec_chrom.index.map(symbol_to_ensembl_mapping.mapping_reduced)
+        # symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
+        #     data_dir=self.ensembl_dir,
+        #     genes=spec_chrom.index.tolist(),
+        #     species=self.species,
+        # )
+        # spec_chrom.index = spec_chrom.index.map(symbol_to_ensembl_mapping.mapping_reduced)
 
         try:
-            gene_chrom = spec_chrom.loc[[k.upper() for k in self.adata.var_names]]
+            # NOTE: below is different from UCE...
+            gene_names = [k.upper() for k in self.adata.var["gene_symbol"]]
+            # gene_chrom = spec_chrom.loc[gene_names]
+            gene_chrom = spec_chrom.reindex(gene_names, copy=True)
         except KeyError as e:
             raise ValueError(
                 "Input AnnData cannot contain gene names that are unmapped in the chromosome metadata.",
             ) from e
 
-        dataset_chroms = gene_chrom["spec_chrom"].cat.codes  # now this is correctly indexed by species and chromosome
+        # TODO: for pretraining, we should keep extraneous codes (i.e. no `remove_unused_categories()`)
+        dataset_chroms = gene_chrom["spec_chrom"].cat.remove_unused_categories().cat.codes
         print("Max Code:", max(dataset_chroms))
         dataset_pos = gene_chrom["start"].values
+
+        self.unique_chromosomes = np.unique(dataset_chroms)
 
         self.chroms = dataset_chroms
         self.starts = dataset_pos
 
-        self.placeholder_id = -1
-        self.chrom_token_right_idx = 0
+        self.chrom_token_offset = 1
 
     def limit(self, cell_tokenization: NDArray) -> NDArray:
         return cell_tokenization[:, : self.max_input_length]
@@ -381,10 +386,10 @@ class UCEFc(Fc):
         new_chrom = self.chroms[gene_tokenization]
         choosen_starts = self.starts[gene_tokenization]
 
-        self.unique_chromosomes = np.unique(new_chrom)
-        self.rng.shuffle(self.unique_chromosomes)
+        unique_chromosomes = np.unique(new_chrom)
+        self.rng.shuffle(unique_chromosomes)
 
-        num_chromosomes = len(self.unique_chromosomes)
+        num_chromosomes = len(unique_chromosomes)
         raw_sequence_length = len(new_chrom) + 2 * num_chromosomes
 
         grouped_gene_tokenization = np.full(raw_sequence_length, self.fg.pad_value)
@@ -392,9 +397,10 @@ class UCEFc(Fc):
 
         sequence_index = 0
 
-        for chromosome in self.unique_chromosomes:
-            grouped_gene_tokenization[sequence_index] = self.placeholder_id
-            grouped_expression_tokenization[sequence_index] = self.placeholder_id
+        for chromosome in unique_chromosomes:
+            placeholder_id = -(chromosome + self.chrom_token_offset + 1)
+            grouped_gene_tokenization[sequence_index] = placeholder_id
+            grouped_expression_tokenization[sequence_index] = placeholder_id
             # ordered_choice_idx[i] = int(chrom) + args.CHROM_TOKEN_OFFSET
             # token of this chromosome # i = 1 next token is a chrom open
 
@@ -417,8 +423,8 @@ class UCEFc(Fc):
 
             sequence_index += num_chromosome_genes
 
-            grouped_gene_tokenization[sequence_index] = self.placeholder_id
-            grouped_expression_tokenization[sequence_index] = self.placeholder_id
+            grouped_gene_tokenization[sequence_index] = -self.chrom_token_offset
+            grouped_expression_tokenization[sequence_index] = -self.chrom_token_offset
             # ordered_choice_idx[i] = args.chrom_token_right_idx # add the chrom sep again
 
             sequence_index += 1  # add the closing token again
@@ -442,22 +448,17 @@ class UCEFc(Fc):
     ) -> Tensor:
         """Embed cells using chromosome-aware sequences."""
 
-        chromosome_token_mask = expression_inputs == self.placeholder_id
-        expression_inputs[chromosome_token_mask] = 0
-        gene_embeddings = gene_embedding_layer(identity_inputs)
-        # expression_embeddings = expression_embedding_layer(expression_inputs)
-        # TODO: want to use bins with this, but currently ignoring
+        chrom_token_mask = expression_inputs < 0
+        chrom_token_indices = expression_inputs[expression_inputs < 0]
+        chrom_token_indices = -chrom_token_indices - self.chrom_token_offset
 
-        # Fix the chromosome tokens after retrieving the expression embeddings
-        placeholder_position = 0
-        for unique_chromosome in self.unique_chromosomes:
-            gene_embeddings[chromosome_token_mask[placeholder_position]] = metadata_embedding_layer(
-                unique_chromosome + 1,
-            )
-            gene_embeddings[chromosome_token_mask[placeholder_position + 1]] = metadata_embedding_layer(
-                self.chrom_token_right_idx,
-            )
-            placeholder_position += 2
+        expression_inputs[chrom_token_mask] = 0
+
+        gene_embeddings = gene_embedding_layer(expression_inputs)
+        # TODO: want to use bins with this, but currently ignoring
+        # print(chrom_token_indices.cpu())
+
+        gene_embeddings[chrom_token_mask] = metadata_embedding_layer(chrom_token_indices)
 
         return gene_embeddings
 

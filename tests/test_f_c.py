@@ -72,10 +72,10 @@ def test_uce_fc_preprocess_cells_and_getitem(mock_dataset_all_valid_genes, uce_f
     identity_expected = csr_array(
         np.array(
             [
-                [-1, 0, 0],
-                [-1, 2, 2],
-                [-1, 2, 2],
-                [-1, 0, 0],
+                [-4, 0, 0],
+                [-3, 2, 2],
+                [-3, 2, 2],
+                [-4, 0, 0],
             ],
         ),
     )

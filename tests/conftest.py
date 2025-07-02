@@ -12,17 +12,30 @@ from scipy.sparse import csr_array
 from Heimdall.fc import GeneformerFc, ScGPTFc, UCEFc
 from Heimdall.fe import BinningFe, DummyFe, NonzeroIdentityFe, SortingFe, WeightedSamplingFe
 from Heimdall.fg import IdentityFg
-from Heimdall.utils import instantiate_from_config
+from Heimdall.utils import convert_to_ensembl_ids, instantiate_from_config
 
 load_dotenv()
 
 
 @fixture(scope="module")
-def plain_toy_data():
-    return ad.AnnData(
+def gene_names():
+    return ["A1BG", "A1CF", "fake_gene", "A2M"]
+
+
+@fixture(scope="module")
+def valid_gene_names():
+    return ["A1BG", "A1CF", "A2M"]
+
+
+@fixture(scope="module")
+def plain_toy_data(valid_gene_names):
+    adata = ad.AnnData(
         X=csr_array(np.arange(3 * 5).reshape(5, 3)),
-        var=pd.DataFrame(index=["ENSG00000142611", "ENSG00000157911", "ENSG00000274917"]),
+        var=pd.DataFrame(index=valid_gene_names),
     )
+
+    convert_to_ensembl_ids(adata, data_dir=os.environ["DATA_PATH"])
+    return adata
 
 
 @fixture(scope="module")
@@ -57,8 +70,7 @@ def toy_paried_data_path(pytestconfig, plain_toy_data):
 
 
 @fixture
-def mock_dataset():
-    gene_names = ["ENSG00000121410", "ENSG00000148584", "fake_gene", "ENSG00000175899"]
+def mock_dataset(gene_names):
 
     mock_expression = csr_array(
         np.array(
@@ -73,14 +85,13 @@ def mock_dataset():
 
     mock_dataset = ad.AnnData(X=mock_expression)
     mock_dataset.var_names = gene_names
+    convert_to_ensembl_ids(mock_dataset, data_dir=os.environ["DATA_PATH"])
 
     return mock_dataset
 
 
 @fixture
-def mock_dataset_all_valid_genes():
-    gene_names = ["ENSG00000121410", "ENSG00000148584", "ENSG00000175899"]
-
+def mock_dataset_all_valid_genes(valid_gene_names):
     mock_expression = csr_array(
         np.array(
             [
@@ -93,14 +104,14 @@ def mock_dataset_all_valid_genes():
     )
 
     mock_dataset = ad.AnnData(X=mock_expression)
-    mock_dataset.var_names = gene_names
+    mock_dataset.var_names = valid_gene_names
+    convert_to_ensembl_ids(mock_dataset, data_dir=os.environ["DATA_PATH"])
 
     return mock_dataset
 
 
 @fixture
-def zero_expression_mock_dataset():
-    gene_names = ["ENSG00000121410", "ENSG00000148584", "fake_gene", "ENSG00000175899"]
+def zero_expression_mock_dataset(gene_names):
 
     mock_expression = csr_array(
         np.array(
@@ -115,6 +126,7 @@ def zero_expression_mock_dataset():
 
     mock_dataset = ad.AnnData(X=mock_expression)
     mock_dataset.var_names = gene_names
+    convert_to_ensembl_ids(mock_dataset, data_dir=os.environ["DATA_PATH"])
 
     return mock_dataset
 
@@ -378,7 +390,7 @@ def uce_fc(mock_dataset_all_valid_genes, identity_fg_all_valid_genes, weighted_s
     fc_config = OmegaConf.create(
         {
             "max_input_length": 4,
-            "num_metadata_tokens": 50,
+            "num_metadata_tokens": 100,
             "ensembl_dir": os.environ["DATA_PATH"],
             "species": "human",
             "gene_metadata_filepath": f"{os.environ['DATA_PATH']}/gene_metadata/species_chrom.csv",

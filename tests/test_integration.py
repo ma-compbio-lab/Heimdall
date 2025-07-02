@@ -1,5 +1,7 @@
 import os
 
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 import hydra
 import pytest
 from dotenv import load_dotenv
@@ -27,8 +29,8 @@ def test_default_hydra_train():
                 # "user=lane-nick"
                 "model=transformer",
                 "fg=identity",
-                "fe=sorting",
-                "fc=geneformer",
+                "fe=weighted_sampling",
+                "fc=uce",
                 "seed=55",
                 "project_name=demo",
                 "tasks.args.epochs=1",
