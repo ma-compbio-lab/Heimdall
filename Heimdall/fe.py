@@ -40,7 +40,7 @@ class Fe(ABC):
 
         if not issparse(self.adata.X):
             print(
-                "> Data was provided dense format, converting to CSR."
+                "> Data was provided in dense format, converting to CSR."
                 " Please consider pre-computing it to save memory.",
             )
             self.adata.X = csr_array(self.adata.X)
@@ -222,7 +222,8 @@ class BinningFe(Fe):
 
         # Compute bin edges from non-zero, non-NaN values
         if len(nonzero_vals) > 0:
-            bins = np.quantile(nonzero_vals, np.linspace(0, 1, n_bins + 1)[1:-1])
+            percentiles = np.linspace(0, 1, n_bins)[1:-1]
+            bins = np.quantile(nonzero_vals, percentiles)
             nonzero_binned = self._digitize(nonzero_vals, bins)
             nonzero_binned += 1  # Shift for bin 0 reserved for zeros
         else:
@@ -328,47 +329,29 @@ class WeightedSamplingFe(Fe):
 
     def __init__(
         self,
-        adata,
-        embedding_parameters,
-        d_embedding: int,
-        vocab_size: int,
-        pad_value: int = None,
-        sample_size: int = 1024,
+        adata: ad.AnnData,
+        sample_size: int,
+        **fe_kwargs,
     ):
-        super().__init__(adata, embedding_parameters, d_embedding, vocab_size, pad_value)
+        super().__init__(adata, **fe_kwargs)
         self.sample_size = sample_size
 
-    def preprocess_embeddings(self):
-        """Preprocess and create weighted sampling embeddings."""
-        self.expression_embeddings = None
+        seed = 0  # TODO: make this configurable???
+        self.rng = np.random.default_rng(seed)
 
-        # Convert expression matrix to sparse format for efficient processing
-        expression = self.adata.X
-        csr_expression = csr_array(expression)
+    def __getitem__(self, cell_index: int):
+        cell_identity_inputs, cell_expression_inputs = self._get_inputs_from_csr(cell_index)
 
-        # Compute log-normalized weights for sampling
-        log_expression = np.log1p(csr_expression.data)  # log(1 + x)
-        cellwise_nonzero_expression = np.split(log_expression, csr_expression.indptr[1:-1])
-        row_sums = [np.sum(expr) for expr in cellwise_nonzero_expression]
-        cellwise_weights = [expr / row_sum for expr, row_sum in zip(cellwise_nonzero_expression, row_sums)]
+        nan_mask = np.isnan(cell_expression_inputs)
 
-        # Sample gene indices based on weights
-        nonzero_indices = np.split(csr_expression.indices, csr_expression.indptr[1:-1])
-        sampled_indices = []
-        for weights, indices in zip(cellwise_weights, nonzero_indices):
-            sampled = np.random.choice(
-                indices,
-                size=self.sample_size,
-                p=weights,
-                replace=True,  # Sample with replacement
-            )
-            sampled_indices.append(sampled)
+        weights = np.log1p(cell_expression_inputs[~nan_mask])
+        weights /= np.sum(weights)
 
-        # Store sampled gene indices and expression values
-        self.adata.obsm["processed_expression_indices"] = ak.Array(sampled_indices)
-        self.adata.obsm["processed_expression_values"] = ak.Array(
-            [csr_expression[idx].toarray().flatten() for idx in sampled_indices],
+        resampled_gene_indices = self.rng.choice(
+            cell_identity_inputs[~nan_mask],
+            size=self.sample_size,
+            p=weights,
+            replace=True,
         )
 
-        self.replace_placeholders()
-        return cell_identity_inputs, cell_expression_inputs
+        return resampled_gene_indices, resampled_gene_indices

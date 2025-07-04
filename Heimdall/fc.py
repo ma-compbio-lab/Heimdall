@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Optional
 
 import anndata as ad
 import awkward as ak
 import numpy as np
+import pandas as pd
 import torch
 from numpy.typing import NDArray
+from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.nn import Module
 
@@ -30,6 +34,8 @@ class Fc(ABC):
         fg: Fg | None,
         fe: Fe | None,
         adata: ad.AnnData,
+        embedding_parameters: DictConfig,
+        num_metadata_tokens: int = 0,
         max_input_length: Optional[int] = None,
         float_dtype: str = "float32",
     ):
@@ -38,6 +44,7 @@ class Fc(ABC):
         self.adata = adata
         self.max_input_length = max_input_length
         self.float_dtype = float_dtype
+        self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
 
     def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray]:
         """Retrieve `identity_inputs`, `expression_inputs` and `padding_mask`.
@@ -128,6 +135,7 @@ class Fc(ABC):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        metadata_embedding_layer: Module | None,
     ) -> Tensor:
         """Embed cell batch using the embedding layers.
 
@@ -158,6 +166,7 @@ class GeneformerFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        metadata_embedding_layer: Module | None,
     ) -> Tensor:
         """Geneformer cell embedding function.
 
@@ -208,6 +217,7 @@ class DummyFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        metadata_embedding_layer: Module | None,
     ) -> Tensor:
 
         pass
@@ -221,10 +231,10 @@ class ScGPTFc(Fc):
         fg: Fg | None,
         fe: Fe | None,
         adata: ad.AnnData,
-        max_input_length: Optional[int] = None,
-        float_dtype: str = "float32",
+        embedding_parameters: OmegaConf,
+        **fc_kwargs,
     ):
-        super().__init__(fg, fe, adata, max_input_length, float_dtype)
+        super().__init__(fg, fe, adata, embedding_parameters, **fc_kwargs)
         seed = 0  # TODO: make this configurable???
         self.rng = np.random.default_rng(seed)
 
@@ -259,6 +269,7 @@ class ScGPTFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        metadata_embedding_layer: Module | None,
     ) -> Tensor:
         """ScGPT cell embedding callback.
 
@@ -281,7 +292,7 @@ class ScGPTFc(Fc):
         return gene_embeddings + expression_embeddings
 
 
-class ChromosomeAwareFc(Fc):
+class UCEFc(Fc):
     """Chromosome-aware implementation of cell embedding."""
 
     def __init__(
@@ -289,62 +300,142 @@ class ChromosomeAwareFc(Fc):
         fg: Fg | None,
         fe: Fe | None,
         adata: ad.AnnData,
-        chroms: Optional[NDArray] = None,
-        starts: Optional[NDArray] = None,
-        max_input_length: Optional[int] = None,
+        embedding_parameters: OmegaConf,
+        gene_metadata_filepath: str | Path,
+        ensembl_dir: str | Path,
+        species: str,
+        # chroms: Optional[NDArray] = None,
+        # starts: Optional[NDArray] = None,
+        **fc_kwargs,
     ):
         """
         Args:
             chroms: Chromosome IDs for each gene.
             starts: Genomic start positions of genes on their chromosomes.
         """
-        super().__init__(fg, fe, adata, max_input_length)
-        self.chroms = chroms
-        self.starts = starts
+        super().__init__(fg, fe, adata, embedding_parameters, **fc_kwargs)
+        seed = 0  # TODO: make this configurable???
+        self.rng = np.random.default_rng(seed)
 
-    def preprocess_cells(self):
-        """Using the `fg` and `fe`, preprocess input cells with chromosome-aware
-        sorting."""
-        gene_names = self.adata.var_names
-        processed_expression_values, processed_expression_indices = self.fe[:]
+        # https://github.com/snap-stanford/UCE/blob/8227a65cdd021b9186ef86671d2aef5c895c8e4b/data_proc/data_utils.py#L155
+        # TODO: load chromosome one-hot encoding and start positions for all genes
 
-        gene_lists = ak.Array(
-            [gene_names[cell_indices] for cell_indices in processed_expression_indices],
+        self.gene_metadata = pd.read_csv(gene_metadata_filepath)
+        self.ensembl_dir = ensembl_dir
+        self.species = species
+
+        self.gene_metadata["spec_chrom"] = pd.Categorical(
+            self.gene_metadata["species"] + "_" + self.gene_metadata["chromosome"],
         )
 
-        cell_identity_inputs = []
-        for cell_idx, gene_indices in enumerate(processed_expression_indices):
-            if self.chroms is not None and self.starts is not None:
-                # Perform chromosome-aware sorting
-                sorted_indices = self._chromosome_sort(gene_indices)
-                cell_identity_inputs.append(self.fg[gene_names[sorted_indices]])
-            else:
-                # Default behavior
-                cell_identity_inputs.append(self.fg[gene_lists[cell_idx]])
+        spec_chrom = self.gene_metadata[self.gene_metadata["species"] == self.species].set_index("gene_symbol")
 
-        # Store processed values
-        self.adata.obsm["cell_identity_inputs"] = ak.Array(cell_identity_inputs)
-        self.adata.obsm["cell_expression_inputs"] = processed_expression_values
+        # symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
+        #     data_dir=self.ensembl_dir,
+        #     genes=spec_chrom.index.tolist(),
+        #     species=self.species,
+        # )
+        # spec_chrom.index = spec_chrom.index.map(symbol_to_ensembl_mapping.mapping_reduced)
 
-    def _chromosome_sort(self, gene_indices):
-        """Sort genes by chromosome and genomic start positions."""
-        chroms = self.chroms[gene_indices]
-        starts = self.starts[gene_indices]
+        try:
+            # NOTE: below is different from UCE...
+            gene_names = [k.upper() for k in self.adata.var["gene_symbol"]]
+            # gene_chrom = spec_chrom.loc[gene_names]
+            gene_chrom = spec_chrom.reindex(gene_names, copy=True)
+        except KeyError as e:
+            raise ValueError(
+                "Input AnnData cannot contain gene names that are unmapped in the chromosome metadata.",
+            ) from e
 
-        # Group by chromosome
-        chrom_sort_order = np.argsort(chroms)
-        sorted_indices = gene_indices[chrom_sort_order]
-        sorted_chroms = chroms[chrom_sort_order]
-        sorted_starts = starts[chrom_sort_order]
+        # TODO: for pretraining, we should keep extraneous codes (i.e. no `remove_unused_categories()`)
+        dataset_chroms = gene_chrom["spec_chrom"].cat.remove_unused_categories().cat.codes
+        print("Max Code:", max(dataset_chroms))
+        dataset_pos = gene_chrom["start"].values
 
-        # Within each chromosome, sort by start position
-        chrom_groups = np.split(sorted_indices, np.unique(sorted_chroms, return_index=True)[1][1:])
-        sorted_sequence = []
-        for group in chrom_groups:
-            group_starts = sorted_starts[group]
-            sorted_sequence.extend(group[np.argsort(group_starts)])
+        self.unique_chromosomes = np.unique(dataset_chroms)
 
-        return np.array(sorted_sequence)
+        self.chroms = dataset_chroms
+        self.starts = dataset_pos
+
+        self.chrom_token_offset = 1
+
+    def limit(self, cell_tokenization: NDArray) -> NDArray:
+        return cell_tokenization[:, : self.max_input_length]
+
+    def tailor(
+        self,
+        gene_tokenization,
+        expression_tokenization,
+    ) -> NDArray | ak.Array:
+
+        # first, drop any NaN values here
+        # Assuming gene_tokenization is a pandas Series and expression_tokenization is a numpy array
+        valid_mask = ~np.isnan(expression_tokenization)
+
+        gene_tokenization = gene_tokenization[valid_mask]
+        expression_tokenization = expression_tokenization[valid_mask]
+
+        choosen_chrom = self.chroms[gene_tokenization]
+
+        chrom_sort = np.argsort(choosen_chrom)
+
+        gene_tokenization = gene_tokenization[chrom_sort]
+        expression_tokenization = expression_tokenization[chrom_sort]
+
+        new_chrom = self.chroms[gene_tokenization]
+        choosen_starts = self.starts[gene_tokenization]
+
+        unique_chromosomes = np.unique(new_chrom)
+        self.rng.shuffle(unique_chromosomes)
+
+        num_chromosomes = len(unique_chromosomes)
+        raw_sequence_length = len(new_chrom) + 2 * num_chromosomes
+
+        grouped_gene_tokenization = np.full(raw_sequence_length, self.fg.pad_value)
+        grouped_expression_tokenization = np.full(raw_sequence_length, self.fe.pad_value)
+
+        sequence_index = 0
+
+        for chromosome in unique_chromosomes:
+            placeholder_id = -(chromosome + self.chrom_token_offset + 1)
+            grouped_gene_tokenization[sequence_index] = placeholder_id
+            grouped_expression_tokenization[sequence_index] = placeholder_id
+            # ordered_choice_idx[i] = int(chrom) + args.CHROM_TOKEN_OFFSET
+            # token of this chromosome # i = 1 next token is a chrom open
+
+            sequence_index += 1
+            # now sort the genes by start order within the chroms
+            (chromosome_index,) = np.where(new_chrom == chromosome)
+            num_chromosome_genes = len(chromosome_index)
+
+            sort_by_start = np.argsort(
+                choosen_starts[chromosome_index],
+            )  # start chromosome_indexations for this chromsome
+
+            chromosome_genes = gene_tokenization[chromosome_index[sort_by_start]]
+            chromosome_expression = expression_tokenization[chromosome_index[sort_by_start]]
+
+            grouped_gene_tokenization[sequence_index : (sequence_index + num_chromosome_genes)] = chromosome_genes
+            grouped_expression_tokenization[sequence_index : (sequence_index + num_chromosome_genes)] = (
+                chromosome_expression
+            )
+
+            sequence_index += num_chromosome_genes
+
+            grouped_gene_tokenization[sequence_index] = -self.chrom_token_offset
+            grouped_expression_tokenization[sequence_index] = -self.chrom_token_offset
+            # ordered_choice_idx[i] = args.chrom_token_right_idx # add the chrom sep again
+
+            sequence_index += 1  # add the closing token again
+
+        cell_tokenization = np.stack([grouped_gene_tokenization, grouped_expression_tokenization], axis=0)
+        # cell_tokenization = np.stack([gene_tokenization, expression_tokenization], axis=0)
+
+        _, input_length = cell_tokenization.shape
+
+        if input_length > self.max_input_length:
+            return self.limit(cell_tokenization)
+        return self.pad(cell_tokenization)
 
     def embed_cells(
         self,
@@ -352,12 +443,23 @@ class ChromosomeAwareFc(Fc):
         gene_embedding_layer: Module | None,
         expression_inputs: Tensor,
         expression_embedding_layer: Module | None,
+        metadata_embedding_layer: Module | None,
     ) -> Tensor:
         """Embed cells using chromosome-aware sequences."""
-        gene_embeddings = gene_embedding_layer(identity_inputs)
-        expression_embeddings = expression_embedding_layer(expression_inputs)
 
-        return gene_embeddings + expression_embeddings
+        chrom_token_mask = identity_inputs < 0
+        chrom_token_indices = identity_inputs[identity_inputs < 0]
+        chrom_token_indices = -chrom_token_indices - self.chrom_token_offset
+
+        identity_inputs[chrom_token_mask] = 0
+
+        gene_embeddings = gene_embedding_layer(identity_inputs)
+        # TODO: want to use bins with this, but currently ignoring
+        # print(chrom_token_indices.cpu())
+
+        gene_embeddings[chrom_token_mask] = metadata_embedding_layer(chrom_token_indices)
+
+        return gene_embeddings
 
 
 class ScBERTFc(ScGPTFc):
