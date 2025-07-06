@@ -7,7 +7,7 @@ import torch
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csr_array, csr_matrix, issparse
+from scipy.sparse import csr_matrix, issparse
 
 
 class Fe(ABC):
