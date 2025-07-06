@@ -346,7 +346,7 @@ class WeightedSamplingFe(Fe):
 
         weights = np.log1p(cell_expression_inputs[~nan_mask])
         weights /= np.sum(weights)
-        #print(weights)
+
         resampled_gene_indices = self.rng.choice(
             cell_identity_inputs[~nan_mask],
             size=self.sample_size,
