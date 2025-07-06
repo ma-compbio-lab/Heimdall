@@ -7,7 +7,7 @@ import torch
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csr_array, issparse
+from scipy.sparse import csr_array, csr_matrix, issparse
 
 
 class Fe(ABC):
@@ -43,7 +43,7 @@ class Fe(ABC):
                 "> Data was provided in dense format, converting to CSR."
                 " Please consider pre-computing it to save memory.",
             )
-            self.adata.X = csr_array(self.adata.X)
+            self.adata.X = csr_matrix(self.adata.X)
 
     def _get_inputs_from_csr(self, cell_index: int):
         """Get expression values and gene indices from internal CSR
