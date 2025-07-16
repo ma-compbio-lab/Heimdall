@@ -235,11 +235,11 @@ class CellRepresentation(SpecialTokenMixin):
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
 
         # convert gene names to ensembl ids
-        if (self.adata.var.index.str.startswith("ENS").sum() / len(self.adata.var.index)) < 0.9:
-            self.adata, symbol_to_ensembl_mapping = self.convert_to_ensembl_ids(
-                data_dir=self._cfg.ensembl_dir,
-                species=self.dataset_preproc_cfg.species,
-            )
+        print("> Converting gene names to Ensembl IDs...")
+        self.adata, symbol_to_ensembl_mapping = self.convert_to_ensembl_ids(
+            data_dir=self._cfg.ensembl_dir,
+            species=self.dataset_preproc_cfg.species,
+        )
 
         if sparse.issparse(self.adata.X):
             print("> Converting sparse matrix to dense... normalization preprocessing")

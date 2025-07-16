@@ -304,9 +304,61 @@ def symbol_to_ensembl_from_ensembl(
     species: str = "human",
     release: int = 112,
 ) -> GeneMappingOutput:
-    mapping_dict = _load_ensembl_table(data_dir, species, release)
-    symbol_to_ensembl_dict = {i: mapping_dict[i] for i in genes if i in mapping_dict}
+    symbol_to_ensembl, ensembl_to_symbol = _load_ensembl_table(data_dir, species, release)
+    symbol_to_ensembl_dict = {i: symbol_to_ensembl[i] for i in genes if i in symbol_to_ensembl}
     return GeneMappingOutput(genes, symbol_to_ensembl_dict)
+
+
+def _prepare_gene_attr_table(
+    raw_path: Union[str, Path],
+    attr_path: Union[str, Path],
+):
+    full_df = pd.read_csv(raw_path, sep="\t", compression="gzip", comment="#", header=None, low_memory=False)
+
+    def flat_to_dict(x: str) -> Tuple[str, str]:
+        """Convert a flat string to a dictionary.
+
+        Example:
+            'gene_id "xxx"; gene_name "ABC";' -> {"gene_id": "xxx", "gene_name": "ABC"}
+
+        """
+        data = []
+        for i in x.split("; "):
+            key, val = i.split(" ", 1)
+            data.append((key.strip('"'), val.rstrip(";").strip('"')))
+        return dict(data)
+
+    attr_df = pd.DataFrame(list(map(flat_to_dict, tqdm(full_df[8]))))
+    attr_df.to_csv(attr_path, sep="\t", index=False, compression="gzip")
+
+
+def _prepare_symbol_ensembl_maps(
+    attr_path: Union[str, Path],
+    mapping_symbol_to_ensembl_path: Union[str, Path],
+    mapping_ensembl_to_symbol_path: Union[str, Path],
+):
+    attr_df = pd.read_csv(attr_path, sep="\t", compression="gzip")
+    mapping_df = attr_df[["gene_id", "gene_name"]].drop_duplicates()
+
+    symbol_to_ensembl, ensembl_to_symbol = defaultdict(list), defaultdict(list)
+    for _, (ensembl, symbol) in mapping_df.iterrows():
+        symbol_to_ensembl[symbol].append(ensembl)
+        ensembl_to_symbol[ensembl].append(symbol)
+
+    symbol_to_ensembl, ensembl_to_symbol = map(  # noqa: C417
+        lambda x: {i: sorted(j) for i, j in x.items()},
+        (symbol_to_ensembl, ensembl_to_symbol),
+    )
+
+    with (
+        open(mapping_symbol_to_ensembl_path, "w") as f1,
+        open(mapping_ensembl_to_symbol_path, "w") as f2,
+    ):
+        json.dump(symbol_to_ensembl, f1, indent=4)
+        json.dump(ensembl_to_symbol, f2, indent=4)
+    print(f"Mapping saved to cache: {mapping_symbol_to_ensembl_path}")
+
+    return symbol_to_ensembl, ensembl_to_symbol
 
 
 def _load_ensembl_table(
@@ -344,54 +396,24 @@ def _load_ensembl_table(
     # Prepare gene attribute table from GTF
     if not attr_path.is_file():
         print("Extracting gene attributes")
-        full_df = pd.read_csv(raw_path, sep="\t", compression="gzip", comment="#", header=None, low_memory=False)
-
-        def flat_to_dict(x: str) -> Tuple[str, str]:
-            """Convert a flat string to a dictionary.
-
-            Example:
-                'gene_id "xxx"; gene_name "ABC";' -> {"gene_id": "xxx", "gene_name": "ABC"}
-
-            """
-            data = []
-            for i in x.split("; "):
-                key, val = i.split(" ", 1)
-                data.append((key.strip('"'), val.rstrip(";").strip('"')))
-            return dict(data)
-
-        attr_df = pd.DataFrame(list(map(flat_to_dict, tqdm(full_df[8]))))
-        attr_df.to_csv(attr_path, sep="\t", index=False, compression="gzip")
+        _prepare_gene_attr_table(raw_path, attr_path)
 
     # Prepare symbol-ensembl mappings
     if not mapping_symbol_to_ensembl_path.is_file():
-        print("Preparing gene ID mapping")
-        attr_df = pd.read_csv(attr_path, sep="\t", compression="gzip")
-        mapping_df = attr_df[["gene_id", "gene_name"]].drop_duplicates()
-
-        symbol_to_ensembl, ensembl_to_symbol = defaultdict(list), defaultdict(list)
-        for _, (ensembl, symbol) in mapping_df.iterrows():
-            symbol_to_ensembl[symbol].append(ensembl)
-            ensembl_to_symbol[ensembl].append(symbol)
-
-        symbol_to_ensembl, ensembl_to_symbol = map(  # noqa: C417
-            lambda x: {i: sorted(j) for i, j in x.items()},
-            (symbol_to_ensembl, ensembl_to_symbol),
+        symbol_to_ensembl, ensembl_to_symbol = _prepare_symbol_ensembl_maps(
+            attr_path,
+            mapping_symbol_to_ensembl_path,
+            mapping_ensembl_to_symbol_path,
         )
-
-        with (
-            open(mapping_symbol_to_ensembl_path, "w") as f1,
-            open(mapping_ensembl_to_symbol_path, "w") as f2,
-        ):
-            json.dump(symbol_to_ensembl, f1, indent=4)
-            json.dump(ensembl_to_symbol, f2, indent=4)
-        print(f"Mapping saved to cache: {mapping_symbol_to_ensembl_path}")
-
     else:
         print(f"Loading mapping from cache: {mapping_symbol_to_ensembl_path}")
         with open(mapping_symbol_to_ensembl_path) as f:
             symbol_to_ensembl = json.load(f)
 
-    return symbol_to_ensembl
+        with open(mapping_ensembl_to_symbol_path) as f:
+            ensembl_to_symbol = json.load(f)
+
+    return symbol_to_ensembl, ensembl_to_symbol
 
 
 def convert_to_ensembl_ids(adata, data_dir, species="human"):
@@ -408,20 +430,28 @@ def convert_to_ensembl_ids(adata, data_dir, species="human"):
         - symbol_to_ensembl_mapping: mapping dictionary from symbols to Ensembl IDs
 
     """
-    symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
-        data_dir=data_dir,
-        genes=adata.var.index.tolist(),
-        species=species,
-    )
+    if (adata.var.index.str.startswith("ENS").sum() / len(adata.var.index)) < 0.9:
+        symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
+            data_dir=data_dir,
+            genes=adata.var.index.tolist(),
+            species=species,
+        )
 
-    adata.uns["gene_mapping:symbol_to_ensembl"] = symbol_to_ensembl_mapping.mapping_full
+        adata.uns["gene_mapping:symbol_to_ensembl"] = symbol_to_ensembl_mapping.mapping_full
 
-    adata.var["gene_symbol"] = adata.var.index
-    adata.var["gene_ensembl"] = adata.var["gene_symbol"].map(
-        symbol_to_ensembl_mapping.mapping_combined.get,
-    )
-    adata.var.index = adata.var.index.map(symbol_to_ensembl_mapping.mapping_reduced)
-    adata.var.index.name = "index"
+        adata.var["gene_symbol"] = adata.var.index
+        adata.var["gene_ensembl"] = adata.var["gene_symbol"].map(
+            symbol_to_ensembl_mapping.mapping_combined.get,
+        )
+        adata.var.index = adata.var.index.map(symbol_to_ensembl_mapping.mapping_reduced)
+        adata.var.index.name = "index"
+    else:
+        adata.var["gene_symbol"] = adata.var.index
+        adata.var["gene_ensembl"] = adata.var["gene_symbol"].map(
+            symbol_to_ensembl_mapping.mapping_combined.get,
+        )
+        adata.var.index = adata.var.index.map(symbol_to_ensembl_mapping.mapping_reduced)
+        adata.var.index.name = "index"
 
     return adata, symbol_to_ensembl_mapping
 
