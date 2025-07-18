@@ -252,14 +252,13 @@ class BinningFe(Fe):
         return cell_identity_inputs, cell_expression_inputs_binned
 
 
-class NonzeroIdentityFe(Fe):
+class IdentityFe(Fe):
     """Directly pass the continuous values. Remove zeros.
 
     Args:
         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         d_embedding: dimensionality of embedding for each expression entity
         embedding_parameters: dimensionality of embedding for each expression entity
-        num_bins: number of bins to generate
 
     """
 
@@ -267,29 +266,29 @@ class NonzeroIdentityFe(Fe):
         return self._get_inputs_from_csr(cell_index)
 
 
-class DummyFe(Fe):
-    """Directly pass the continuous values. Does not remove zero expression
-    elements.
-
-    Args:
-        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
-        d_embedding: dimensionality of embedding for each expression entity
-        embedding_parameters: dimensionality of embedding for each expression entity
-
-    """
-
-    def __getitem__(self, cell_index: int):
-        """Input is an adata indexed at cell [idx]
-
-        returns two vectors of cell_expression_inputs and cell_identity_inputs
-        where cell_expression_inputs is a vector of cell expression values and
-        cell_identity_inputs is a vector of corresponding gene indices
-
-        """
-        cell_expression_inputs = self.adata.X[[cell_index], :].toarray()
-        cell_identity_inputs = np.arange(self.adata.shape[1])
-
-        return cell_identity_inputs, cell_expression_inputs
+# class DummyFe(Fe):
+#     """Directly pass the continuous values. Does not remove zero expression
+#     elements.
+#
+#     Args:
+#         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
+#         d_embedding: dimensionality of embedding for each expression entity
+#         embedding_parameters: dimensionality of embedding for each expression entity
+#
+#     """
+#
+#     def __getitem__(self, cell_index: int):
+#         """Input is an adata indexed at cell [idx]
+#
+#         returns two vectors of cell_expression_inputs and cell_identity_inputs
+#         where cell_expression_inputs is a vector of cell expression values and
+#         cell_identity_inputs is a vector of corresponding gene indices
+#
+#         """
+#         cell_expression_inputs = self.adata.X[[cell_index], :].toarray()
+#         cell_identity_inputs = np.arange(self.adata.shape[1])
+#
+#         return cell_identity_inputs, cell_expression_inputs
 
 
 class SortingFe(Fe):
@@ -301,15 +300,15 @@ class SortingFe(Fe):
         expression values and cell_identity_inputs is a vector of corresponding
         gene indices."""
 
-        nonzero_indices, nonzero_values = self._get_inputs_from_csr(cell_index)
+        cell_indices, cell_values = self._get_inputs_from_csr(cell_index)
 
         if "medians" in self.adata.var:
-            nonzero_values = nonzero_values - self.adata.var["medians"].iloc[nonzero_indices].values
+            cell_values = cell_values - self.adata.var["medians"].iloc[cell_indices].values
 
         # Sort non-zero values in descending order
-        sorted_order = np.argsort(nonzero_values)[::-1]  # Indices for sorting descending
-        cell_expression_inputs = nonzero_values[sorted_order]
-        cell_identity_inputs = nonzero_indices[sorted_order]
+        sorted_order = np.argsort(cell_values)[::-1]  # Indices for sorting descending
+        cell_expression_inputs = cell_values[sorted_order]
+        cell_identity_inputs = cell_indices[sorted_order]
 
         return cell_identity_inputs, cell_expression_inputs
 

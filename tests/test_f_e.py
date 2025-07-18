@@ -131,25 +131,11 @@ def test_binning_fe(identity_fg, binning_fe):
     assert binning_fe.mask_value == binning_fe.num_bins + 2
 
 
-def test_dummy_fe(identity_fg, dummy_fe):
-    identity_fg.preprocess_embeddings()
-    dummy_fe.preprocess_embeddings()
-
-    expected = dummy_fe.adata.X
-
-    for cell_index in range(len(identity_fg.adata)):
-        cell_identity_inputs, cell_expression_inputs = dummy_fe[cell_index]
-        assert np.allclose(expected[[cell_index], :].toarray(), cell_expression_inputs)
-
-    assert dummy_fe.pad_value == 4
-    assert dummy_fe.mask_value == 5
-
-
-def test_nonzero_identity_fe(zero_expression_identity_fg, nonzero_identity_fe):
+def test_identity_fe(zero_expression_identity_fg, identity_fe):
     zero_expression_identity_fg.preprocess_embeddings()
-    nonzero_identity_fe.preprocess_embeddings()
+    identity_fe.preprocess_embeddings()
 
-    num_genes = nonzero_identity_fe.num_genes
+    num_genes = identity_fe.num_genes
 
     expression_expected = np.array(
         [
@@ -170,7 +156,7 @@ def test_nonzero_identity_fe(zero_expression_identity_fg, nonzero_identity_fe):
     )
 
     for cell_index in range(len(zero_expression_identity_fg.adata)):
-        cell_identity_inputs, cell_expression_inputs = nonzero_identity_fe[cell_index]
+        cell_identity_inputs, cell_expression_inputs = identity_fe[cell_index]
         assert np.allclose(identity_expected[cell_index], cell_identity_inputs)
         assert np.allclose(expression_expected[cell_index], cell_expression_inputs)
 
@@ -183,12 +169,12 @@ def test_nonzero_identity_fe(zero_expression_identity_fg, nonzero_identity_fe):
         ],
     )
     for cell_index in range(len(zero_expression_identity_fg.adata)):
-        cell_identity_inputs, cell_expression_inputs = nonzero_identity_fe[cell_index]
-        padded_input = pad(cell_expression_inputs, num_genes, nonzero_identity_fe.pad_value)
+        cell_identity_inputs, cell_expression_inputs = identity_fe[cell_index]
+        padded_input = pad(cell_expression_inputs, num_genes, identity_fe.pad_value)
         assert np.allclose(padded_expected[cell_index], padded_input)
 
-    assert nonzero_identity_fe.pad_value == 4
-    assert nonzero_identity_fe.mask_value == 5
+    assert identity_fe.pad_value == 4
+    assert identity_fe.mask_value == 5
 
 
 def test_weighted_sampling_fe(identity_fg, weighted_sampling_fe):

@@ -157,6 +157,16 @@ class Fc(ABC):
 class GeneformerFc(Fc):
     """Implementation of Geneformer cell embedding."""
 
+    def __init__(
+        self,
+        fg: Fg | None,
+        fe: Fe | None,
+        adata: ad.AnnData,
+        embedding_parameters: OmegaConf,
+        **fc_kwargs,
+    ):
+        super().__init__(fg, fe, adata, embedding_parameters, **fc_kwargs)
+
     def limit(self, cell_tokenization: NDArray) -> NDArray:
         return cell_tokenization[:, : self.max_input_length]
 

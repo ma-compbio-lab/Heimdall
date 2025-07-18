@@ -10,7 +10,7 @@ from pytest import fixture
 from scipy.sparse import csr_array
 
 from Heimdall.fc import GeneformerFc, ScGPTFc, UCEFc
-from Heimdall.fe import BinningFe, DummyFe, NonzeroIdentityFe, SortingFe, WeightedSamplingFe
+from Heimdall.fe import BinningFe, IdentityFe, SortingFe, WeightedSamplingFe
 from Heimdall.fg import IdentityFg
 from Heimdall.utils import convert_to_ensembl_ids, instantiate_from_config
 
@@ -253,23 +253,7 @@ def binning_fe(mock_dataset):
 
 
 @fixture
-def dummy_fe(mock_dataset):
-    fe_config = OmegaConf.create(
-        {
-            "vocab_size": 6,
-            "embedding_parameters": {
-                "type": "torch.nn.Module",
-            },
-            "d_embedding": None,
-        },
-    )
-    dummy_fe = DummyFe(mock_dataset, **fe_config)
-
-    return dummy_fe
-
-
-@fixture
-def nonzero_identity_fe(zero_expression_mock_dataset):
+def identity_fe(zero_expression_mock_dataset):
     fe_config = OmegaConf.create(
         {
             "vocab_size": 6,
@@ -283,9 +267,9 @@ def nonzero_identity_fe(zero_expression_mock_dataset):
             "d_embedding": 128,
         },
     )
-    nonzero_identity_fe = NonzeroIdentityFe(zero_expression_mock_dataset, **fe_config)
+    identity_fe = IdentityFe(zero_expression_mock_dataset, **fe_config)
 
-    return nonzero_identity_fe
+    return identity_fe
 
 
 @fixture
