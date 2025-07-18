@@ -117,6 +117,39 @@ class Fe(ABC):
                 continue
             self.embedding_parameters["args"][key] = value
 
+class scBERTBinningFe(Fe):
+    """Value-binning Fe from scBERT.
+
+    Args:
+        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
+        d_embedding: dimensionality of embedding for each expression entity
+        embedding_parameters: dimensionality of embedding for each expression entity
+        num_bins: number of bins to generate
+
+    """
+
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        num_bins: int,  # CLASS - 2 in scBERT
+        **fe_kwargs,
+    ):
+        vocab_size = max_bin + 3  # [0, ..., max_bin], <PAD>, <MASK>
+        super().__init__(adata, vocab_size=vocab_size, **fe_kwargs)
+        self.num_bins = num_bins
+    
+
+    def __getitem__(self, cell_index: int):
+        # Get gene indices and expression values
+        cell_identity_inputs, cell_expression_inputs = self._get_inputs_from_csr(cell_index)
+
+        # Clip expression values to max_bin and cast to LongTensor
+        clipped_expr = np.minimum(cell_expression_inputs, self.num_bins)
+        expr_tensor = torch.from_numpy(clipped_expr).long()
+
+    
+
+        return cell_identity_inputs, expr_tensor
 
 class BinningFe(Fe):
     """Value-binning Fe from scGPT.
