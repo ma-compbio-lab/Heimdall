@@ -320,7 +320,7 @@ class HeimdallTransformerEncoder(nn.Module):
                 raise ImportError(
                     "`FlashAttention` is not installed, "
                     "when initializing model, make sure to use a default transformer instead.",
-                )
+                ) from e
 
             fa_config = BertConfig(
                 hidden_size=d_model,
