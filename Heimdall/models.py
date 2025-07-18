@@ -316,10 +316,10 @@ class HeimdallTransformerEncoder(nn.Module):
                 from transformers import BertConfig
 
                 print("FlashAttention Library Successfully Loaded")
-            except ImportError:
-                print(
-                    "Warning: FlashAttention Not Installed, "
-                    "when initializing model make sure to use default Transformers",
+            except ImportError as e:
+                raise ImportError(
+                    "`FlashAttention` is not installed, "
+                    "when initializing model, make sure to use a default transformer instead.",
                 )
 
             fa_config = BertConfig(
