@@ -7,7 +7,7 @@ import torch
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import csr_array, issparse
 
 
 class Fe(ABC):
@@ -43,7 +43,7 @@ class Fe(ABC):
                 "> Data was provided in dense format, converting to CSR."
                 " Please consider pre-computing it to save memory.",
             )
-            self.adata.X = csr_matrix(self.adata.X)
+            self.adata.X = csr_array(self.adata.X)
 
     def _get_inputs_from_csr(self, cell_index: int):
         """Get expression values and gene indices from internal CSR
@@ -117,16 +117,8 @@ class Fe(ABC):
                 continue
             self.embedding_parameters["args"][key] = value
 
-class scBERTBinningFe(Fe):
-    """Value-binning Fe from scBERT.
-
-    Args:
-        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
-        d_embedding: dimensionality of embedding for each expression entity
-        embedding_parameters: dimensionality of embedding for each expression entity
-        num_bins: number of bins to generate
-
-    """
+class ScBERTBinningFe(Fe):
+    """scBERT-style binning: cap expression values and convert to long indices."""
 
     def __init__(
         self,
@@ -134,22 +126,36 @@ class scBERTBinningFe(Fe):
         num_bins: int,  # CLASS - 2 in scBERT
         **fe_kwargs,
     ):
-        vocab_size = max_bin + 3  # [0, ..., max_bin], <PAD>, <MASK>
+        fe_kwargs.pop("vocab_size", None)
+        vocab_size = num_bins + 3  # [0, ..., num_bins], <PAD>, <MASK>
         super().__init__(adata, vocab_size=vocab_size, **fe_kwargs)
         self.num_bins = num_bins
     
+    def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
+        """scBERT-style binning: bin values into [0, n_bins], capping high values.
+        - Zeros are retained as 0.
+        - Values > n_bins are capped at n_bins.
+        """
+        dtype = row.dtype
+        return_np = not isinstance(row, torch.Tensor)
+        row = row.cpu().numpy() if isinstance(row, torch.Tensor) else row
+
+        nan_mask = np.isnan(row)
+        binned = np.floor(row).astype(np.float32)
+        binned = np.clip(binned, a_min=0, a_max=n_bins)
+        binned[nan_mask] = np.nan  # preserve NaNs
+        
+        return torch.from_numpy(binned).to(dtype) if not return_np else binned.astype(dtype) 
 
     def __getitem__(self, cell_index: int):
         # Get gene indices and expression values
         cell_identity_inputs, cell_expression_inputs = self._get_inputs_from_csr(cell_index)
 
-        # Clip expression values to max_bin and cast to LongTensor
-        clipped_expr = np.minimum(cell_expression_inputs, self.num_bins)
-        expr_tensor = torch.from_numpy(clipped_expr).long()
+        # Apply scBERT-style binning (capped at num_bins)
+        binned_expression = self.binning(cell_expression_inputs, self.num_bins)
 
-    
+        return cell_identity_inputs, binned_expression
 
-        return cell_identity_inputs, expr_tensor
 
 class BinningFe(Fe):
     """Value-binning Fe from scGPT.
