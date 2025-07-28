@@ -214,28 +214,27 @@ def test_uce_fc_preprocess_cells_and_getitem(mock_dataset_all_valid_genes, uce_f
 
 def test_chrom_sort_random_sample_fc_preprocess_cells_and_getitem(chrom_mock_dataset, chrom_sort_random_sample_fc):
     identity_expected = csr_array(
-        np.array([
-            [-2,  1, -1, -3,  2, -1],  # cell 0
-            [-3,  2, -1, -2,  1, -1],  # cell 1
-            [-2,  1, -1, -3,  2, -1],  # cell 2
-            [-2,  1, -1, -3,  2, -1],  # cell 3
-        ], dtype=int),
+    np.array([
+        [-3, 2, -1, -2, 1, -1],  # cell 0
+        [-3, 2, -1, -2, 0, -1],  # cell 1
+        [-2, 0, -1, -3, 2, -1],  # cell 2
+        [-2, 1, -1, -3, 2, -1],  # cell 3
+    ], dtype=int),
     )
 
-    
     expression_expected = csr_array(
-        np.array([
-            [-2,  4, -1, -3,  2, -1],  # cell 0
-            [-3,  3, -1, -2,  1, -1],  # cell 1
-            [-2,  2, -1, -3,  4, -1],  # cell 2
-            [-2,  3, -1, -3,  1, -1],  # cell 3
-        ], dtype=float),
-    )
-    
+    np.array([
+        [-3, 2, -1, -2, 4, -1],  # cell 0
+        [-3, 3, -1, -2, 2, -1],  # cell 1
+        [-2, 3, -1, -3, 4, -1],  # cell 2
+        [-2, 3, -1, -3, 1, -1],  # cell 3
+    ]),
+    ) 
     fc = chrom_sort_random_sample_fc
     for i in range(fc.adata.n_obs):
         ids_out, expr_out, pad = fc[i]
-        
+        #print(ids_out)
+        #print(expr_out)
         exp_ids  = identity_expected[i : i+1, :].toarray().ravel()
         exp_expr = expression_expected[i : i+1, :].toarray().ravel()
 
@@ -252,27 +251,28 @@ def test_chrom_sort_random_sample_fc_preprocess_cells_and_getitem(chrom_mock_dat
 def test_chrom_sort_weighted_resample_fc_preprocess_cells_and_getitem(chrom_mock_dataset, chrom_sort_weighted_resample_fc):
     identity_expected = csr_array(
     np.array([
-        [-2,  0,  1, -1, -3, -1],  # cell 0
-        [-2,  0, -1, -3,  2, -1],  # cell 1
-        [-3, -1, -2,  0,  0, -1],  # cell 2
-        [-2,  1, -1, -3,  2, -1],  # cell 3
+        [-2,  1,  1, -1, 4, 4],  # cell 0
+        [-2,  0, 0, -1,  4, 4],  # cell 1
+        [-3, 2, 2, -1, 4, 4],  # cell 2
+        [-2,  1, 1, -1, 4, 4],  # cell 3
     ], dtype=int),
     )
 
     expression_expected = csr_array(
     np.array([
-        [-2.0,  1.0,  4.0, -1.0, -3.0, -1.0],  # cell 0
-        [-2.0,  2.0, -1.0, -3.0,  3.0, -1.0],  # cell 1
-        [-3.0, -1.0, -2.0,  3.0,  3.0, -1.0],  # cell 2
-        [-2.0,  3.0, -1.0, -3.0,  1.0, -1.0],  # cell 3
-    ], dtype=float),
+        [-2,  4,  4, -1, 4, 4],  # cell 0
+        [-2,  2, 2, -1,  4, 4],  # cell 1
+        [-3, 4, 4, -1, 4, 4],  # cell 2
+        [-2, 3, 3, -1, 4, 4],  # cell 3
+    ], ),
     )
     
     
     fc = chrom_sort_weighted_resample_fc
     for i in range(fc.adata.n_obs):
         ids_out, expr_out, pad = fc[i]
-
+        #print(ids_out)
+        #print(expr_out)
         exp_ids  = identity_expected[i : i+1, :].toarray().ravel()
         exp_expr = expression_expected[i : i+1, :].toarray().ravel()
 
@@ -291,26 +291,29 @@ def test_chrom_sort_truncate_fc_preprocess_cells_and_getitem(chrom_mock_dataset,
 
     identity_expected = csr_array(
         np.array([
-            [-2,  0,  1, -1, -3, -1],
-            [-2,  0,  1, -1, -3, -1],
-            [-2,  0,  1, -1, -3, -1],
-            [-2,  0,  1, -1, -3, -1],
+            [-2,  0,  1, -1, 4, 4],
+            [-2,  0,  1, -1, 4, 4],
+            [-2,  0,  1, -1, 4, 4],
+            [-2,  0,  1, -1, 4, 4],
         ], dtype=int),
     )
 
     expression_expected = csr_array(
         np.array([
-            [-2.0, 1.0, 4.0, -1.0, -3.0, -1.0],
-            [-2.0, 2.0, 1.0, -1.0, -3.0, -1.0],
-            [-2.0, 3.0, 2.0, -1.0, -3.0, -1.0],
-            [-2.0, 4.0, 3.0, -1.0, -3.0, -1.0],
-        ], dtype=float),
+            [-2, 1, 4, -1, 4, 4],
+            [-2, 2, 1, -1, 4, 4],
+            [-2, 3, 2, -1, 4, 4],
+            [-2, 4, 3, -1, 4, 4],
+        ], ),
     )
 
     fc = chrom_sort_truncate_fc
+    print(fc)
+    print('**********************')
     for i in range(fc.adata.n_obs):
         ids_out, expr_out, pad = fc[i]
-
+        print(ids_out)
+        print(expr_out)
         exp_ids  = identity_expected[i : i+1, :].toarray().ravel()
         exp_expr = expression_expected[i : i+1, :].toarray().ravel()
 

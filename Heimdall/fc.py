@@ -559,6 +559,7 @@ class ChromSortRandomSampleFc(Fc):
         gene_metadata_filepath: str | Path,
         ensembl_dir: str | Path,
         species: str,
+        sample_size: int,
         # chroms: Optional[NDArray] = None,
         # starts: Optional[NDArray] = None,
         **fc_kwargs,
@@ -613,7 +614,7 @@ class ChromSortRandomSampleFc(Fc):
         zero_indices = np.where(expression_tokenization == 0)[0]
 
         num_nonzero_to_sample = min(len(nonzero_indices), self.sample_size)
-        selected_nonzero = self.rng.choice(nonzero_indices, non_nonzero_to_sample, replace=False)
+        selected_nonzero = self.rng.choice(nonzero_indices, num_nonzero_to_sample, replace=False)
 
         remaining = self.sample_size - num_nonzero_to_sample
 
@@ -749,6 +750,7 @@ class ChromSortTruncateFc(Fc):
         gene_metadata_filepath: str | Path,
         ensembl_dir: str | Path,
         species: str,
+        sample_size: int,
         # chroms: Optional[NDArray] = None,
         # starts: Optional[NDArray] = None,
         **fc_kwargs,
