@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 from pytest import fixture
 from scipy.sparse import csr_array
 
-from Heimdall.fc import GeneformerFc, ScGPTFc, UCEFc
+from Heimdall.fc import ChromosomeAwareFc, Fc
 from Heimdall.fe import BinningFe, IdentityFe
 from Heimdall.fg import IdentityFg
 from Heimdall.utils import convert_to_ensembl_ids, instantiate_from_config
@@ -359,16 +359,24 @@ def geneformer_fc(zero_expression_mock_dataset, zero_expression_identity_fg, zer
     fc_config = OmegaConf.create(
         {
             "max_input_length": 4,
-            "num_metadata_tokens": 0,
             "embedding_parameters": {
                 "type": "torch.nn.Module",
+            },
+            "tailor_config": {
+                "type": "Heimdall.tailor.TruncateTailor",
+            },
+            "order_config": {
+                "type": "Heimdall.order.ExpressionOrder",
+            },
+            "reduce_config": {
+                "type": "Heimdall.reduce.IdentityReduce",
             },
         },
     )
     zero_expression_identity_fg.preprocess_embeddings()
     zero_expression_identity_fe.preprocess_embeddings()
 
-    geneformer_fc = GeneformerFc(
+    geneformer_fc = Fc(
         zero_expression_identity_fg,
         zero_expression_identity_fe,
         zero_expression_mock_dataset,
@@ -385,16 +393,24 @@ def scgpt_fc(zero_expression_mock_dataset, zero_expression_identity_fg, zero_exp
     fc_config = OmegaConf.create(
         {
             "max_input_length": 2,
-            "num_metadata_tokens": 0,
             "embedding_parameters": {
                 "type": "torch.nn.Module",
+            },
+            "tailor_config": {
+                "type": "Heimdall.tailor.TruncateTailor",
+            },
+            "order_config": {
+                "type": "Heimdall.order.RandomOrder",
+            },
+            "reduce_config": {
+                "type": "Heimdall.reduce.SumReduce",
             },
         },
     )
     zero_expression_identity_fg.preprocess_embeddings()
     zero_expression_binning_fe.preprocess_embeddings()
 
-    scgpt_fc = ScGPTFc(
+    scgpt_fc = Fc(
         zero_expression_identity_fg,
         zero_expression_binning_fe,
         zero_expression_mock_dataset,
@@ -414,7 +430,6 @@ def uce_fc(mock_dataset_all_valid_genes, identity_fg_all_valid_genes, identity_f
     fc_config = OmegaConf.create(
         {
             "max_input_length": 4,
-            "num_metadata_tokens": 100,
             "ensembl_dir": os.environ["DATA_PATH"],
             "species": "human",
             "gene_metadata_filepath": f"{os.environ['DATA_PATH']}/gene_metadata/species_chrom.csv",
@@ -422,11 +437,22 @@ def uce_fc(mock_dataset_all_valid_genes, identity_fg_all_valid_genes, identity_f
                 "type": "torch.nn.Module",
                 "type": "Heimdall.embedding.GaussianInitEmbedding",
                 "args": {
-                    "num_embeddings": 50,
+                    "num_embeddings": 100,
                     "embedding_dim": 128,
                 },
             },
-            "sample_size": 5,
+            "tailor_config": {
+                "type": "Heimdall.tailor.ChromosomeTailor",
+                "args": {
+                    "sample_size": 5,
+                },
+            },
+            "order_config": {
+                "type": "Heimdall.order.ChromosomeOrder",
+            },
+            "reduce_config": {
+                "type": "Heimdall.reduce.ChromosomeReduce",
+            },
         },
     )
     identity_fg_all_valid_genes.preprocess_embeddings()
@@ -437,7 +463,7 @@ def uce_fc(mock_dataset_all_valid_genes, identity_fg_all_valid_genes, identity_f
 
     identity_fe_all_valid_genes.preprocess_embeddings()
 
-    uce_fc = UCEFc(
+    uce_fc = ChromosomeAwareFc(
         identity_fg_all_valid_genes,
         identity_fe_all_valid_genes,
         mock_dataset_all_valid_genes,

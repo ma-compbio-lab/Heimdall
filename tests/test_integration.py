@@ -35,7 +35,7 @@ def test_default_hydra_train():
                 "project_name=demo",
                 "tasks.args.epochs=1",
                 "fc.args.max_input_length=512",
-                "fc.args.sample_size=450",
+                "fc.args.tailor_config.args.sample_size=450",
                 # f"user={os.environ['HYDRA_USER']}"
             ],
         )
