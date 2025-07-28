@@ -30,6 +30,7 @@ class Fg(ABC):
         pad_value: int = None,
         mask_value: int = None,
         frozen: bool = False,
+        rng: int | np.random.Generator = 0,
     ):
         self.adata = adata
         _, self.num_genes = adata.shape
@@ -39,6 +40,7 @@ class Fg(ABC):
         self.pad_value = vocab_size - 2 if pad_value is None else pad_value
         self.mask_value = vocab_size - 1 if mask_value is None else mask_value
         self.frozen = frozen
+        self.rng = np.random.default_rng(rng)
 
     @abstractmethod
     def preprocess_embeddings(self, float_dtype: str = "float32"):
