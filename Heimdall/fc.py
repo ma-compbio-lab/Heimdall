@@ -14,7 +14,6 @@ from torch.nn import Module
 
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
-from Heimdall.utils import _get_inputs_from_csr
 
 
 class Fc(ABC):
