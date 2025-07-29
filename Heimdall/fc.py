@@ -99,8 +99,9 @@ class ChromosomeAwareFc(Fc):
     ):
         """
         Args:
-            chroms: Chromosome IDs for each gene.
-            starts: Genomic start positions of genes on their chromosomes.
+            gene_metadata_filepath: path to gene metadata .csv
+            ensembl_dir: path to directory in which Ensembl mapping file is stored
+            species: species from which single-cell dataset is derived
         """
 
         super().__init__(*fc_args, **fc_kwargs)
