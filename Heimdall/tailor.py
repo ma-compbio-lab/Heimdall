@@ -208,3 +208,56 @@ class ChromosomeTailor(Tailor):
         identity_inputs, expression_inputs = self.weighted_resampling(identity_inputs, expression_inputs, gene_order)
 
         return super().__call__(identity_inputs, expression_inputs, gene_order)
+
+
+class WeightedResampleTailor(Tailor):
+    def __init__(self, fc: Fc, sample_size: int):
+        self.sample_size = sample_size
+
+        super().__init__(fc=fc)
+
+    def weighted_resampling(
+        self,
+        identity_inputs: NDArray,
+        expression_inputs: NDArray,
+        gene_order: NDArray,
+    ) -> tuple[NDArray, NDArray]:
+        """Weighted sampling."""
+
+        weights = np.log1p(expression_inputs)
+        weights /= np.sum(weights)
+
+        resampled_indices = self.fc.rng.choice(
+            len(identity_inputs),
+            size=self.sample_size,
+            p=weights,
+            replace=True,
+        )
+
+        resampled_identity_inputs = identity_inputs[resampled_indices]
+        resampled_expression_inputs = expression_inputs[resampled_indices]
+
+        return resampled_identity_inputs, resampled_expression_inputs
+
+    def limit(
+        self,
+        identity_inputs: NDArray,
+        expression_inputs: NDArray,
+        gene_order: NDArray,
+    ) -> tuple[NDArray, NDArray]:
+
+        return super().limit(identity_inputs, expression_inputs, gene_order)
+
+    def pad(
+        self,
+        identity_inputs: NDArray,
+        expression_inputs: NDArray,
+        gene_order: NDArray,
+    ) -> tuple[NDArray, NDArray]:
+
+        return super().pad(identity_inputs, expression_inputs, gene_order)
+
+    def __call__(self, identity_inputs: NDArray, expression_inputs: NDArray, gene_order: NDArray) -> NDArray:
+        identity_inputs, expression_inputs = self.weighted_resampling(identity_inputs, expression_inputs, gene_order)
+
+        return super().__call__(identity_inputs, expression_inputs, gene_order)
