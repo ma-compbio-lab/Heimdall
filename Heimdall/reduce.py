@@ -117,6 +117,7 @@ class ChromosomeReduce(Reduce):
 
         return gene_embeddings
 
+
 class ChromosomeSumReduce(Reduce):
     def __call__(
         self,
