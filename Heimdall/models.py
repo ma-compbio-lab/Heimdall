@@ -130,6 +130,7 @@ class ExpressionOnly(nn.Module):
 
     def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
         _, outputs = inputs  # extract expression only
+
         return outputs.to(get_dtype(self.float_dtype))  # convert to float32?
 
 
