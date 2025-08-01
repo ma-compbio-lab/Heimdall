@@ -286,35 +286,6 @@ class ScBERTBinningFe(Fe):
         return cell_identity_inputs, binned_expression
 
 
-class ZeroExpressionFe(Fe):
-    """
-    Fe implementation for the ‘no-expression’ setting.
-
-    * identity_inputs  – same as IdentityFe  (gene indices)
-    * expression_inputs – length-aligned vector of zeros (dtype float32)
-
-    Parameters
-    ----------
-    adata : AnnData
-        Matrix with shape (n_cells, n_genes).  Gene names must be in `adata.var`.
-    d_embedding : int
-        Dimensionality of each expression embedding (kept for API symmetry,
-        but not actually used since we output zeros).
-    embedding_parameters : DictConfig
-        Same field your other Fe classes expect; stored for completeness.
-    pad_value : float, optional
-        Value used to pad expression inputs (defaults to 0.0).
-    drop_zeros : bool, default True
-        If True, zero-count genes are removed before padding.
-    """
-    
-    def __getitem__(self, cell_index: int):
-        identity_inputs, expr = self._get_inputs_from_csr(cell_index)
-
-        zero_expr = np.zeros_like(expr, dtype=np.float32)
-
-        return identity_inputs, zero_expr
-
 
 
 class IdentityFe(Fe):
