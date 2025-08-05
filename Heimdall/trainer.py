@@ -37,14 +37,41 @@ class HeimdallTrainer:
         self.data = data
 
         # cell type label
-        label_key = self.cfg.tasks.args.label_col_name
-        if not pd.api.types.is_categorical_dtype(self.data.adata.obs[label_key]):
-            self.data.adata.obs[label_key] = self.data.adata.obs[label_key].astype("category")
+        #label_key = self.cfg.tasks.args.label_col_name
+        #if not pd.api.types.is_categorical_dtype(self.data.adata.obs[label_key]):
+        #    self.data.adata.obs[label_key] = self.data.adata.obs[label_key].astype("category")
 
         # class_names will now align with integer labels returned by .codes
-        self.class_names = self.data.adata.obs[label_key].cat.categories.tolist()
+        #self.class_names = self.data.adata.obs[label_key].cat.categories.tolist()
 
-        assert len(self.class_names) == self.num_labels, "Mismatch between classes and label indices"
+        #assert len(self.class_names) == self.num_labels, "Mismatch between classes and label indices"
+        
+        args = self.cfg.tasks.args
+
+        # Unified label key handling: support .obs or .obsm
+        label_key = getattr(args, "label_col_name", None)
+        label_obsm_key = getattr(args, "label_obsm_name", None)
+
+        if label_key is not None:
+            # Single-label classification using .obs[label_key]
+            if not pd.api.types.is_categorical_dtype(self.data.adata.obs[label_key]):
+                self.data.adata.obs[label_key] = self.data.adata.obs[label_key].astype("category")
+            self.class_names = self.data.adata.obs[label_key].cat.categories.tolist()
+            self.num_labels = len(self.class_names)
+
+        elif label_obsm_key is not None:
+            # Multi-label classification using .obsm[label_obsm_key]
+            self.class_names = self.data.adata.obsm[label_obsm_key].columns.tolist()
+            self.num_labels = len(self.class_names)
+
+        else:
+            raise ValueError("Must specify either `label_col_name` or `label_obsm_name` in the config.")
+
+        # Verify model output matches number of labels
+        #assert self.num_labels == self.model.output_dim, \
+         #   f"Mismatch between number of labels ({self.num_labels}) and model output dim ({self.model.output_dim})"
+
+
 
         self.run_wandb = run_wandb
         self.process = psutil.Process()
@@ -583,6 +610,17 @@ class HeimdallTrainer:
 
                 if self.cfg.tasks.args.task_type == "multiclass":
                     preds = logits.argmax(1)
+                
+                elif self.cfg.tasks.args.task_type == "binary":
+                    # multi-label binary classification → use sigmoid + threshold
+                    probs = torch.sigmoid(logits)
+                    preds = (probs > 0.5).float()
+
+                elif self.cfg.tasks.args.task_type == "regression":
+                    preds = logits
+
+                else:
+                    raise ValueError(f"Unsupported task_type: {self.cfg.tasks.args.task_type}")
 
                 y_true_batches.append(labels.cpu())
                 preds_batches.append(preds.cpu())
