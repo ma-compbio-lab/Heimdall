@@ -22,7 +22,7 @@ seed: 55
 
 # run_name: ${fg.type}_${fe.type}_${fc.name}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
 run_name: 'test_pretraining'
-work_dir: '${project_name}_results/${fg.type}_${fe.name}_${fc.type}_${dataset.dataset_name}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}_seed${seed}_ag${fe.args.drop_zeros}'  ## set your custom working directory
+# work_dir: '${project_name}_results/${fg.type}_${fe.name}_${fc.type}_${dataset.dataset_name}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}_seed${seed}_ag${fe.args.drop_zeros}'  ## set your custom working directory
 
 project_name: 'pretraining' #project name for WandB
 
