@@ -11,7 +11,7 @@ defaults:
   - override /optimizer: AdamW
   - override /fc: scbert
   - override /fe: autobin
-  - override /fg: gene2vec
+  - override /fg: esm2 #gene2vec
   - override /loss: CrossEntropyLoss
 
 ####
