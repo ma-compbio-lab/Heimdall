@@ -35,7 +35,8 @@ tasks:
   args:
     task_type: multiclass
     label_col_name: self_supervised
-    metrics: null
+    metrics:
+      - Accuracy
     track_metric: null
     splits:
       type: predefined
