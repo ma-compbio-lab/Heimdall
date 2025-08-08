@@ -9,7 +9,7 @@ defaults:
   - override /tasks: new_sctab_split # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
   - override /optimizer: AdamW
-  - override /fc: scbert
+  - override /fc: scbert_chromsort
   - override /fe: binning_scbert
   - override /fg: esm2 #gene2vec
   - override /loss: CrossEntropyLoss
