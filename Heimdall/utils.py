@@ -260,9 +260,10 @@ class GeneMappingOutput:
                 self.mapping_reduced[identifier] = hits[0]
                 self.mapping_combined[identifier] = "|".join(hits)
 
+        map_ratio = len(self.mapping_full) / len(self.identifiers)
         print(
             f"Successfully mapped {len(self.mapping_full):,} out of {len(self.identifiers):,} "
-            f"identifiers ({len(self.mapping_full) / len(self.identifiers):.1%})",
+            f"identifiers ({map_ratio:.1%})",
         )
 
 
