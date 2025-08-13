@@ -9,9 +9,9 @@ defaults:
   - override /tasks: new_sctab_split # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
   - override /optimizer: AdamW
-  - override /fc: scbert_randsort
-  - override /fe: binning_scbert
-  - override /fg: esm2 #gene2vec
+  - override /fc: scgpt
+  - override /fe: binning_scgpt
+  - override /fg: identity #gene2vec
   - override /loss: CrossEntropyLoss
 
 ####
@@ -30,6 +30,12 @@ optimizer:
   args:
     lr: 2e-3
 
+fg:
+  args:
+    frozen: True
+fc:
+  args:
+    max_input_length: 1024
 
 tasks:
   args:
@@ -40,7 +46,7 @@ tasks:
     track_metric: null
     splits:
       type: predefined
-      col: split3
+      col: split1
       keys_:
         train: train
         val: val
