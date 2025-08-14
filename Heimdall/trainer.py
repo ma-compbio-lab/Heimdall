@@ -670,7 +670,11 @@ class HeimdallTrainer:
         preds_all = torch.cat(preds_batches, 0)
 
         if self.accelerator.num_processes > 1:
-            loss = self.accelerator.gather(torch.tensor(loss)).mean().item()
+            loss_tensor = torch.tensor(
+                [loss],
+                device=self.accelerator.device,
+            )  # loss is a python floating point value, for gather operation across multiple processes needs to be cuda tensor
+            loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
         for metric_name, metric in metrics.items():
