@@ -7,8 +7,8 @@ defaults:
   - _self_  # NOTE: init self first
   - global_vars  # TODO: move to this file (_self_)?
   - /model: transformer # the chosen model
-  - /dataset: cell_type_classification_dev # dataset for the relevant task
-  - /tasks: cell_type_classification_dev # dataset for the relevant task
+  - /dataset: spatial_cancer_split1 # dataset for the relevant task
+  - /tasks: spatial_cancer_split # dataset for the relevant task
   - /scheduler: cosine # contains scheduler
   - /trainer: default # contains optimizer and trainer details
   - /optimizer: AdamW
