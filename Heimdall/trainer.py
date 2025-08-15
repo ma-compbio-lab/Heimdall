@@ -49,6 +49,9 @@ class HeimdallTrainer:
 
         args = self.cfg.tasks.args
 
+        # TODO: since we use the label_key in the CellRepresentation setup, we shouldn't need it here.
+        # It should all be accessible in the data.labels... Delete the block below if possible...?
+
         # Unified label key handling: support .obs or .obsm
         label_key = getattr(args, "label_col_name", None)
         label_obsm_key = getattr(args, "label_obsm_name", None)
@@ -72,10 +75,6 @@ class HeimdallTrainer:
 
         # else:
         #    raise ValueError("Must specify either `label_col_name` or `label_obsm_name` in the config.")
-
-        # Verify model output matches number of labels
-        # assert self.num_labels == self.model.output_dim, \
-        #     f"Mismatch between number of labels ({self.num_labels}) and model output dim ({self.model.output_dim})"
 
         self.run_wandb = run_wandb
         self.process = psutil.Process()
@@ -137,7 +136,6 @@ class HeimdallTrainer:
         self._data = data
         for split in ["train", "val", "test"]:
             setattr(self, f"dataloader_{split}", data.dataloaders[split])
-        self.num_labels = data.num_tasks
 
     def print_r0(self, payload):
         if self.accelerator.is_main_process:
@@ -626,8 +624,7 @@ class HeimdallTrainer:
                 labels = batch["labels"].to(outputs.device)
 
                 if self.cfg.tasks.args.task_type == "multiclass":
-                    preds = logits.argmax(1)
-
+                    preds = logits.argmax(dim=1)
                 elif self.cfg.tasks.args.task_type == "binary":
                     # multi-label binary classification → use sigmoid + threshold
                     probs = torch.sigmoid(logits)
