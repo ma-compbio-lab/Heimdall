@@ -18,6 +18,7 @@ from torchmetrics.regression import MeanSquaredError, R2Score
 from tqdm import tqdm
 from transformers import get_scheduler
 
+import Heimdall.datasets
 import Heimdall.losses
 import wandb
 
@@ -339,7 +340,11 @@ class HeimdallTrainer:
                 self.accelerator.log(best_metric, step=self.step)
             self.accelerator.end_training()
 
-        if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
+        if (
+            self.accelerator.is_main_process
+            and self.cfg.model.name != "logistic_regression"
+            and not isinstance(self.data.datasets["full"], Heimdall.datasets.PairedInstanceDataset)
+        ):
             self.save_adata_umap(best_test_embed, best_val_embed)
             self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
 
