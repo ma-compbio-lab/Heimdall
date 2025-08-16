@@ -44,13 +44,6 @@ class Fe(ABC):
         self.rng = np.random.default_rng(rng)
 
         if not issparse(self.adata.X):
-            print(
-                "> Data was provided in dense format, converting to CSR."
-                " Please consider pre-computing it to save memory.",
-            )
-            self.adata.X = csr_array(self.adata.X)
-
-        if not issparse(self.adata.X):
             if getattr(self.adata, "isbacked", False):
                 print("> Data is dense and backed, skipping conversion to CSR to keep memory mapping.")
             else:
