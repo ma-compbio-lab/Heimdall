@@ -673,7 +673,9 @@ class HeimdallTrainer:
             loss_tensor = torch.tensor(
                 [loss],
                 device=self.accelerator.device,
-            )  # loss is a python floating point value, for gather operation across multiple processes needs to be cuda tensor
+            )  # loss is a python floating point value, for gather
+            # operation across multiple processes needs to be
+            # cuda tensor
             loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
