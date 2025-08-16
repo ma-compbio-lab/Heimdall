@@ -7,7 +7,7 @@ import torch
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import csr_array, issparse
 
 from Heimdall.utils import _get_inputs_from_csr
 
@@ -48,7 +48,7 @@ class Fe(ABC):
                 "> Data was provided in dense format, converting to CSR."
                 " Please consider pre-computing it to save memory.",
             )
-            self.adata.X = csr_matrix(self.adata.X)
+            self.adata.X = csr_array(self.adata.X)
 
     def _get_inputs_from_csr(self, cell_index: int):
         """Get expression values and gene indices from internal CSR
@@ -110,6 +110,46 @@ class Fe(ABC):
             else:
                 continue
             self.embedding_parameters["args"][key] = value
+
+
+class ScBERTBinningFe(Fe):
+    """scBERT-style binning: cap expression values and convert to long indices."""
+
+    def __init__(
+        self,
+        adata: ad.AnnData,
+        num_bins: int,  # CLASS - 2 in scBERT
+        **fe_kwargs,
+    ):
+        fe_kwargs.pop("vocab_size", None)
+        vocab_size = num_bins + 3  # [0, ..., num_bins], <PAD>, <MASK>
+        super().__init__(adata, vocab_size=vocab_size, **fe_kwargs)
+        self.num_bins = num_bins
+
+    def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
+        """scBERT-style binning: bin values into [0, n_bins], capping high values.
+        - Zeros are retained as 0.
+        - Values > n_bins are capped at n_bins.
+        """
+        dtype = row.dtype
+        return_np = not isinstance(row, torch.Tensor)
+        row = row.cpu().numpy() if isinstance(row, torch.Tensor) else row
+
+        nan_mask = np.isnan(row)
+        binned = np.floor(row).astype(np.float32)
+        binned = np.clip(binned, a_min=0, a_max=n_bins)
+        binned[nan_mask] = np.nan  # preserve NaNs
+
+        return torch.from_numpy(binned).to(dtype) if not return_np else binned.astype(dtype)
+
+    def __getitem__(self, cell_index: int):
+        # Get gene indices and expression values
+        cell_identity_inputs, cell_expression_inputs = self._get_inputs_from_csr(cell_index)
+
+        # Apply scBERT-style binning (capped at num_bins)
+        binned_expression = self.binning(cell_expression_inputs, self.num_bins)
+
+        return cell_identity_inputs, binned_expression
 
 
 class BinningFe(Fe):
@@ -246,46 +286,6 @@ class BinningFe(Fe):
         return cell_identity_inputs, cell_expression_inputs_binned
 
 
-class ScBERTBinningFe(Fe):
-    """scBERT-style binning: cap expression values and convert to long indices."""
-
-    def __init__(
-        self,
-        adata: ad.AnnData,
-        num_bins: int,  # CLASS - 2 in scBERT
-        **fe_kwargs,
-    ):
-        fe_kwargs.pop("vocab_size", None)
-        vocab_size = num_bins + 3  # [0, ..., num_bins], <PAD>, <MASK>
-        super().__init__(adata, vocab_size=vocab_size, **fe_kwargs)
-        self.num_bins = num_bins
-
-    def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
-        """scBERT-style binning: bin values into [0, n_bins], capping high values.
-        - Zeros are retained as 0.
-        - Values > n_bins are capped at n_bins.
-        """
-        dtype = row.dtype
-        return_np = not isinstance(row, torch.Tensor)
-        row = row.cpu().numpy() if isinstance(row, torch.Tensor) else row
-
-        nan_mask = np.isnan(row)
-        binned = np.floor(row).astype(np.float32)
-        binned = np.clip(binned, a_min=0, a_max=n_bins)
-        binned[nan_mask] = np.nan  # preserve NaNs
-
-        return torch.from_numpy(binned).to(dtype) if not return_np else binned.astype(dtype)
-
-    def __getitem__(self, cell_index: int):
-        # Get gene indices and expression values
-        cell_identity_inputs, cell_expression_inputs = self._get_inputs_from_csr(cell_index)
-
-        # Apply scBERT-style binning (capped at num_bins)
-        binned_expression = self.binning(cell_expression_inputs, self.num_bins)
-
-        return cell_identity_inputs, binned_expression
-
-
 class IdentityFe(Fe):
     """Directly pass the continuous values. Remove zeros.
 
@@ -320,68 +320,3 @@ class IdentityFe(Fe):
 
     def __getitem__(self, cell_index: int):
         return self._get_inputs_from_csr(cell_index)
-
-
-# class SortingFe(Fe):
-#     """Sorting Fe."""
-#
-#     def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray]:
-#         """Returns two vectors of cell_expression_inputs and
-#         cell_identity_inputs where cell_expression_inputs is a vector of cell
-#         expression values and cell_identity_inputs is a vector of corresponding
-#         gene indices."""
-#
-#         cell_indices, cell_values = self._get_inputs_from_csr(cell_index)
-#
-#         if "medians" in self.adata.var:
-#             cell_values = cell_values - self.adata.var["medians"].iloc[cell_indices].values
-#
-#         # Sort non-zero values in descending order
-#         sorted_order = np.argsort(cell_values)[::-1]  # Indices for sorting descending
-#         cell_expression_inputs = cell_values[sorted_order]
-#         cell_identity_inputs = cell_indices[sorted_order]
-#
-#         return cell_identity_inputs, cell_expression_inputs
-
-
-# class WeightedSamplingFe(Fe):
-#     """Weighted Sampling Fe based on gene expression.
-#
-#     Args:
-#         adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
-#         d_embedding: dimensionality of embedding for each expression entity
-#         embedding_parameters: parameters for the embedding, including sampling size
-#         vocab_size: vocabulary size for embedding
-#         pad_value: value used for padding
-#         sample_size: number of genes to sample per cell
-#
-#     """
-#
-#     def __init__(
-#         self,
-#         adata: ad.AnnData,
-#         sample_size: int,
-#         **fe_kwargs,
-#     ):
-#         super().__init__(adata, **fe_kwargs)
-#         self.sample_size = sample_size
-#
-#         seed = 0  # TODO: make this configurable???
-#         self.rng = np.random.default_rng(seed)
-#
-#     def __getitem__(self, cell_index: int):
-#         cell_identity_inputs, cell_expression_inputs = self._get_inputs_from_csr(cell_index)
-#
-#         nan_mask = np.isnan(cell_expression_inputs)
-#
-#         weights = np.log1p(cell_expression_inputs[~nan_mask])
-#         weights /= np.sum(weights)
-#
-#         resampled_gene_indices = self.rng.choice(
-#             cell_identity_inputs[~nan_mask],
-#             size=self.sample_size,
-#             p=weights,
-#             replace=True,
-#         )
-#
-#         return resampled_gene_indices, resampled_gene_indices

@@ -16,5 +16,3 @@ args:
     type: Heimdall.order.ChromosomeOrder
   reduce_config:
     type: Heimdall.reduce.ChromosomeSumReduce
-
-

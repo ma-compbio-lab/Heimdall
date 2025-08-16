@@ -1,5 +1,6 @@
 """Heimdall model."""
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -43,6 +44,11 @@ class TransformerOutput:
             },
         )
         return reduced_output
+
+    def __post_init__(self):
+        # ensure output tensors are in float32 format
+        for k, v in self.__dict__.items():
+            setattr(self, k, v.float())
 
 
 class HeimdallModel(nn.Module):
@@ -221,7 +227,7 @@ class HeimdallLinear(nn.Module):
         elif pos_enc == "BERT":
             self.position_embeddings = nn.Embedding(self.fc.max_input_length + 1, d_model)  # +1 cuz of CLS
         elif pos_enc == "sincos":
-            raise NotImplementedError("Sine-Cosine Positional Encodings are not implemented yet")
+            self.position_embeddings = SinusoidalPositionalEncoding(d_model, max_len=self.fc.max_input_length + 1)
         elif pos_enc == "none" or pos_enc == "NONE":
             self.position_embeddings = None
         else:
@@ -288,7 +294,17 @@ class HeimdallLinear(nn.Module):
         ).expand((batch_size, -1))
 
         if self.position_embeddings is not None:
-            input_embeds += self.position_embeddings(position_ids)
+            if isinstance(self.position_embeddings, nn.Embedding):
+                # BERT-style learned embeddings
+                position_ids = torch.arange(
+                    seq_length,
+                    dtype=torch.long,
+                    device=input_embeds.device,
+                ).expand((batch_size, -1))
+                input_embeds += self.position_embeddings(position_ids)
+            else:
+                # Sinusoidal encoding
+                input_embeds = self.position_embeddings(input_embeds)
 
         # Encoder
         transformer_encoder_output = self.encoder(input_embeds, attention_mask)
@@ -431,7 +447,8 @@ class HeimdallTransformer(nn.Module):
         elif pos_enc == "BERT":
             self.position_embeddings = nn.Embedding(self.fc.max_input_length + 1, d_model)  # +1 cuz of CLS
         elif pos_enc == "sincos":
-            raise NotImplementedError("Sine-Cosine Positional Encodings are not implemented yet")
+            # raise NotImplementedError("Sine-Cosine Positional Encodings are not implemented yet")
+            self.position_embeddings = SinusoidalPositionalEncoding(d_model, max_len=self.fc.max_input_length + 1)
         elif pos_enc == "none" or pos_enc == "NONE":
             self.position_embeddings = None
         else:
@@ -493,8 +510,17 @@ class HeimdallTransformer(nn.Module):
         ).expand((batch_size, -1))
 
         if self.position_embeddings is not None:
-            input_embeds += self.position_embeddings(position_ids)
-
+            if isinstance(self.position_embeddings, nn.Embedding):
+                # BERT-style learned embeddings
+                position_ids = torch.arange(
+                    seq_length,
+                    dtype=torch.long,
+                    device=input_embeds.device,
+                ).expand((batch_size, -1))
+                input_embeds += self.position_embeddings(position_ids)
+            else:
+                # Sinusoidal encoding
+                input_embeds = self.position_embeddings(input_embeds)
         # # Dynamically adding the conditional tokens, if there are any
         # if conditional_tokens is not None:
         #     assert isinstance(
@@ -603,6 +629,21 @@ class FFN(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+
+class SinusoidalPositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)  # Shape: (1, max_len, d_model)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        return x + self.pe[:, : x.size(1)]
 
 
 class PreNormResidual(nn.Module):

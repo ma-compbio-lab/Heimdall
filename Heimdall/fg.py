@@ -79,7 +79,8 @@ class Fg(ABC):
         valid_mask = self.adata.var.loc[gene_names, "identity_valid_mask"]
         if (valid_mask.sum() != len(gene_names)) and not return_mask:
             raise KeyError(
-                "At least one gene is not mapped in this Fg. Please remove such genes from consideration in the Fc.",
+                "At least one gene is not mapped in this `Fg`. "
+                "Please remove such genes from consideration in the `Fc`.",
             )
 
         if return_mask:
@@ -194,6 +195,13 @@ class PretrainedFg(Fg, ABC):
         self.prepare_embedding_parameters()
 
         print(f"Found {len(valid_indices)} genes with mappings out of {len(self.adata.var_names)} genes.")
+
+        map_ratio = len(valid_indices) / len(self.adata.var_names)
+        if map_ratio < 0.5:
+            raise ValueError(
+                "Very few genes in the dataset are mapped by the `Fg`."
+                "Please check if the species is set correctly in the config.",
+            )
 
 
 class IdentityFg(Fg):

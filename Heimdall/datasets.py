@@ -4,8 +4,10 @@ from pprint import pformat
 from typing import TYPE_CHECKING, Tuple, Union
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import Dataset as PyTorchDataset
 
 if TYPE_CHECKING:
@@ -285,13 +287,35 @@ class PretrainDataset(SingleInstanceDataset, ABC):
         super().__init__(*args, **kwargs)
 
     def _setup_labels_and_pre_splits(self):
+        adata = self.data.adata
+        dataset_task_cfg = self.data.dataset_task_cfg
+        task_type = dataset_task_cfg.task_type
+        assert task_type == "multiclass"  # For MLM pretraining task
+
         # # FIX: not necessarily the case,e.g., UCE.....
         # # FIX: probably doesn't work after we changed fg/fe/fc implementation...
         # identity_inputs, expression_inputs = self.data.fc[:]
         identity_inputs = [self.data.fc[i][0] for i in range(len(self.data.adata))]
         identity_inputs = np.vstack(identity_inputs).astype(int)
         self.labels = identity_inputs
+
         # self.labels = self.data.fc.copy()
+        if "label_obsm_name" in dataset_task_cfg:
+            assert "label_col_name" not in dataset_task_cfg
+
+            # TODO: not scalabel to have sparse_output=False
+            binarized = MultiLabelBinarizer(
+                sparse_output=True,
+                classes=np.arange(adata.n_vars + 1),
+            ).fit_transform(self.labels)
+
+            adata.obsm[dataset_task_cfg.label_obsm_name] = pd.DataFrame.sparse.from_spmatrix(
+                data=binarized,
+                index=adata.obs_names,
+                columns=adata.var_names.append(pd.Index(["pad"])),
+            )
+
+            print(f"labels shape {identity_inputs.shape}")
 
     def __getitem__(self, idx):
         data = super().__getitem__(idx)
@@ -313,7 +337,7 @@ class MaskedPretrainDataset(PretrainDataset, ABC):
 class SeqMaskedPretrainDataset(MaskedPretrainDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._num_tasks = self.data.sequence_length  # number of genes
+        # self._num_tasks = self.data.sequence_length  # number of genes
 
     @property
     def mask_token(self):
