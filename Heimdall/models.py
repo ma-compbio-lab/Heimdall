@@ -1,5 +1,6 @@
 """Heimdall model."""
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -628,9 +629,6 @@ class FFN(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-
-
-import math
 
 
 class SinusoidalPositionalEncoding(nn.Module):
