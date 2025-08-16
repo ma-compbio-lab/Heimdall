@@ -30,6 +30,7 @@ class Fg(ABC):
         pad_value: int = None,
         mask_value: int = None,
         frozen: bool = False,
+        rng: int | np.random.Generator = 0,
     ):
         self.adata = adata
         _, self.num_genes = adata.shape
@@ -39,6 +40,7 @@ class Fg(ABC):
         self.pad_value = vocab_size - 2 if pad_value is None else pad_value
         self.mask_value = vocab_size - 1 if mask_value is None else mask_value
         self.frozen = frozen
+        self.rng = np.random.default_rng(rng)
 
     @abstractmethod
     def preprocess_embeddings(self, float_dtype: str = "float32"):
@@ -77,7 +79,8 @@ class Fg(ABC):
         valid_mask = self.adata.var.loc[gene_names, "identity_valid_mask"]
         if (valid_mask.sum() != len(gene_names)) and not return_mask:
             raise KeyError(
-                "At least one gene is not mapped in this Fg. Please remove such genes from consideration in the Fc.",
+                "At least one gene is not mapped in this `Fg`. "
+                "Please remove such genes from consideration in the `Fc`.",
             )
 
         if return_mask:
@@ -192,6 +195,13 @@ class PretrainedFg(Fg, ABC):
         self.prepare_embedding_parameters()
 
         print(f"Found {len(valid_indices)} genes with mappings out of {len(self.adata.var_names)} genes.")
+
+        map_ratio = len(valid_indices) / len(self.adata.var_names)
+        if map_ratio < 0.5:
+            raise ValueError(
+                "Very few genes in the dataset are mapped by the `Fg`."
+                "Please check if the species is set correctly in the config.",
+            )
 
 
 class IdentityFg(Fg):

@@ -44,6 +44,11 @@ class TransformerOutput:
         )
         return reduced_output
 
+    def __post_init__(self):
+        # ensure output tensors are in float32 format
+        for k, v in self.__dict__.items():
+            setattr(self, k, v.float())
+
 
 class HeimdallModel(nn.Module):
     def __init__(
@@ -130,6 +135,7 @@ class ExpressionOnly(nn.Module):
 
     def forward(self, inputs, labels=None, conditional_tokens=None, attention_mask=None):
         _, outputs = inputs  # extract expression only
+
         return outputs.to(get_dtype(self.float_dtype))  # convert to float32?
 
 
@@ -269,7 +275,7 @@ class HeimdallLinear(nn.Module):
         """
         identity_inputs, expression_inputs = inputs
 
-        input_embeds = self.fc.embed_cells(
+        input_embeds = self.fc.reduce(
             identity_inputs,
             self.gene_embeddings,
             expression_inputs,
@@ -327,11 +333,11 @@ class HeimdallTransformerEncoder(nn.Module):
                 from transformers import BertConfig
 
                 print("FlashAttention Library Successfully Loaded")
-            except ImportError:
-                print(
-                    "Warning: FlashAttention Not Installed, "
-                    "when initializing model make sure to use default Transformers",
-                )
+            except ImportError as e:
+                raise ImportError(
+                    "`FlashAttention` is not installed, "
+                    "when initializing model, make sure to use a default transformer instead.",
+                ) from e
 
             fa_config = BertConfig(
                 hidden_size=d_model,
@@ -449,18 +455,7 @@ class HeimdallTransformer(nn.Module):
             raise ValueError("pos_enc canonly be: BERT")
 
         # Setting up the conditional embeddings; TODO: can this fit into the fg/fe framework instead?
-        # self.conditional_embeddings = nn.ModuleDict()
         self.metadata_embeddings = instantiate_from_config(data.fc.embedding_parameters)
-        # if conditional_input_types is not None:
-        #     for name, spec in conditional_input_types.items():
-        #         if spec["type"] == "learned":
-        #             self.conditional_embeddings[name] = nn.Embedding(spec["vocab_size"], d_model)
-        #         elif spec["type"] == "predefined":
-        #             self.conditional_embeddings[name] = None  # no need to specify anything, loads in directly
-        #         else:
-        #             raise ValueError(
-        #                 f"conditional_input_types.{name}['type'] must be either 'learned' or 'predefined'",
-        #             )
 
         # encoder_layer = instantiate_from_config(encoder_layer_parameters)
         # self.transformer_encoder = instantiate_from_config(encoder_parameters, encoder_layer)
@@ -496,7 +491,7 @@ class HeimdallTransformer(nn.Module):
         """
         identity_inputs, expression_inputs = inputs
 
-        input_embeds = self.fc.embed_cells(
+        input_embeds = self.fc.reduce(
             identity_inputs,
             self.gene_embeddings,
             expression_inputs,

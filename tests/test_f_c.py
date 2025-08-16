@@ -59,8 +59,7 @@ def test_scgpt_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, scg
     rng = np.random.default_rng(seed)
     for cell_index in range(len(zero_expression_mock_dataset)):
         identity_inputs, expression_inputs, padding_mask = scgpt_fc[cell_index]
-
-        sample_indices = rng.choice(raw_seq_length, scgpt_fc.max_input_length, replace=False)
+        sample_indices = rng.choice(raw_seq_length, raw_seq_length, replace=False)
         assert np.allclose(identity_expected[[cell_index], sample_indices], identity_inputs)
         assert np.allclose(expression_expected[[cell_index], sample_indices], expression_inputs)
         assert len(identity_inputs) == scgpt_fc.max_input_length
@@ -68,19 +67,85 @@ def test_scgpt_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, scg
         assert not np.any(padding_mask[: scgpt_fc.max_input_length])
 
 
+def test_scBERT_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, scbert_fc):
+    identity_expected = csr_array(
+        np.array(
+            [
+                [1, 2, 3],
+                [0, 2, 3],
+                [0, 1, 3],
+                [0, 1, 2],
+            ],
+        ),
+    )
+
+    expression_expected = csr_array(
+        np.array(
+            [
+                [2, 2, 1],
+                [1, 2, 2],
+                [2, 1, 2],
+                [2, 2, 1],
+            ],
+        ),
+    )
+
+    _, raw_seq_length = identity_expected.shape
+
+    seed = 0
+    rng = np.random.default_rng(seed)
+    for cell_index in range(len(zero_expression_mock_dataset)):
+        identity_inputs, expression_inputs, padding_mask = scbert_fc[cell_index]
+        sample_indices = rng.choice(raw_seq_length, raw_seq_length, replace=False)
+        assert np.allclose(identity_expected[[cell_index], sample_indices], identity_inputs)
+        assert np.allclose(expression_expected[[cell_index], sample_indices], expression_inputs)
+        assert len(identity_inputs) == scbert_fc.max_input_length
+
+        assert not np.any(padding_mask[: scbert_fc.max_input_length])
+
+
+# def test_uce_fc_order(mock_dataset_all_valid_genes, uce_fc):
+#     _, num_genes = weighted_sampling_fe.adata.shape
+#
+#     expected = np.array(
+#         [
+#             [1, 1, 0, 0, 2],
+#             [2, 2, 2, 1, 2],
+#             [2, 0, 2, 0, 2],
+#             [0, 2, 1, 0, 0],
+#         ],
+#     )
+#
+#     for cell_index in range(len(identity_fg.adata)):
+#         cell_identity_inputs, cell_expression_inputs = weighted_sampling_fe[cell_index]
+#         assert np.allclose(expected[cell_index], cell_identity_inputs)
+#
+#     assert weighted_sampling_fe.pad_value == 4
+#     assert weighted_sampling_fe.mask_value == 5
+
+
 def test_uce_fc_preprocess_cells_and_getitem(mock_dataset_all_valid_genes, uce_fc):
     identity_expected = csr_array(
         np.array(
             [
                 [-4, 0, 0],
-                [-3, 2, 2],
-                [-3, 2, 2],
+                [-2, 1, -1],
+                [-2, 1, 1],
                 [-4, 0, 0],
             ],
         ),
     )
 
-    expression_expected = identity_expected
+    expression_expected = csr_array(
+        np.array(
+            [
+                [-4, 1, 1],
+                [-2, 1, -1],
+                [-2, 2, 2],
+                [-4, 4, 4],
+            ],
+        ),
+    )
 
     _, raw_seq_length = identity_expected.shape
 
@@ -93,9 +158,9 @@ def test_uce_fc_preprocess_cells_and_getitem(mock_dataset_all_valid_genes, uce_f
         assert not np.any(padding_mask[:raw_seq_length])
 
 
-def test_geneformer_fc_embed_cells(geneformer_fc):
+def test_geneformer_fc_reduce(geneformer_fc):
     ...
-    # geneformer_fc.embed_cells() # TODO: fill out function call
+    # geneformer_fc.reduce() # TODO: fill out function call
 
     # output = mock_dataset.obsm["cell_identity_inputs"]
 

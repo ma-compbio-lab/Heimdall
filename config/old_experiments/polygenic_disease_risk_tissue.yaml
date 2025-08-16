@@ -6,7 +6,7 @@
 
 defaults:
   - override /model: transformer # the chosen model
-  - override /dataset: scdrs_tissue # dataset for the relevant task
+  - override /dataset: scdrs # dataset for the relevant task
   - override /tasks: polygenic_disease_risk # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
   - override /trainer: default # contains optimizer and trainer details

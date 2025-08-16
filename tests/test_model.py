@@ -98,14 +98,19 @@ def paired_task_config(request, toy_paried_data_path):
         - 0.95
         foreach: false
     fc:
-      type: Heimdall.fc.GeneformerFc
+      type: Heimdall.fc.Fc  # Geneformer
       args:
         max_input_length: 2048
-        num_metadata_tokens: 0
         embedding_parameters:
           type: torch.nn.Module  # Should throw an error if called
+        tailor_config:
+          type: Heimdall.tailor.ReorderTailor
+        order_config:
+          type: Heimdall.order.ExpressionOrder
+        reduce_config:
+          type: Heimdall.reduce.IdentityReduce
     fe:
-      type: Heimdall.fe.SortingFe
+      type: Heimdall.fe.IdentityFe
       args:
         embedding_parameters:
           type: Heimdall.embedding.FlexibleTypeEmbedding
@@ -197,15 +202,21 @@ def single_task_config(toy_single_data_path):
     fc:
       type: Heimdall.fc.DummyFc
       args:
-        num_metadata_tokens: 0
         embedding_parameters:
           type: torch.nn.Module  # Should throw an error if called
+        tailor_config:
+          type: Heimdall.tailor.Tailor  # Should throw an error if called
+        order_config:
+          type: Heimdall.order.Order  # Should throw an error if called
+        reduce_config:
+          type: Heimdall.reduce.Reduce  # Should throw an error if called
     fe:
-      type: Heimdall.fe.DummyFe
+      type: Heimdall.fe.IdentityFe
       args:
         embedding_parameters:
           type: torch.nn.Module
         d_embedding: null
+        drop_zeros: False
     fg:
       name: IdentityFg
       type: Heimdall.fg.IdentityFg

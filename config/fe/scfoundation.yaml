@@ -1,4 +1,4 @@
-type: Heimdall.fe.NonzeroIdentityFe
+type: Heimdall.fe.IdentityFe
 name: Heimdall.fe.scfound
 
 args:
