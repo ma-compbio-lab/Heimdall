@@ -50,6 +50,13 @@ class Fe(ABC):
             )
             self.adata.X = csr_array(self.adata.X)
 
+        if not issparse(self.adata.X):
+            if getattr(self.adata, "isbacked", False):
+                print("> Data is dense and backed, skipping conversion to CSR to keep memory mapping.")
+            else:
+                print("> Data was provided in dense format, converting to CSR. Consider precomputing.")
+                self.adata.X = csr_array(self.adata.X)
+
     def _get_inputs_from_csr(self, cell_index: int):
         """Get expression values and gene indices from internal CSR
         representation.
