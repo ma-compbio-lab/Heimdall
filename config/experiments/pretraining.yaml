@@ -4,7 +4,7 @@
 # Set the experiment parts you would like to import
 ####
 defaults:
-  - override /model: transformer_lmhead # the chosen model
+  - override /model: transformer # the chosen model
   - override /dataset: new_sctab # dataset for the relevant task
   - override /tasks: pretrain_geneformer_dev # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
