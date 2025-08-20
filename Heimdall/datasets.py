@@ -295,30 +295,38 @@ class PretrainDataset(SingleInstanceDataset, ABC):
         # # FIX: not necessarily the case,e.g., UCE.....
         # # FIX: probably doesn't work after we changed fg/fe/fc implementation...
         # identity_inputs, expression_inputs = self.data.fc[:]
-        identity_inputs = [self.data.fc[i][0] for i in range(len(self.data.adata))]
-        identity_inputs = np.vstack(identity_inputs).astype(int)
-        self.labels = identity_inputs
+        # identity_inputs = [self.data.fc[i][0] for i in range(len(self.data.adata))]
+        # identity_inputs = self.data.fc[0][0]
+        # identity_inputs = np.vstack(identity_inputs).astype(int)
+        # self.labels = identity_inputs
 
-        # self.labels = self.data.fc.copy()
+        # # self.labels = self.data.fc.copy()
         if "label_obsm_name" in dataset_task_cfg:
             assert "label_col_name" not in dataset_task_cfg
 
-            # TODO: not scalabel to have sparse_output=False
-            binarized = MultiLabelBinarizer(
-                sparse_output=True,
-                classes=np.arange(adata.n_vars + 1),
-            ).fit_transform(self.labels)
+            # # TODO: not scalabel to have sparse_output=False
+            # binarized = MultiLabelBinarizer(
+            #     sparse_output=True,
+            #     classes=np.arange(adata.n_vars + 1),
+            # ).fit_transform(identity_inputs)
 
-            adata.obsm[dataset_task_cfg.label_obsm_name] = pd.DataFrame.sparse.from_spmatrix(
-                data=binarized,
-                index=adata.obs_names,
+            adata.obsm[dataset_task_cfg.label_obsm_name] = pd.DataFrame(
                 columns=adata.var_names.append(pd.Index(["pad"])),
+                index=adata.obs_names,
             )
 
-            print(f"labels shape {identity_inputs.shape}")
+            # print(f"labels shape {identity_inputs.shape}")
 
     def __getitem__(self, idx):
-        data = super().__getitem__(idx)
+
+        identity_inputs, expression_inputs, expression_padding = self.data.fc[idx]
+
+        data = {
+            "identity_inputs": identity_inputs,
+            "expression_inputs": expression_inputs,
+            "expression_padding": expression_padding,
+            "labels": identity_inputs,
+        }
         return self._transform(data)
 
     @abstractmethod

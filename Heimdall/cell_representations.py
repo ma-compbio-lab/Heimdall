@@ -104,7 +104,7 @@ class CellRepresentation(SpecialTokenMixin):
             self.tokenize_cells()
             self.prepare_dataset_loaders()
 
-        super().__init__()
+            super().__init__()
 
     # @property
     # @check_states(adata=True, processed_fcfg=True)
