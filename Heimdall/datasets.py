@@ -1,15 +1,9 @@
-import math
 import warnings
 from abc import ABC, abstractmethod, abstractproperty
-from glob import glob
-from pathlib import Path
 from pprint import pformat
 from typing import TYPE_CHECKING, Tuple, Union
 
-import anndata
 import numpy as np
-import pandas as pd
-import torch
 from numpy.typing import NDArray
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset as PyTorchDataset
@@ -366,7 +360,6 @@ class SeqMaskedPretrainDataset(MaskedPretrainDataset):
 class PartitionedDataset(SeqMaskedPretrainDataset):
     def __init__(self, data, *args, **kwargs):
         self.partition_splits = {}
-        self.partition_split_sizes = {}
         super().__init__(data, *args, **kwargs)
 
     @property
@@ -394,29 +387,25 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
         print("> Found predefined splits in config, extracting splits.")
         for partition in range(self.num_partitions):
             self.partition = partition
-            self.partition_splits[partition], self.partition_split_sizes[partition] = self._get_partition_splits(
-                partition,
-            )
+            self.partition_splits[partition] = self._get_partition_splits(partition)
 
         self.partition = 0
 
     def _setup_random_splits(self):
-        print(f"> Did not find splits in config, generating random splits.")
+        print("> Did not find splits in config, generating random splits.")
         for partition in range(self.num_partitions):
             self.partition = partition
-            self.partition_splits[partition], self.partition_split_sizes[partition] = self._get_random_splits_partition(
+            self.partition_splits[partition] = self._get_random_splits_partition(
                 partition,
             )
 
         self.partition = 0
 
     def _get_partition_splits(self, part_id):
-        num_samples_partition = self._data.partition_sizes[part_id]
         dataset_task_cfg = self.data.dataset_task_cfg
         adata = self.data.adata
 
         partition_splits = {}
-        partition_split_sizes = {}
         if hasattr(dataset_task_cfg.splits, "col"):
             split_col = adata.obs[dataset_task_cfg.splits.col]
         else:
@@ -431,9 +420,8 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
                 )
                 continue
             partition_splits[split] = np.where(split_col == split_key)[0]
-            partition_split_sizes[split] = len(partition_splits[split])
 
-        return partition_splits, partition_split_sizes
+        return partition_splits
 
     def _get_random_splits_partition(self, part_id):
         num_samples_partition = self._data.partition_sizes[part_id]
@@ -445,11 +433,7 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
         train_idx, test_val_idx = train_test_split(np.arange(num_samples_partition), train_size=0.8, random_state=seed)
         val_idx, test_idx = train_test_split(test_val_idx, test_size=0.5, random_state=seed)
 
-        return {"train": train_idx, "val": val_idx, "test": test_idx}, {
-            "train": len(train_idx),
-            "val": len(val_idx),
-            "test": len(test_idx),
-        }
+        return {"train": train_idx, "val": val_idx, "test": test_idx}
 
 
 class PartitionedSubset(Subset):
@@ -475,9 +459,9 @@ class PartitionedSubset(Subset):
         # add batched sampling support when parent dataset supports it.
         # see torch.utils.data._utils.fetch._MapDatasetFetcher
         if callable(getattr(self.dataset, "__getitems__", None)):
-            return self.dataset.__getitems__([self.indices[self.dataset.partition][idx] for idx in indices])  # type: ignore[attr-defined]
+            return self.dataset.__getitems__([self.indices[self.dataset.partition][idx] for idx in indices])
         else:
             return [self.dataset[self.indices[self.dataset.partition][idx]] for idx in indices]
 
     def __len__(self):
-        return len([indices for indices in self.indices.values()])
+        return sum(len(indices) for indices in self.indices.values())

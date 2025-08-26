@@ -218,8 +218,8 @@ class CellRepresentation(SpecialTokenMixin):
 
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():
-            loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(preprocessed_cfg_path)).replace("\n", "\n    ")
             print(f"> Found already preprocessed anndata: {preprocessed_data_path}")
+            # loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(preprocessed_cfg_path)).replace("\n", "\n    ")
             # print(f"  Preprocessing config:\n    {loaded_cfg_str}") # TODO: add verbosity level
             self.adata = ad.read_h5ad(
                 preprocessed_data_path,
@@ -358,6 +358,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     @check_states(adata=True, processed_fcfg=True)
     def prepare_dataset_loaders(self):
+        full_dataset = self.datasets["full"]
         # Set up dataset splits given the data splits
         for split, split_idx in self.splits.items():
             self.datasets[split] = Subset(full_dataset, split_idx)
@@ -449,8 +450,8 @@ class CellRepresentation(SpecialTokenMixin):
                 "data.pkl",
             )
             if processed_data_path.is_file():
-                loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(processed_cfg_path)).replace("\n", "\n    ")
                 print(f"> Using processed cell representations: {processed_data_path}")
+                # loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(processed_cfg_path)).replace("\n", "\n    ")
                 # print(f"  Processing config:\n    {loaded_cfg_str}") # TODO: add verbosity levels
 
                 with open(processed_data_path, "rb") as rep_file:

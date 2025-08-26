@@ -1,8 +1,6 @@
 import math
 
 import numpy as np
-import torch
-from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import DistributedSampler
 
 from Heimdall.datasets import PartitionedSubset
@@ -20,18 +18,7 @@ class PartitionedDistributedSampler(DistributedSampler):
         self.rng = np.random.default_rng(seed=full_dataset._data._cfg.seed)
         self.partition_order = list(range(full_dataset.num_partitions))  # Provide an arg to shuffle
 
-        # counter = 0
-        # self.indices = {}
         self.partition_sizes = {partition: len(indices) for partition, indices in subset.indices.items()}
-
-        # for partition, partition_split_sizes in full_dataset.partition_split_sizes.items():
-        #     partition_split_size = partition_split_sizes[split]
-        #     partition_indices = subset.indices[counter:counter+partition_split_size]
-        #     counter += partition_split_size
-
-        #     partition_indices -= full_dataset._data.offsets[partition]
-        #     self.indices[partition] = partition_indices
-
         self.total_samples_per_partition = {}
 
         for p, part_size in self.partition_sizes.items():
@@ -80,7 +67,7 @@ class PartitionedDistributedSampler(DistributedSampler):
         if self.shuffle:
             self.rng.shuffle(self.partition_order)
 
-        for i, partition in enumerate(self.partition_order):
+        for partition in self.partition_order:
             full_dataset.partition = partition
             indices = self.generate_partition_indices(partition)
             yield from indices
