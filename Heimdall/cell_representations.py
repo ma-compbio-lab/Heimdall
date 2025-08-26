@@ -2,6 +2,7 @@
 
 import pickle as pkl
 import warnings
+from collections import defaultdict
 from functools import partial, wraps
 from pathlib import Path
 from pprint import pformat
@@ -16,9 +17,10 @@ from omegaconf import DictConfig, OmegaConf
 from scipy import sparse
 from scipy.sparse import csc_array
 from sklearn.utils import resample
+from torch import distributed as dist
 from torch.utils.data import DataLoader, Subset
 
-from Heimdall.datasets import Dataset
+from Heimdall.datasets import Dataset, PartitionedSubset
 from Heimdall.fc import Fc
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
@@ -218,7 +220,7 @@ class CellRepresentation(SpecialTokenMixin):
         if preprocessed_data_path.is_file():
             loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(preprocessed_cfg_path)).replace("\n", "\n    ")
             print(f"> Found already preprocessed anndata: {preprocessed_data_path}")
-            print(f"  Preprocessing config:\n    {loaded_cfg_str}")
+            # print(f"  Preprocessing config:\n    {loaded_cfg_str}") # TODO: add verbosity level
             self.adata = ad.read_h5ad(
                 preprocessed_data_path,
                 backed="r",
@@ -241,7 +243,6 @@ class CellRepresentation(SpecialTokenMixin):
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
 
         preprocessed_data_path, preprocessed_cfg_path, cfg = self.get_preprocessed_data_path()
-        print(preprocessed_data_path, preprocessed_cfg_path)
         if preprocessed_data_path is not None:
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
             if is_cached:
@@ -357,7 +358,6 @@ class CellRepresentation(SpecialTokenMixin):
 
     @check_states(adata=True, processed_fcfg=True)
     def prepare_dataset_loaders(self):
-        full_dataset = self.datasets["full"]
         # Set up dataset splits given the data splits
         for split, split_idx in self.splits.items():
             self.datasets[split] = Subset(full_dataset, split_idx)
@@ -451,7 +451,7 @@ class CellRepresentation(SpecialTokenMixin):
             if processed_data_path.is_file():
                 loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(processed_cfg_path)).replace("\n", "\n    ")
                 print(f"> Using processed cell representations: {processed_data_path}")
-                print(f"  Processing config:\n    {loaded_cfg_str}")
+                # print(f"  Processing config:\n    {loaded_cfg_str}") # TODO: add verbosity levels
 
                 with open(processed_data_path, "rb") as rep_file:
                     (
@@ -540,6 +540,7 @@ class CellRepresentation(SpecialTokenMixin):
 class PartitionedCellRepresentation(CellRepresentation):
     def __init__(self, config, auto_setup: bool = True):
         super().__init__(config, auto_setup=False)
+        self.get_context()
 
         # Expect `data_path` to hold parent directory, not filepath
         self.partition_file_paths = sorted(
@@ -549,7 +550,7 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.partition_sizes = {}
 
         for partition, f in enumerate(self.partition_file_paths):
-            adata = anndata.read_h5ad(f, backed="r")
+            adata = ad.read_h5ad(f, backed="r")
             self.partition_sizes[partition] = adata.n_obs
             self.partition = partition
 
@@ -557,7 +558,6 @@ class PartitionedCellRepresentation(CellRepresentation):
             del adata
 
         self.num_partitions = len(self.partition_file_paths)
-        self.total_num_samples = np.cumsum(self.partition_sizes)
 
         self.partition = 0  # TODO: don't hardcode
         self.prepare_full_dataset()
@@ -578,6 +578,9 @@ class PartitionedCellRepresentation(CellRepresentation):
     @partition.setter
     def partition(self, partition):
         """Move to a new partition."""
+        if getattr(self, "_partition", None) == partition:
+            return
+
         self.close_partition()
         self._partition = partition
 
@@ -585,29 +588,50 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.dataset_preproc_cfg.data_path = self.partition_file_paths[partition]
         self.auto_setup()
 
+    def get_context(self):
+        if dist.is_initialized():
+            self.rank = dist.get_rank()
+            self.num_replicas = dist.get_world_size()
+        else:
+            self.rank = 0
+            self.num_replicas = 1
+
     @check_states(adata=True, processed_fcfg=True)
     def prepare_dataset_loaders(self):
+        full_dataset = self.datasets["full"]
         # TODO: implement. It may be okay to just inherit from `CellRepresentation`, if we
         # implement `PartitionedDataset` correctly, actually...
 
         # Set up dataset splits given the data splits
-        for split, split_idx in self.splits.items():
-            self.datasets[split] = Subset(full_dataset, split_idx)
+        overall_splits = defaultdict(dict)
+        for partition, splits in full_dataset.partition_splits.items():
+            for split, split_idx in splits.items():
+                overall_splits[split][partition] = split_idx
 
-        # sampler = PartitionedDistributedSampler(...) # TODO: instantiate distributed sampler
+        for split in overall_splits:
+            self.datasets[split] = PartitionedSubset(full_dataset, overall_splits[split])
+
+        # sampler = PartitionedDistributedSampler(split=split) # TODO: instantiate distributed sampler
         # Set up data loaders
-        dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
+        # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
         dataloader_kwargs = {"num_workers": 4}  # TODO: we can parse additional data loader kwargs from config
         self.dataloaders = {
             split: DataLoader(
                 dataset,
                 batch_size=self.dataset_task_cfg.batchsize,
-                shuffle=self.dataset_task_cfg.shuffle if split == "train" else False,
+                # shuffle=self.dataset_task_cfg.shuffle if split == "train" else False,
+                sampler=PartitionedDistributedSampler(
+                    dataset,
+                    num_replicas=self.num_replicas,
+                    rank=self.rank,
+                    shuffle=self.dataset_task_cfg.shuffle if split == "train" else False,
+                ),
                 # sampler=sampler,
                 collate_fn=heimdall_collate_fn,
                 **dataloader_kwargs,
             )
             for split, dataset in self.datasets.items()
+            if split != "full"  # TODO: add back 'full'
         }
 
         dataset_str = pformat(self.datasets).replace("\n", "\n\t")

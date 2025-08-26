@@ -1,18 +1,40 @@
 import math
 
+import numpy as np
 import torch
+from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import DistributedSampler
+
+from Heimdall.datasets import PartitionedSubset
 
 
 class PartitionedDistributedSampler(DistributedSampler):
     """Distributed sampler for `PartitionedDataset`."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, dataset: PartitionedSubset, *args, **kwargs):
+        super().__init__(dataset, *args, **kwargs)
+
+        subset = self.dataset
+        full_dataset = subset.dataset
+
+        self.rng = np.random.default_rng(seed=full_dataset._data._cfg.seed)
+        self.partition_order = list(range(full_dataset.num_partitions))  # Provide an arg to shuffle
+
+        # counter = 0
+        # self.indices = {}
+        self.partition_sizes = {partition: len(indices) for partition, indices in subset.indices.items()}
+
+        # for partition, partition_split_sizes in full_dataset.partition_split_sizes.items():
+        #     partition_split_size = partition_split_sizes[split]
+        #     partition_indices = subset.indices[counter:counter+partition_split_size]
+        #     counter += partition_split_size
+
+        #     partition_indices -= full_dataset._data.offsets[partition]
+        #     self.indices[partition] = partition_indices
 
         self.total_samples_per_partition = {}
 
-        for p, part_size in self.dataset._data.partition_sizes.items():
+        for p, part_size in self.partition_sizes.items():
             # If the dataset length is evenly divisible by # of replicas, then there
             # is no need to drop any data, since the dataset will be split equally.
             if self.drop_last and part_size % self.num_replicas != 0:  # type: ignore[arg-type]
@@ -27,12 +49,12 @@ class PartitionedDistributedSampler(DistributedSampler):
 
             self.total_samples_per_partition[p] = num_samples_part * self.num_replicas
 
-    def generate_partition_indices(self, partition, rand_generator=None):
-
+    def generate_partition_indices(self, partition):
+        indices = range(self.partition_sizes[partition])
         if self.shuffle:
-            indices = torch.randperm(len(self.dataset), generator=rand_generator).tolist()  # type: ignore[arg-type]
-        else:
-            indices = list(range(len(self.dataset)))  # type: ignore[arg-type]
+            indices = self.rng.permutation(indices)
+
+        indices = indices.astype(int).tolist()
 
         if not self.drop_last:
             # add extra samples to make it evenly divisible
@@ -50,32 +72,18 @@ class PartitionedDistributedSampler(DistributedSampler):
         indices = indices[self.rank : self.total_samples_per_partition[partition] : self.num_replicas]
         assert len(indices) == self.total_samples_per_partition[partition] / self.num_replicas
 
-        return indices[:500]  # TODO: why 500?
+        return iter(indices)  # TODO: why 500?
 
     def __iter__(self):
-        partition_order = list(range(self.dataset.num_partitions))  # Provide an arg to shuffle
-        g = None
-
+        subset = self.dataset
+        full_dataset = subset.dataset
         if self.shuffle:
-            # deterministically shuffle based on epoch and seed
-            g = torch.Generator()
-            g.manual_seed(self.seed + self.epoch)
+            self.rng.shuffle(self.partition_order)
 
-            # partition_order = torch.randperm(partition_order, generator=rand_generator).tolist()
-            # NOT SUPPORTED YET, WILL NEED TO MAKE SURE PARTITION IS LOADED
-
-        for i, partition in enumerate(partition_order):
-
-            partition_indices = self.generate_partition_indices(partition, rand_generator=g)
-
-            yield from partition_indices
-
-            # trigger loading of next partition
-            if i < self.dataset.num_partitions - 1:
-                self.dataset.partition = partition_order[i + 1]
-            # trigger end of epoch
-            else:
-                raise StopIteration
+        for i, partition in enumerate(self.partition_order):
+            full_dataset.partition = partition
+            indices = self.generate_partition_indices(partition)
+            yield from indices
 
     def __len__(self) -> int:
-        return sum(self.num_samples_per_partition.values())
+        return sum(self.total_samples_per_partition.values())

@@ -13,6 +13,7 @@ import torch
 from numpy.typing import NDArray
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset as PyTorchDataset
+from torch.utils.data import Subset
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
@@ -143,9 +144,6 @@ class SingleInstanceDataset(Dataset):
         self.labels = labels
 
         # Set up splits and task mask
-        if "splits" not in dataset_task_cfg:  # no predefined splits specified
-            pass
-
         splits = dataset_task_cfg.get("splits", None)
         if splits is None:
             return
@@ -318,7 +316,6 @@ class PretrainDataset(SingleInstanceDataset, ABC):
     #         # print(f"labels shape {identity_inputs.shape}")
 
     def __getitem__(self, idx):
-
         identity_inputs, expression_inputs, expression_padding = self.data.fc[idx]
 
         data = {
@@ -369,6 +366,7 @@ class SeqMaskedPretrainDataset(MaskedPretrainDataset):
 class PartitionedDataset(SeqMaskedPretrainDataset):
     def __init__(self, data, *args, **kwargs):
         self.partition_splits = {}
+        self.partition_split_sizes = {}
         super().__init__(data, *args, **kwargs)
 
     @property
@@ -385,15 +383,20 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
         self.splits = self.partition_splits.get(partition, None)
 
     def __len__(self):
-        return self.partition_sizes[self.partition]
+        return self._data.partition_sizes[self.partition]
 
     def _setup_labels_and_pre_splits(self):
+        dataset_task_cfg = self.data.dataset_task_cfg
         splits = dataset_task_cfg.get("splits", None)
+        if splits is None:
+            return
 
         print("> Found predefined splits in config, extracting splits.")
         for partition in range(self.num_partitions):
             self.partition = partition
-            self.partition_splits[partition] = self._get_partition_splits(partition)
+            self.partition_splits[partition], self.partition_split_sizes[partition] = self._get_partition_splits(
+                partition,
+            )
 
         self.partition = 0
 
@@ -401,16 +404,19 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
         print(f"> Did not find splits in config, generating random splits.")
         for partition in range(self.num_partitions):
             self.partition = partition
-            self.partition_splits[partition] = self._get_random_splits_partition(partition)
+            self.partition_splits[partition], self.partition_split_sizes[partition] = self._get_random_splits_partition(
+                partition,
+            )
 
         self.partition = 0
 
     def _get_partition_splits(self, part_id):
-        num_samples_partition = self.partition_sizes[part_id]
+        num_samples_partition = self._data.partition_sizes[part_id]
         dataset_task_cfg = self.data.dataset_task_cfg
         adata = self.data.adata
 
         partition_splits = {}
+        partition_split_sizes = {}
         if hasattr(dataset_task_cfg.splits, "col"):
             split_col = adata.obs[dataset_task_cfg.splits.col]
         else:
@@ -425,17 +431,53 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
                 )
                 continue
             partition_splits[split] = np.where(split_col == split_key)[0]
+            partition_split_sizes[split] = len(partition_splits[split])
 
-        return partition_splits
+        return partition_splits, partition_split_sizes
 
     def _get_random_splits_partition(self, part_id):
-        num_samples_partition = self.partition_sizes[part_id]
+        num_samples_partition = self._data.partition_sizes[part_id]
 
         warnings.warn("Pre-defined split unavailable, using random 8/1/1 split", UserWarning, stacklevel=2)
 
-        seed = self.data._cfg.seed + part_id
+        seed = self._data._cfg.seed + part_id
 
         train_idx, test_val_idx = train_test_split(np.arange(num_samples_partition), train_size=0.8, random_state=seed)
         val_idx, test_idx = train_test_split(test_val_idx, test_size=0.5, random_state=seed)
 
-        return {"train": train_idx, "val": val_idx, "test": test_idx}
+        return {"train": train_idx, "val": val_idx, "test": test_idx}, {
+            "train": len(train_idx),
+            "val": len(val_idx),
+            "test": len(test_idx),
+        }
+
+
+class PartitionedSubset(Subset):
+    r"""Subset of a dataset at specified indices.
+
+    Args:
+        dataset (Dataset): The whole Dataset
+        indices (sequence): Indices in the whole set selected for subset
+        partition (sequence): Partition indices in the whole set selected for subset
+
+    """
+
+    def __init__(self, dataset: PartitionedDataset, indices: dict[dict]) -> None:
+        self.dataset = dataset
+        self.indices = indices
+
+    def __getitem__(self, idx):
+        if isinstance(idx, list):
+            return self.dataset[[self.indices[self.dataset.partition][i] for i in idx]]
+        return self.dataset[self.indices[self.dataset.partition][idx]]
+
+    def __getitems__(self, indices: list[int]) -> list:
+        # add batched sampling support when parent dataset supports it.
+        # see torch.utils.data._utils.fetch._MapDatasetFetcher
+        if callable(getattr(self.dataset, "__getitems__", None)):
+            return self.dataset.__getitems__([self.indices[self.dataset.partition][idx] for idx in indices])  # type: ignore[attr-defined]
+        else:
+            return [self.dataset[self.indices[self.dataset.partition][idx]] for idx in indices]
+
+    def __len__(self):
+        return len([indices for indices in self.indices.values()])

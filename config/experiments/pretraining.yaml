@@ -5,13 +5,13 @@
 ####
 defaults:
   - override /model: transformer # the chosen model
-  - override /dataset: new_sctab # dataset for the relevant task
+  - override /dataset: new_sctab_pretrain # dataset for the relevant task
   - override /tasks: pretrain_geneformer_dev # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
   - override /optimizer: AdamW
   - override /fc: scbert_randsort
   - override /fe: binning_scbert
-  - override /fg: esm2 #gene2vec
+  - override /fg: pca_esm2 #gene2vec
   - override /loss: CrossEntropyLoss
 
 ####

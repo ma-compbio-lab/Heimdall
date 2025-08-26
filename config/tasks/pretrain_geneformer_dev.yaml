@@ -8,7 +8,7 @@ args:
   batchsize: 32
   epochs: 20
   dataset_config:
-    type: Heimdall.datasets.SeqMaskedPretrainDataset
+    type: Heimdall.datasets.PartitionedDataset
     # args:
     #   mask_ratio: 0.15
   head_config:
