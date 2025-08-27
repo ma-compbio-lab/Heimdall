@@ -76,11 +76,6 @@ class Fg(ABC):
         """
         embedding_indices = self.adata.var.loc[gene_names, "identity_embedding_index"]
         valid_mask = self.adata.var.loc[gene_names, "identity_valid_mask"]
-        print(f"{self.adata.var=}")
-        print(f"{gene_names=}")
-        print(f"{valid_mask.sum()=}")
-        print(f'{np.char.startswith(np.array(gene_names, dtype="U10"), prefix="ENS").sum()=}')
-        2 / 0
         if (valid_mask.sum() != len(gene_names)) and not return_mask:
             raise KeyError(
                 "At least one gene is not mapped in this `Fg`. "

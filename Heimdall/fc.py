@@ -40,7 +40,7 @@ class Fc:
     ):
         self.fg = fg
         self.fe = fe
-        self.adata = adata
+        self._adata = adata
         self.max_input_length = max_input_length
         self.float_dtype = float_dtype
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
@@ -91,6 +91,16 @@ class Fc:
         padding_mask = expression_inputs == self.fe.pad_value
         return identity_inputs, expression_inputs, padding_mask
 
+    @property
+    def adata(self):
+        return self._adata
+
+    @adata.setter
+    def adata(self, val):
+        self._adata = val
+        self.fg.adata = val
+        self.fe.adata = val
+
 
 class ChromosomeAwareFc(Fc):
     def __init__(
@@ -110,9 +120,6 @@ class ChromosomeAwareFc(Fc):
 
         super().__init__(*fc_args, **fc_kwargs)
 
-        # https://github.com/snap-stanford/UCE/blob/8227a65cdd021b9186ef86671d2aef5c895c8e4b/data_proc/data_utils.py#L155
-        # TODO: load chromosome one-hot encoding and start positions for all genes
-
         self.gene_metadata = pd.read_csv(gene_metadata_filepath)
         self.ensembl_dir = ensembl_dir
         self.species = species
@@ -121,7 +128,8 @@ class ChromosomeAwareFc(Fc):
             self.gene_metadata["species"] + "_" + self.gene_metadata["chromosome"],
         )
 
-        spec_chrom = self.gene_metadata[self.gene_metadata["species"] == self.species].set_index("gene_symbol")
+        # https://github.com/snap-stanford/UCE/blob/8227a65cdd021b9186ef86671d2aef5c895c8e4b/data_proc/data_utils.py#L155
+        # TODO: load chromosome one-hot encoding and start positions for all genes
 
         # symbol_to_ensembl_mapping = symbol_to_ensembl_from_ensembl(
         #     data_dir=self.ensembl_dir,
@@ -129,7 +137,11 @@ class ChromosomeAwareFc(Fc):
         #     species=self.species,
         # )
         # spec_chrom.index = spec_chrom.index.map(symbol_to_ensembl_mapping.mapping_reduced)
+        self.extract_gene_positions()
+        self.chrom_token_offset = 1
 
+    def extract_gene_positions(self):
+        spec_chrom = self.gene_metadata[self.gene_metadata["species"] == self.species].set_index("gene_symbol")
         try:
             # NOTE: below is different from UCE...
             gene_names = [k.upper() for k in self.adata.var["gene_symbol"]]
@@ -150,7 +162,10 @@ class ChromosomeAwareFc(Fc):
         self.chroms = dataset_chroms
         self.starts = dataset_pos
 
-        self.chrom_token_offset = 1
+    @Fc.adata.setter
+    def adata(self, val):
+        Fc.adata.fset(self, val)
+        self.extract_gene_positions()
 
 
 class DummyFc(Fc):
