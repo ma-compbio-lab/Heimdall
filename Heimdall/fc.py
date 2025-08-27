@@ -57,10 +57,15 @@ class Fc:
             A tuple of gene identity embedding indices and gene expression embedding indices for all cells.
 
         """
-        identity_indices, expression_inputs = self.fe[cell_index]
 
-        gene_list = self.adata.var_names[identity_indices]  # convert to ENSEMBL Gene Names
-        identity_inputs = self.fg[gene_list]  # convert the genes into fg
+        if cell_index == -1:  # Dummy `cell_index`
+            identity_inputs = pd.array(np.full(self.max_input_length, self.fg.pad_value), dtype="Int64")
+            expression_inputs = np.full(self.max_input_length, self.fe.pad_value)
+        else:
+            identity_indices, expression_inputs = self.fe[cell_index]
+
+            gene_list = self.adata.var_names[identity_indices]  # convert to ENSEMBL Gene Names
+            identity_inputs = self.fg[gene_list]  # convert the genes into fg
 
         if len(identity_inputs) != len(expression_inputs):
             raise ValueError(
