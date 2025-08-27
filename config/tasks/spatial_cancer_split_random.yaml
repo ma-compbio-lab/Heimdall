@@ -16,3 +16,5 @@ args:
   head_config:
     type: Heimdall.models.LinearCellPredHead
     args: null
+  cell_rep_config:
+    type: Heimdall.cell_representations.CellRepresentation

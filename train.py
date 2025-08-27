@@ -6,7 +6,7 @@ from omegaconf import OmegaConf, open_dict
 from Heimdall.cell_representations import CellRepresentation, PartitionedCellRepresentation
 from Heimdall.models import HeimdallModel
 from Heimdall.trainer import HeimdallTrainer
-from Heimdall.utils import count_parameters, get_dtype
+from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
@@ -20,36 +20,33 @@ def main(config):
         only_preprocess_data = config.pop("only_preprocess_data", None)
         # pop so hash of cfg is not changed depending on value
 
-    if Path(config.dataset.preprocess_args.data_path).is_dir():
-        cr = PartitionedCellRepresentation(config)
-    else:
-        cr = CellRepresentation(config)  # takes in the whole config from hydra
+    cr = instantiate_from_config(config.tasks.args.cell_rep_config, config)
+
+    if only_preprocess_data:
+        return
 
     # Create the model and the types of inputs that it may use
     # `type` can either be `learned`, which is integer tokens and learned nn.embeddings,
     # or `predefined`, which expects the dataset to prepare batchsize x length x hidden_dim
+    conditional_input_types = None
+    float_dtype = get_dtype(config.float_dtype)
 
-    if not only_preprocess_data:
+    model = HeimdallModel(
+        data=cr,
+        model_config=config.model,
+        task_config=config.tasks.args,
+        conditional_input_types=conditional_input_types,
+    ).to(float_dtype)
 
-        conditional_input_types = None
-        float_dtype = get_dtype(config.float_dtype)
+    print(model)
 
-        model = HeimdallModel(
-            data=cr,
-            model_config=config.model,
-            task_config=config.tasks.args,
-            conditional_input_types=conditional_input_types,
-        ).to(float_dtype)
+    num_params = count_parameters(model)
 
-        print(model)
+    print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
 
-        num_params = count_parameters(model)
+    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, run_wandb=True)
 
-        print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
-
-        trainer = HeimdallTrainer(cfg=config, model=model, data=cr, run_wandb=True)
-
-        trainer.fit()
+    trainer.fit()
 
 
 if __name__ == "__main__":

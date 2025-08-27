@@ -14,3 +14,5 @@ args:
   head_config:
     type: Heimdall.models.LinearSeqPredHead
     args: null
+  cell_rep_config:
+    type: Heimdall.cell_representations.PartitionedCellRepresentation

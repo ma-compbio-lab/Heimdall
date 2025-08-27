@@ -22,3 +22,5 @@ args:
   head_config:
     type: Heimdall.models.ExpressionOnlyCellPredHead
     args: null
+  cell_rep_config:
+    type: Heimdall.cell_representations.CellRepresentation

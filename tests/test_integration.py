@@ -5,12 +5,12 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import hydra
 import pytest
 from dotenv import load_dotenv
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, open_dict
 
 from Heimdall.cell_representations import CellRepresentation
 from Heimdall.models import HeimdallModel
 from Heimdall.trainer import HeimdallTrainer
-from Heimdall.utils import count_parameters, get_dtype
+from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
 
 load_dotenv()
 
@@ -41,7 +41,14 @@ def test_default_hydra_train():
         )
         print(OmegaConf.to_yaml(config))
 
-    cr = CellRepresentation(config)  # takes in the whole config from hydra
+    with open_dict(config):
+        only_preprocess_data = config.pop("only_preprocess_data", None)
+        # pop so hash of cfg is not changed depending on value
+
+    cr = instantiate_from_config(config.tasks.args.cell_rep_config, config)
+
+    if only_preprocess_data:
+        return
 
     float_dtype = get_dtype(config.float_dtype)
 
