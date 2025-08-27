@@ -472,12 +472,14 @@ class CellRepresentation(SpecialTokenMixin):
             self.fg_cfg,
             self.adata,
             vocab_size=self.adata.n_vars + 2,
+            rng=self.rng,
             return_name=True,
         )
         self.fe, fe_name = instantiate_from_config(
             self.fe_cfg,
             self.adata,
             vocab_size=self.adata.n_vars + 2,
+            rng=self.rng,
             return_name=True,
         )
         self.fc, fc_name = instantiate_from_config(
@@ -486,6 +488,7 @@ class CellRepresentation(SpecialTokenMixin):
             self.fe,
             self.adata,
             float_dtype=self.float_dtype,
+            rng=self.rng,
             return_name=True,
         )
 
