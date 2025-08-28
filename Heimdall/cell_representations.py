@@ -425,7 +425,7 @@ class CellRepresentation(SpecialTokenMixin):
         if preprocessed_data_path is not None:
             self.anndata_to_cache(preprocessed_data_path)
 
-    def load_tokenization_from_cache(self, cache_dir, hash_vars=()):
+    def load_tokenization_from_cache(self, cache_dir, hash_vars):
         cfg = DictConfig(
             {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
         )
@@ -457,7 +457,7 @@ class CellRepresentation(SpecialTokenMixin):
         OmegaConf.save(cfg, processed_cfg_path)
         return False
 
-    def save_tokenization_to_cache(self, cache_dir, hash_vars=()):
+    def save_tokenization_to_cache(self, cache_dir, hash_vars):
         # Gather things for caching
         identity_embedding_index, identity_valid_mask = self.fg.__getitem__(self.adata.var_names, return_mask=True)
 
@@ -525,7 +525,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.instantiate_representation_functions()
 
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-            is_cached = self.load_tokenization_from_cache(cache_dir)
+            is_cached = self.load_tokenization_from_cache(cache_dir, hash_vars=hash_vars)
             if is_cached:
                 return
 
@@ -541,7 +541,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.processed_fcfg = True
 
         if cache_dir is not None:
-            self.save_tokenization_to_cache(cache_dir)
+            self.save_tokenization_to_cache(cache_dir, hash_vars=hash_vars)
 
 
 class PartitionedCellRepresentation(CellRepresentation):

@@ -7,9 +7,9 @@ import torch
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csr_array, issparse
+from scipy.sparse import csr_array
 
-from Heimdall.utils import _get_inputs_from_csr
+from Heimdall.utils import _get_inputs_from_csr, issparse
 
 
 class Fe(ABC):
@@ -44,6 +44,7 @@ class Fe(ABC):
 
         if not issparse(self.adata.X):
             if getattr(self.adata, "isbacked", False):
+                # TODO: use sparse datsets with backed?
                 print("> Data is dense and backed, skipping conversion to CSR to keep memory mapping.")
             else:
                 print("> Data was provided in dense format, converting to CSR. Consider precomputing.")

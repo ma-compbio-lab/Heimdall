@@ -16,10 +16,11 @@ import mygene
 import numpy as np
 import pandas as pd
 import requests
+from anndata.abc import CSCDataset, CSRDataset
 from numpy.random import Generator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
-from scipy.sparse import issparse
+from scipy import sparse as sp
 from torch import Tensor
 from torch.utils.data import default_collate
 from tqdm.auto import tqdm
@@ -535,10 +536,13 @@ def _get_inputs_from_csr(adata: ad.AnnData, cell_index: int, drop_zeros: bool):
     if drop_zeros is True:
         if issparse(adata.X):
             expression = adata.X
-            start = expression.indptr[cell_index]
-            end = expression.indptr[cell_index + 1]
-            cell_expression_inputs = expression.data[start:end]
-            cell_identity_inputs = expression.indices[start:end]
+            cell = adata.X[cell_index]
+            _, cell_identity_inputs = cell.nonzero()
+            cell_expression_inputs = np.squeeze(cell.toarray())[cell_identity_inputs]
+            # start = expression.indptr[cell_index]
+            # end = expression.indptr[cell_index + 1]
+            # cell_expression_inputs = expression.data[start:end]
+            # cell_identity_inputs = expression.indices[start:end]
         else:
             cell_expression_inputs_full = adata.X[cell_index, :]
             cell_identity_inputs = np.nonzero(cell_expression_inputs_full)[0]
@@ -548,3 +552,7 @@ def _get_inputs_from_csr(adata: ad.AnnData, cell_index: int, drop_zeros: bool):
         cell_identity_inputs = np.arange(adata.shape[1])
 
     return cell_identity_inputs, cell_expression_inputs
+
+
+def issparse(x):
+    return sp.issparse(x) or isinstance(x, (CSRDataset, CSCDataset))
