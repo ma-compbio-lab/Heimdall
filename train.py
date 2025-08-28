@@ -1,9 +1,6 @@
-from pathlib import Path
-
 import hydra
 from omegaconf import OmegaConf, open_dict
 
-from Heimdall.cell_representations import CellRepresentation, PartitionedCellRepresentation
 from Heimdall.models import HeimdallModel
 from Heimdall.trainer import HeimdallTrainer
 from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
