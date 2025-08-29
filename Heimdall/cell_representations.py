@@ -103,16 +103,16 @@ class CellRepresentation(SpecialTokenMixin):
         self.rng = np.random.default_rng(seed)
 
         if auto_setup:
-            self.auto_setup()
+            self.setup()
             self.prepare_full_dataset()
             self.prepare_dataset_loaders()
 
-    def auto_setup(self):
+    def setup(self):
         self.preprocess_anndata()
         self.tokenize_cells()
-        if hasattr(self, "datasets") and "full" in self.datasets:
-            self.prepare_dataset_loaders()
         super().__init__()
+        # if hasattr(self, "datasets") and "full" in self.datasets:
+        #     self.prepare_dataset_loaders()
 
     # @property
     # @check_states(adata=True, processed_fcfg=True)
@@ -158,7 +158,7 @@ class CellRepresentation(SpecialTokenMixin):
                 out = self._labels.shape[0] + 1  # TODO why +1 ?
             else:
                 raise ValueError(
-                    f"Unknown task type {task_type!r}. Valid options are: 'multiclass', 'binary', 'regression'.",
+                    f"Unknown task type {task_type!r}. Valid options are: 'multiclass', 'binary', 'regression', 'mlm'.",
                 )
 
             self._num_tasks = out = int(out)
@@ -425,6 +425,8 @@ class CellRepresentation(SpecialTokenMixin):
         if preprocessed_data_path is not None:
             self.anndata_to_cache(preprocessed_data_path)
 
+        print(f"> Finished dropping invalid genes, yielding new AnnData: :\n{self.adata}")
+
     def load_tokenization_from_cache(self, cache_dir, hash_vars):
         cfg = DictConfig(
             {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
@@ -553,28 +555,24 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.partition_file_paths = sorted(
             Path(self._cfg.dataset.preprocess_args.data_path).glob("*.h5ad"),
         )
+        self.num_partitions = len(self.partition_file_paths)
 
         self.partition_sizes = {}
 
-        for partition, _ in enumerate(self.partition_file_paths):
-            # adata = ad.read_h5ad(f, backed="r") #TODO don't need to
-            # do this step since we load the dataset in the set partition
-            self.partition = partition
-            self.partition_sizes[partition] = self.adata.n_obs
+        if auto_setup:
+            for partition, _ in enumerate(self.partition_file_paths):
+                self.partition = partition
+                self.partition_sizes[partition] = self.adata.n_obs
 
-            # adata.file.close()
-            # del adata
+            self.prepare_full_dataset()
+            self.prepare_dataset_loaders()
 
-        self.num_partitions = len(self.partition_file_paths)
-        self.partition = 0  # TODO: don't hardcode
+            self.partition = 0  # TODO: don't hardcode
 
-        SpecialTokenMixin.__init__(self)
-        self.prepare_full_dataset()
-        self.prepare_dataset_loaders()
-
-    def auto_setup(self):
+    def setup(self):
         self.preprocess_anndata()
         self.tokenize_cells(hash_vars=(self.partition,))
+        SpecialTokenMixin.__init__(self)
 
     def close_partition(self):
         """Close current partition."""
@@ -598,8 +596,9 @@ class PartitionedCellRepresentation(CellRepresentation):
         self._partition = partition
 
         # Preprocess partition AnnData
+        print(f"> Opening partition {partition + 1} of {self.num_partitions}")
         self.dataset_preproc_cfg.data_path = self.partition_file_paths[partition]
-        self.auto_setup()
+        self.setup()
 
     def get_context(self):
         if dist.is_initialized():
