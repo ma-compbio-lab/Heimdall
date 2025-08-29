@@ -375,8 +375,12 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
         self._data.partition = partition
         self.splits = self.partition_splits.get(partition, None)
 
+    @property
+    def partition_sizes(self):
+        return self._data.partition_sizes
+
     def __len__(self):
-        return self._data.partition_sizes[self.partition]
+        return self.partition_sizes[self.partition]
 
     def _setup_labels_and_pre_splits(self):
         dataset_task_cfg = self.data.dataset_task_cfg
@@ -428,7 +432,7 @@ class PartitionedDataset(SeqMaskedPretrainDataset):
         return partition_splits
 
     def _get_random_splits_partition(self, part_id):
-        num_samples_partition = self._data.partition_sizes[part_id]
+        num_samples_partition = self.partition_sizes[part_id]
 
         warnings.warn("Pre-defined split unavailable, using random 8/1/1 split", UserWarning, stacklevel=2)
 
