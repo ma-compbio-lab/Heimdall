@@ -132,7 +132,7 @@ class HeimdallTrainer:
     @data.setter
     def data(self, data):
         self._data = data
-        for split in ["train", "val", "test"]:
+        for split in ["train", "val", "test", "full"]:
             setattr(self, f"dataloader_{split}", data.dataloaders[split])
 
     def print_r0(self, payload):
