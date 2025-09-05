@@ -1,13 +1,10 @@
 """Heimdall model."""
 
-import math
-from abc import ABC, abstractmethod
-from typing import Callable, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
-from torch import Tensor
 
 from Heimdall.cell_representations import CellRepresentation
 from Heimdall.datasets import PairedInstanceDataset
