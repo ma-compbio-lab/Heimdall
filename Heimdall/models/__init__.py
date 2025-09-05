@@ -1,10 +1,11 @@
 from Heimdall.models._head import ExpressionOnlyCellPredHead, LinearCellPredHead, LinearSeqPredHead, TransformerOutput
-from Heimdall.models._models import ExpressionOnly, HeimdallModel, HeimdallTransformer
+from Heimdall.models._models import ExpressionOnly, HeimdallModel, MaskedAverage, Transformer
 from Heimdall.models._reducers import AsymmetricConcatReducer, MeanReducer, SumReducer, SymmetricConcatReducer
 
 __all__ = [
     HeimdallModel.__name__,
-    HeimdallTransformer.__name__,
+    Transformer.__name__,
+    MaskedAverage.__name__,
     ExpressionOnly.__name__,
     TransformerOutput.__name__,
     LinearCellPredHead.__name__,

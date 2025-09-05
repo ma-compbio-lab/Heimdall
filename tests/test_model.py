@@ -30,7 +30,7 @@ def paired_task_config(request, toy_paried_data_path):
     cache_preprocessed_dataset_dir: null
     entity: Heimdall
     model:
-      type: Heimdall.models.HeimdallTransformer
+      type: Heimdall.models.Transformer
       name: transformer
       args:
         d_model: 128
