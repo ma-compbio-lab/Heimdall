@@ -295,27 +295,5 @@ class IdentityFe(Fe):
 
     """
 
-    # def __init__(
-    #     self,
-    #     adata: ad.AnnData,
-    #     vocab_size: int,
-    #     **fe_kwargs,
-    # ):
-    #     self.adata = adata
-    #     self.num_cells, self.num_genes = adata.shape
-    #     self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
-    #     self.d_embedding = d_embedding
-    #     self.vocab_size = vocab_size
-    #     self.pad_value = vocab_size - 2 if pad_value is None else pad_value
-    #     self.mask_value = vocab_size - 1 if mask_value is None else mask_value
-    #     self.drop_zeros = drop_zeros
-
-    #     if not issparse(self.adata.X):
-    #         print(
-    #             "> Data was provided in dense format, converting to CSR."
-    #             " Please consider pre-computing it to save memory.",
-    #         )
-    #         self.adata.X = csr_matrix(self.adata.X)
-
     def __getitem__(self, cell_index: int):
         return self._get_inputs_from_csr(cell_index)
