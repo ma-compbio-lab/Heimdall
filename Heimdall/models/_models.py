@@ -1,7 +1,5 @@
 """Heimdall model."""
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
@@ -204,7 +202,7 @@ class CellSentenceModel(nn.Module):
         return outputs
 
 
-class MaskedAverage(CellSentenceModel):
+class Average(CellSentenceModel):
     def __init__(
         self,
         data: CellRepresentation,
@@ -219,7 +217,7 @@ class MaskedAverage(CellSentenceModel):
 
         super().__init__(data, d_model=d_model, pos_enc=pos_enc, pooling=pooling)
 
-        self.cell_sentence_model = MaskedAverageEncoder()
+        self.cell_sentence_model = AverageEncoder()
 
 
 class ExpressionWeightedSum(CellSentenceModel):
@@ -332,7 +330,7 @@ class Transformer(CellSentenceModel):
         return outputs
 
 
-class MaskedAverageEncoder(nn.Module):
+class AverageEncoder(nn.Module):
     def forward(self, input_embeds, attention_mask):
 
         # Encoder

@@ -67,39 +67,38 @@ model_configs = [
     """,
     """
         model:
+            type: Heimdall.models.Average
+            name: ExpressionWeightedSum
+            args:
+              d_model: 128
+              pos_enc: null
+              pooling: mean_pooling # or "mean_pooling"
+    """,
+    """
+        model:
             type: Heimdall.models.ExpressionOnly
             name: logistic_regression
     """,
 ]
+geneformer_config = """
+    fc:
+      type: Heimdall.fc.Fc  # Geneformer
+      args:
+        max_input_length: 2048
+        embedding_parameters:
+          type: torch.nn.Module  # Should throw an error if called
+        tailor_config:
+          type: Heimdall.tailor.ReorderTailor
+        order_config:
+          type: Heimdall.order.ExpressionOrder
+        reduce_config:
+          type: Heimdall.reduce.IdentityReduce
+"""
+
 fc_configs = [
-    """
-        fc:
-          type: Heimdall.fc.Fc  # Geneformer
-          args:
-            max_input_length: 2048
-            embedding_parameters:
-              type: torch.nn.Module  # Should throw an error if called
-            tailor_config:
-              type: Heimdall.tailor.ReorderTailor
-            order_config:
-              type: Heimdall.order.ExpressionOrder
-            reduce_config:
-              type: Heimdall.reduce.IdentityReduce
-    """,
-    """
-        fc:
-          type: Heimdall.fc.Fc  # Geneformer
-          args:
-            max_input_length: 2048
-            embedding_parameters:
-              type: torch.nn.Module  # Should throw an error if called
-            tailor_config:
-              type: Heimdall.tailor.ReorderTailor
-            order_config:
-              type: Heimdall.order.ExpressionOrder
-            reduce_config:
-              type: Heimdall.reduce.IdentityReduce
-    """,
+    geneformer_config,
+    geneformer_config,
+    geneformer_config,
     """
         fc:
           type: Heimdall.fc.DummyFc
