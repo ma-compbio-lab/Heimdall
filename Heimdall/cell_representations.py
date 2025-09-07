@@ -12,6 +12,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import scanpy as sc
+from accelerate import Accelerator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
 from scipy import sparse
@@ -76,15 +77,15 @@ class SpecialTokenMixin:
 
 
 class CellRepresentation(SpecialTokenMixin):
-    def __init__(self, config, accelerate_context, auto_setup: bool = True):
+    def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True):
         """Initialize the Cell Rep object with configuration and AnnData object.
 
         Parameters:
         config (dict): Configuration dictionary.
 
         """
-        self.rank = accelerate_context.process_index
-        self.num_replicas = accelerate_context.num_processes
+        self.rank = accelerator.process_index
+        self.num_replicas = accelerator.num_processes
         self.cr_setup = False
         self._cfg = config
 
@@ -561,8 +562,8 @@ class CellRepresentation(SpecialTokenMixin):
 
 
 class PartitionedCellRepresentation(CellRepresentation):
-    def __init__(self, config, accelerate_context, auto_setup: bool = True):
-        super().__init__(config, accelerate_context, auto_setup=False)
+    def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True):
+        super().__init__(config, accelerator, auto_setup=False)
 
         # Expect `data_path` to hold parent directory, not filepath
         self.partition_file_paths = sorted(

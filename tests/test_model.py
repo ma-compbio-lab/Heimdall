@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import scipy.sparse as sp
 import torch
+from accelerate import Accelerator
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from pytest import fixture
@@ -233,7 +234,19 @@ def single_task_config(toy_single_data_path):
 
 
 def instantiate_and_run_model(config):
-    cr = CellRepresentation(config)  # takes in the whole config from hydra
+    # get accelerate context
+    accelerator_log_kwargs = {}
+    accelerator_log_kwargs["log_with"] = "wandb"
+    accelerator_log_kwargs["project_dir"] = config.work_dir
+    accelerator = Accelerator(
+        gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
+        step_scheduler_with_optimizer=False,
+        **accelerator_log_kwargs,
+    )
+    if accelerator.is_main_process:
+        print(OmegaConf.to_yaml(config, resolve=True))
+
+    cr = CellRepresentation(config, accelerator)  # takes in the whole config from hydra
 
     float_dtype = get_dtype(config.float_dtype)
 

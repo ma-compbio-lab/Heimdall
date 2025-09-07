@@ -9,7 +9,7 @@ import psutil
 import scanpy as sc
 import torch
 import torch.nn as nn
-import wandb
+from accelerate import Accelerator
 from accelerate.utils import set_seed
 from anndata import AnnData
 from omegaconf import OmegaConf
@@ -20,6 +20,7 @@ from transformers import get_scheduler
 
 import Heimdall.datasets
 import Heimdall.losses
+import wandb
 
 
 class HeimdallTrainer:
@@ -28,7 +29,7 @@ class HeimdallTrainer:
         cfg,
         model,
         data,
-        accelerate_context,
+        accelerator: Accelerator,
         run_wandb=False,
         custom_loss_func=None,
         custom_metrics=None,
@@ -36,7 +37,7 @@ class HeimdallTrainer:
         self.cfg = cfg
         self.model = model
         self.data = data
-        self.accelerator = accelerate_context
+        self.accelerator = accelerator
 
         # cell type label
         # label_key = self.cfg.tasks.args.label_col_name

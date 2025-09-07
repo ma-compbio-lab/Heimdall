@@ -50,7 +50,7 @@ def main(config):
         num_params = count_parameters(model)
         print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
 
-    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerate_context=accelerator, run_wandb=True)
+    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=True)
 
     trainer.fit()
 

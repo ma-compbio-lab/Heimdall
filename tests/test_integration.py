@@ -4,6 +4,7 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 import hydra
 import pytest
+from accelerate import Accelerator
 from dotenv import load_dotenv
 from omegaconf import OmegaConf, open_dict
 
@@ -41,11 +42,23 @@ def test_default_hydra_train():
         )
         print(OmegaConf.to_yaml(config))
 
+    # get accelerate context
+    accelerator_log_kwargs = {}
+    accelerator_log_kwargs["log_with"] = "wandb"
+    accelerator_log_kwargs["project_dir"] = config.work_dir
+    accelerator = Accelerator(
+        gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
+        step_scheduler_with_optimizer=False,
+        **accelerator_log_kwargs,
+    )
+    if accelerator.is_main_process:
+        print(OmegaConf.to_yaml(config, resolve=True))
+
     with open_dict(config):
         only_preprocess_data = config.pop("only_preprocess_data", None)
         # pop so hash of cfg is not changed depending on value
 
-    cr = instantiate_from_config(config.tasks.args.cell_rep_config, config)
+    cr = instantiate_from_config(config.tasks.args.cell_rep_config, config, accelerator)
 
     if only_preprocess_data:
         return
@@ -62,7 +75,7 @@ def test_default_hydra_train():
 
     print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
 
-    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, run_wandb=False)
+    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=False)
 
     trainer.fit(resume_from_checkpoint=False, checkpoint_every_n_epochs=20)
 
