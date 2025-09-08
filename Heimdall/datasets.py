@@ -279,36 +279,6 @@ class PairedInstanceDataset(Dataset):
 
 
 class PretrainDataset(SingleInstanceDataset, ABC):
-    # def _setup_labels_and_pre_splits(self):
-    #     adata = self.data.adata
-    #     dataset_task_cfg = self.data.dataset_task_cfg
-    #     task_type = dataset_task_cfg.task_type
-    #     assert task_type == "mlm"  # For MLM pretraining task
-
-    #     # # FIX: not necessarily the case,e.g., UCE.....
-    #     # identity_inputs, expression_inputs = self.data.fc[:]
-    #     # identity_inputs = [self.data.fc[i][0] for i in range(len(self.data.adata))]
-    #     # identity_inputs = self.data.fc[0][0]
-    #     # identity_inputs = np.vstack(identity_inputs).astype(int)
-    #     # self.labels = identity_inputs
-
-    #     # # self.labels = self.data.fc.copy()
-    #     if "label_obsm_name" in dataset_task_cfg:
-    #         assert "label_col_name" not in dataset_task_cfg
-
-    #         # # TODO: not scalabel to have sparse_output=False
-    #         # binarized = MultiLabelBinarizer(
-    #         #     sparse_output=True,
-    #         #     classes=np.arange(adata.n_vars + 1),
-    #         # ).fit_transform(identity_inputs)
-
-    #         adata.obsm[dataset_task_cfg.label_obsm_name] = pd.DataFrame(
-    #             columns=adata.var_names.append(pd.Index(["pad"])),
-    #             index=adata.obs_names,
-    #         )
-
-    #         # print(f"labels shape {identity_inputs.shape}")
-
     def __getitem__(self, idx):
         identity_inputs, expression_inputs, expression_padding = self.data.fc[idx]
 

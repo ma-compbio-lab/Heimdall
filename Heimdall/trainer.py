@@ -87,12 +87,6 @@ class HeimdallTrainer:
         #     accelerator_log_kwargs["project_dir"] = cfg.work_dir
         set_seed(cfg.seed)
 
-        # self.accelerator = Accelerator(
-        #     gradient_accumulation_steps=cfg.trainer.accumulate_grad_batches,
-        #     step_scheduler_with_optimizer=False,
-        #     **accelerator_log_kwargs,
-        # )
-
         if hasattr(model.encoder, "use_flash_attn") and model.encoder.use_flash_attn:
             assert self.accelerator.mixed_precision == "bf16", "If using Flash Attention, mixed precision must be bf16"
 
