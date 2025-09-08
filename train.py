@@ -9,21 +9,20 @@ from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(config):
-
     # get accelerate context
     accelerator_log_kwargs = {}
-    accelerator_log_kwargs["log_with"] = "wandb"
-    accelerator_log_kwargs["project_dir"] = config.work_dir
+    if config.run_wandb:
+        accelerator_log_kwargs["log_with"] = "wandb"
+        accelerator_log_kwargs["project_dir"] = config.work_dir
+
     accelerator = Accelerator(
         gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
         step_scheduler_with_optimizer=False,
         **accelerator_log_kwargs,
     )
+
     if accelerator.is_main_process:
         print(OmegaConf.to_yaml(config, resolve=True))
-
-    # After preparing your f_g and f_c, use the Heimdall Cell_Representation object to load in and
-    # preprocess the dataset
 
     with open_dict(config):
         only_preprocess_data = config.pop("only_preprocess_data", None)
@@ -50,7 +49,7 @@ def main(config):
         num_params = count_parameters(model)
         print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
 
-    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=True)
+    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=config.run_wandb)
 
     trainer.fit()
 

@@ -81,10 +81,6 @@ class HeimdallTrainer:
         self.custom_loss_func = custom_loss_func
         self.custom_metrics = custom_metrics or {}
 
-        # accelerator_log_kwargs = {}
-        # if run_wandb:
-        #     accelerator_log_kwargs["log_with"] = "wandb"
-        #     accelerator_log_kwargs["project_dir"] = cfg.work_dir
         set_seed(cfg.seed)
 
         if hasattr(model.encoder, "use_flash_attn") and model.encoder.use_flash_attn:
