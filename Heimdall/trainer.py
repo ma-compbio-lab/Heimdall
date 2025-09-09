@@ -39,6 +39,8 @@ class HeimdallTrainer:
         self.data = data
         self.accelerator = accelerator
 
+        self.check_flash_attn()
+
         # cell type label
         # label_key = self.cfg.tasks.args.label_col_name
         # if not pd.api.types.is_categorical_dtype(self.data.adata.obs[label_key]):
@@ -83,9 +85,6 @@ class HeimdallTrainer:
 
         set_seed(cfg.seed)
 
-        if hasattr(model.encoder, "use_flash_attn") and model.encoder.use_flash_attn:
-            assert self.accelerator.mixed_precision == "bf16", "If using Flash Attention, mixed precision must be bf16"
-
         self.optimizer = self._initialize_optimizer()
         self.loss_fn = self._get_loss_function()
 
@@ -116,6 +115,14 @@ class HeimdallTrainer:
         if self.accelerator.is_main_process:
             print("> Finished Wrapping the model, optimizer, and dataloaders in accelerate")
             print("> run HeimdallTrainer.train() to begin training")
+
+    def check_flash_attn(self):
+        if (
+            hasattr(self.model.encoder.cell_sentence_model, "use_flash_attn")
+            and self.model.encoder.cell_sentence_model.use_flash_attn
+            and self.accelerator.mixed_precision != "bf16"
+        ):
+            raise ValueError("If using Flash Attention, mixed precision must be bf16")
 
     @property
     def data(self):
@@ -363,6 +370,142 @@ class HeimdallTrainer:
 
         return loss
 
+    def validate_model(self, dataloader, dataset_type):
+        self.model.eval()
+        metrics = self._initialize_metrics()
+        # print(metrics)
+        loss = 0
+        encoded_list = []
+
+        y_true_batches, preds_batches = [], []
+
+        with torch.no_grad():
+            for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
+                inputs = (batch["identity_inputs"], batch["expression_inputs"])
+
+                outputs = self.model(
+                    inputs=inputs,
+                    attention_mask=batch.get("expression_padding"),
+                )
+
+                logits = outputs.logits
+                labels = batch["labels"].to(outputs.device)
+
+                if self.cfg.tasks.args.task_type in ("multiclass", "mlm"):
+                    preds = logits.argmax(dim=1)
+                elif self.cfg.tasks.args.task_type == "binary":
+                    # multi-label binary classification → use sigmoid + threshold
+                    probs = torch.sigmoid(logits)
+                    preds = (probs > 0.5).float()
+
+                elif self.cfg.tasks.args.task_type == "regression":
+                    preds = logits
+
+                else:
+                    raise ValueError(f"Unsupported task_type: {self.cfg.tasks.args.task_type}")
+
+                y_true_batches.append(labels.cpu())
+                preds_batches.append(preds.cpu())
+
+                if self.cfg.model.name != "logistic_regression":
+                    encoded_list.append(outputs.cls_embeddings.detach().cpu().numpy())
+
+                if (masks := batch.get("masks")) is not None:
+                    masks = masks.to(outputs.device)
+
+                # perform a .clone() so that the labels are not updated in-place
+                loss += self.get_loss(logits, labels.clone(), masks=masks).item()
+
+                for metric_name, metric in metrics.items():  # noqa: B007
+                    # Built-in metric
+                    # print(metric)
+                    # print(metric_name)
+                    if self.cfg.tasks.args.task_type in ["multiclass", "mlm"]:
+                        labels = labels.to(torch.int)
+                    if self.cfg.tasks.args.task_type in ["binary"]:
+                        # Step 1: Flatten the tensor
+                        flattened_labels = labels.flatten()
+                        flattened_logits = logits.flatten()
+                        mask = ~torch.isnan(flattened_labels)
+
+                        no_nans_flattened_labels = flattened_labels[mask]
+                        no_nans_flattened_logits = flattened_logits[mask]
+                        labels = no_nans_flattened_labels.to(torch.int)
+                        logits = no_nans_flattened_logits
+                    metric.update(logits, labels)
+                if self.cfg.trainer.fastdev:
+                    break
+
+        all_encoded = None
+        if self.cfg.model.name != "logistic_regression":
+            all_encoded = np.concatenate(encoded_list, axis=0)
+
+        loss = loss / len(dataloader)
+
+        # concatenate & gather once per epoch
+        y_true_all = torch.cat(y_true_batches, 0)
+        preds_all = torch.cat(preds_batches, 0)
+
+        if self.accelerator.num_processes > 1:
+            loss_tensor = torch.tensor(
+                [loss],
+                device=self.accelerator.device,
+            )  # loss is a python floating point value, for gather
+            # operation across multiple processes needs to be
+            # cuda tensor
+            loss = self.accelerator.gather(loss_tensor).mean().item()
+
+        log = {f"{dataset_type}_loss": loss}
+        for metric_name, metric in metrics.items():
+            if metric_name != "ConfusionMatrix":
+                # Built-in metric
+                log[f"{dataset_type}_{metric_name}"] = metric.compute().item()
+                if metric_name in ["Accuracy", "Precision", "Recall", "F1Score", "MathewsCorrCoef"]:
+                    log[f"{dataset_type}_{metric_name}"] *= 100  # Convert to percentage for these metrics
+
+        if "ConfusionMatrix" in metrics:
+            # 1. Gather counts from all processes and sum
+            cm_local = metrics["ConfusionMatrix"].compute()  # (C, C) tensor
+            cm_counts = self.accelerator.reduce(cm_local, reduction="sum")  # global counts
+
+            # 3) If binary and flat, reshape to (2, 2)
+            if cm_counts.dim() == 1:
+                c = int(cm_counts.numel() ** 0.5)  # should be 2
+                cm_counts = cm_counts.view(c, c)
+
+            # 2. Row-wise normalisation → per-class accuracy matrix
+            cm_norm = cm_counts.float()
+            cm_norm = cm_norm / (cm_norm.sum(dim=1, keepdim=True) + 1e-8)
+
+            # 3. Per-class accuracy vector (for dashboard scalars)
+            per_class_acc = cm_norm.diag().cpu().numpy() * 100
+            log[f"{dataset_type}_per_class_accuracy"] = {
+                name: float(acc) for name, acc in zip(self.class_names, per_class_acc)
+            }
+
+            # 4. Log interactive confusion matrix to WandB (main process only)
+            if self.run_wandb and self.accelerator.is_main_process:
+                wandb_cm = wandb.plot.confusion_matrix(
+                    y_true=y_true_all.numpy().tolist(),
+                    preds=preds_all.numpy().tolist(),
+                    class_names=self.class_names,  # same order as metric
+                )
+                self.accelerator.log(
+                    {f"{dataset_type}_confusion_matrix": wandb_cm},
+                    step=self.step,
+                )
+
+        rss = self.process.memory_info().rss / (1024**3)
+        log["Process_mem_rss"] = rss
+
+        if self.run_wandb and self.accelerator.is_main_process:
+            self.accelerator.log(log, step=self.step)
+
+        if not self.run_wandb and self.accelerator.is_main_process:
+            print(log)
+
+        return log, all_encoded
+
     def train_epoch(self, epoch):
         self.model.train()
         step = len(self.dataloader_train) * epoch
@@ -420,7 +563,6 @@ class HeimdallTrainer:
                 if self.cfg.trainer.fastdev:
                     break
 
-    # Add these methods to the HeimdallTrainer class
     def save_adata_umap(self, best_test_embed, best_val_embed):
         # Case 1: predefined splits
         if hasattr(self.cfg.tasks.args, "splits"):
@@ -594,140 +736,3 @@ class HeimdallTrainer:
         self.print_r0(f"> Resumed from epoch {epoch}, step {self.step}")
 
         return epoch + 1  # Return the next epoch to start from
-
-    def validate_model(self, dataloader, dataset_type):
-        self.model.eval()
-        metrics = self._initialize_metrics()
-        # print(metrics)
-        loss = 0
-        encoded_list = []
-
-        y_true_batches, preds_batches = [], []
-
-        with torch.no_grad():
-            for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
-                inputs = (batch["identity_inputs"], batch["expression_inputs"])
-
-                outputs = self.model(
-                    inputs=inputs,
-                    attention_mask=batch.get("expression_padding"),
-                )
-
-                logits = outputs.logits
-                labels = batch["labels"].to(outputs.device)
-
-                if self.cfg.tasks.args.task_type in ("multiclass", "mlm"):
-                    preds = logits.argmax(dim=1)
-                elif self.cfg.tasks.args.task_type == "binary":
-                    # multi-label binary classification → use sigmoid + threshold
-                    probs = torch.sigmoid(logits)
-                    preds = (probs > 0.5).float()
-
-                elif self.cfg.tasks.args.task_type == "regression":
-                    preds = logits
-
-                else:
-                    raise ValueError(f"Unsupported task_type: {self.cfg.tasks.args.task_type}")
-
-                y_true_batches.append(labels.cpu())
-                preds_batches.append(preds.cpu())
-
-                if self.cfg.model.name != "logistic_regression":
-                    encoded_list.append(outputs.cls_embeddings.detach().cpu().numpy())
-
-                if (masks := batch.get("masks")) is not None:
-                    masks = masks.to(outputs.device)
-                    logits, labels = logits[masks], labels[masks]
-
-                # perform a .clone() so that the labels are not updated in-place
-                loss += self.get_loss(logits, labels.clone()).item()
-
-                for metric_name, metric in metrics.items():  # noqa: B007
-                    # Built-in metric
-                    # print(metric)
-                    # print(metric_name)
-                    if self.cfg.tasks.args.task_type in ["multiclass", "mlm"]:
-                        labels = labels.to(torch.int)
-                    if self.cfg.tasks.args.task_type in ["binary"]:
-                        # Step 1: Flatten the tensor
-                        flattened_labels = labels.flatten()
-                        flattened_logits = logits.flatten()
-                        mask = ~torch.isnan(flattened_labels)
-
-                        no_nans_flattened_labels = flattened_labels[mask]
-                        no_nans_flattened_logits = flattened_logits[mask]
-                        labels = no_nans_flattened_labels.to(torch.int)
-                        logits = no_nans_flattened_logits
-                    metric.update(logits, labels)
-                if self.cfg.trainer.fastdev:
-                    break
-
-        all_encoded = None
-        if self.cfg.model.name != "logistic_regression":
-            all_encoded = np.concatenate(encoded_list, axis=0)
-
-        loss = loss / len(dataloader)
-
-        # concatenate & gather once per epoch
-        y_true_all = torch.cat(y_true_batches, 0)
-        preds_all = torch.cat(preds_batches, 0)
-
-        if self.accelerator.num_processes > 1:
-            loss_tensor = torch.tensor(
-                [loss],
-                device=self.accelerator.device,
-            )  # loss is a python floating point value, for gather
-            # operation across multiple processes needs to be
-            # cuda tensor
-            loss = self.accelerator.gather(loss_tensor).mean().item()
-
-        log = {f"{dataset_type}_loss": loss}
-        for metric_name, metric in metrics.items():
-            if metric_name != "ConfusionMatrix":
-                # Built-in metric
-                log[f"{dataset_type}_{metric_name}"] = metric.compute().item()
-                if metric_name in ["Accuracy", "Precision", "Recall", "F1Score", "MathewsCorrCoef"]:
-                    log[f"{dataset_type}_{metric_name}"] *= 100  # Convert to percentage for these metrics
-
-        if "ConfusionMatrix" in metrics:
-            # 1. Gather counts from all processes and sum
-            cm_local = metrics["ConfusionMatrix"].compute()  # (C, C) tensor
-            cm_counts = self.accelerator.reduce(cm_local, reduction="sum")  # global counts
-
-            # 3) If binary and flat, reshape to (2, 2)
-            if cm_counts.dim() == 1:
-                c = int(cm_counts.numel() ** 0.5)  # should be 2
-                cm_counts = cm_counts.view(c, c)
-
-            # 2. Row-wise normalisation → per-class accuracy matrix
-            cm_norm = cm_counts.float()
-            cm_norm = cm_norm / (cm_norm.sum(dim=1, keepdim=True) + 1e-8)
-
-            # 3. Per-class accuracy vector (for dashboard scalars)
-            per_class_acc = cm_norm.diag().cpu().numpy() * 100
-            log[f"{dataset_type}_per_class_accuracy"] = {
-                name: float(acc) for name, acc in zip(self.class_names, per_class_acc)
-            }
-
-            # 4. Log interactive confusion matrix to WandB (main process only)
-            if self.run_wandb and self.accelerator.is_main_process:
-                wandb_cm = wandb.plot.confusion_matrix(
-                    y_true=y_true_all.numpy().tolist(),
-                    preds=preds_all.numpy().tolist(),
-                    class_names=self.class_names,  # same order as metric
-                )
-                self.accelerator.log(
-                    {f"{dataset_type}_confusion_matrix": wandb_cm},
-                    step=self.step,
-                )
-
-        rss = self.process.memory_info().rss / (1024**3)
-        log["Process_mem_rss"] = rss
-
-        if self.run_wandb and self.accelerator.is_main_process:
-            self.accelerator.log(log, step=self.step)
-
-        if not self.run_wandb and self.accelerator.is_main_process:
-            print(log)
-
-        return log, all_encoded

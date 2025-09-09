@@ -142,7 +142,7 @@ class CellRepresentation(SpecialTokenMixin):
                 "binary",
                 "multiclass",
                 "mlm",
-            ], "task type must be regression, binary, or multiclass. Check the task config file."
+            ], "task type must be regression, binary, multiclass or mlm. Check the task config file."
 
             task_type = self.dataset_task_cfg.task_type
             if task_type == "regression":

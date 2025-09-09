@@ -1,5 +1,5 @@
 import warnings
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from pprint import pformat
 from typing import TYPE_CHECKING, Tuple, Union
 
@@ -278,7 +278,7 @@ class PairedInstanceDataset(Dataset):
         }
 
 
-class PretrainDataset(SingleInstanceDataset, ABC):
+class MLMDataset(SingleInstanceDataset, ABC):
     def __getitem__(self, idx):
         identity_inputs, expression_inputs, expression_padding = self.data.fc[idx]
 
@@ -294,16 +294,17 @@ class PretrainDataset(SingleInstanceDataset, ABC):
     def _transform(self, data): ...
 
 
-class MaskedPretrainDataset(PretrainDataset, ABC):
+class MaskedMixin(ABC):
     def __init__(self, *args, mask_ratio: float = 0.15, **kwargs):
         super().__init__(*args, **kwargs)
         self.mask_ratio = mask_ratio
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def mask_token(self): ...
 
 
-class SeqMaskedPretrainDataset(MaskedPretrainDataset):
+class SeqMaskedMLMDataset(MaskedMixin, MLMDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # self._num_tasks = self.data.adata.n_vars  # number of genes
@@ -327,7 +328,7 @@ class SeqMaskedPretrainDataset(MaskedPretrainDataset):
         return data
 
 
-class PartitionedDataset(SeqMaskedPretrainDataset):
+class PartitionedDataset(SeqMaskedMLMDataset):
     def __init__(self, data, *args, **kwargs):
         self.partition_splits = {}
         super().__init__(data, *args, **kwargs)
