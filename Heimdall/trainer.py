@@ -377,7 +377,6 @@ class HeimdallTrainer:
             for batch in t:
                 step += 1
                 is_logging = step % log_every == 0
-
                 lr = self.lr_scheduler.get_last_lr()[0]
                 with self.accelerator.accumulate(self.model):
 
@@ -612,7 +611,6 @@ class HeimdallTrainer:
         with torch.no_grad():
             for batch in tqdm(dataloader, disable=not self.accelerator.is_main_process):
                 inputs = (batch["identity_inputs"], batch["expression_inputs"])
-
                 outputs = self.model(
                     inputs=inputs,
                     attention_mask=batch.get("expression_padding"),

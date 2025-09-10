@@ -1,6 +1,10 @@
 # @package _global_
 defaults:
-  - sock
+  - lane
+
+# cache_preprocessed_dataset_dir: /scratch/nzh/Heimdall/cache
+cache_preprocessed_dataset_dir: null
+
 
 
 # hydra:

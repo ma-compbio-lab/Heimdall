@@ -256,7 +256,7 @@ class CellRepresentation(SpecialTokenMixin):
             nan_mask = np.isnan(self.adata.X)
 
             # Temporarily fill NaNs with 0 (so they don't affect normalization)
-            normalized_expression = self.adata.X.copy()
+            normalized_expression = self.adata.X #.copy()
             normalized_expression[nan_mask] = 0
 
             # Temporarily assign filled data to adata.X
@@ -279,7 +279,7 @@ class CellRepresentation(SpecialTokenMixin):
             nan_mask = np.isnan(self.adata.X)
 
             # Log1p only on valid values
-            normalized_expression = np.log1p(self.adata.X.copy())
+            normalized_expression = np.log1p(self.adata.X)
             normalized_expression[nan_mask] = np.nan
 
             # Assign back

@@ -197,10 +197,11 @@ class PretrainedFg(Fg, ABC):
 
         map_ratio = len(valid_indices) / len(self.adata.var_names)
         if map_ratio < 0.5:
-            raise ValueError(
-                "Very few genes in the dataset are mapped by the `Fg`."
-                "Please check if the species is set correctly in the config.",
-            )
+            print("WARNING: Very few genes in the dataset are mapped by the `Fg`.")
+            # raise ValueError(
+            #     "Very few genes in the dataset are mapped by the `Fg`."
+            #     "Please check if the species is set correctly in the config.",
+            # )
 
 
 class IdentityFg(Fg):

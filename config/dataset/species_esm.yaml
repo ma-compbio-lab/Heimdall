@@ -1,0 +1,9 @@
+dataset_name: "species"
+
+preprocess_args:
+  data_path: "/work/magroup/nzh/species/data/cross_species_20_classes.h5ad"
+  top_n_genes: false
+  normalize: true
+  log_1p: true
+  scale_data: false
+  species: "humouse"

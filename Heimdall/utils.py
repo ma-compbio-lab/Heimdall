@@ -386,6 +386,9 @@ def _load_ensembl_table(
         url = ENSEMBL_URL_MAP[species].format(release, release)
         fname = url.split("/")[-1]
     except KeyError as e:
+        print(f"Unknown species {species!r}, available options are {sorted(ENSEMBL_URL_MAP)}")
+        print("Going with no mapping...")
+        return None, None
         raise KeyError(
             f"Unknown species {species!r}, available options are {sorted(ENSEMBL_URL_MAP)}",
         ) from e
@@ -463,6 +466,9 @@ def convert_to_ensembl_ids(adata, data_dir, species="human"):
         adata.var.index = adata.var.index.map(gene_mapping.mapping_reduced)
         adata.var.index.name = "index"
     else:
+        if species == "humouse": # a bit hacky but works for now
+            species = "human"
+
         gene_mapping = symbol_to_ensembl_from_ensembl(
             data_dir=data_dir,
             ensembl_ids=adata.var.index.tolist(),
