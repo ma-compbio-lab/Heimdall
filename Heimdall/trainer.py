@@ -349,9 +349,7 @@ class HeimdallTrainer:
         if self.accelerator.is_main_process:
             self.print_r0("> Model has finished Training")
 
-    def get_loss(self, logits, labels, masks=None):
-        if masks is not None:
-            logits, labels = logits[masks], labels[masks]
+    def get_loss(self, logits, labels):
 
         if self.custom_loss_func:
             loss = self.loss_fn(logits, labels)
@@ -381,9 +379,10 @@ class HeimdallTrainer:
 
         if (masks := batch.get("masks")) is not None:
             masks = masks.to(outputs.device)
+            logits, labels = logits[masks], labels[masks]
 
         # perform a .clone() so that the labels are not updated in-place
-        batch_loss = self.get_loss(logits, labels.clone(), masks=masks)
+        batch_loss = self.get_loss(logits, labels.clone())
         if loss is None:
             loss = batch_loss
         else:
@@ -562,39 +561,6 @@ class HeimdallTrainer:
 
                 if self.cfg.trainer.fastdev:
                     break
-
-    # def save_adata_umap(self, best_test_embed, best_val_embed):
-    #     # Case 1: predefined splits
-    #     if hasattr(self.cfg.tasks.args, "splits"):
-    #         test_adata = self.data.adata[
-    #             self.data.adata.obs[self.cfg.tasks.args.splits.col] == self.cfg.tasks.args.splits.keys_.test
-    #         ].copy()
-    #         val_adata = self.data.adata[
-    #             self.data.adata.obs[self.cfg.tasks.args.splits.col] == self.cfg.tasks.args.splits.keys_.val
-    #         ].copy()
-
-    #     # Case 2: random splits
-    #     elif hasattr(self.data, "splits"):
-    #         # breakpoint()
-    #         test_adata = self.data.adata[self.data.splits["test"]].copy()
-    #         val_adata = self.data.adata[self.data.splits["val"]].copy()
-
-    #     else:
-    #         raise ValueError("No split information found in config")
-
-    #     test_adata.obsm["heimdall_latents"] = best_test_embed
-    #     val_adata.obsm["heimdall_latents"] = best_val_embed
-
-    #     sc.pp.neighbors(test_adata, use_rep="heimdall_latents")
-    #     sc.tl.leiden(test_adata)
-    #     sc.tl.umap(test_adata)
-
-    #     sc.pp.neighbors(val_adata, use_rep="heimdall_latents")
-    #     sc.tl.leiden(val_adata)
-    #     sc.tl.umap(val_adata)
-
-    #     AnnData.write(test_adata, self.results_folder / "test_adata.h5ad")
-    #     AnnData.write(val_adata, self.results_folder / "val_adata.h5ad")
 
     def initialize_checkpointing(self, results_folder_path=None):
         """Initialize checkpoint directory."""
