@@ -20,7 +20,7 @@ from scipy.sparse import csc_array
 from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset
 
-from Heimdall.datasets import Dataset, PartitionedSubset
+from Heimdall.datasets import CustomPartitionDataLoader, Dataset, PartitionedSubset
 from Heimdall.fc import Fc
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
@@ -630,25 +630,18 @@ class PartitionedCellRepresentation(CellRepresentation):
         for split in overall_splits:
             self.datasets[split] = PartitionedSubset(full_dataset, overall_splits[split])
 
-        # Set up data loaders
-        # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
-        dataloader_kwargs = {"num_workers": 4}
-        # TODO: we can parse additional data loader kwargs from config
         self.dataloaders = {
-            split: DataLoader(
+            split: CustomPartitionDataLoader(
                 dataset,
                 batch_size=self._cfg.trainer.per_device_batch_size,
-                #  self.dataset_task_cfg.batchsize,
-                #  shuffle=self.dataset_task_cfg.shuffle if split == "train" else False,
                 sampler=PartitionedDistributedSampler(
                     dataset,
                     num_replicas=self.num_replicas,
                     rank=self.rank,
                     shuffle=self.dataset_task_cfg.shuffle if split == "train" else False,
                 ),
-                # sampler=sampler,
                 collate_fn=heimdall_collate_fn,
-                **dataloader_kwargs,
+                num_workers=4,
             )
             for split, dataset in self.datasets.items()
         }

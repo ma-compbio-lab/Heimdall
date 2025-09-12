@@ -565,3 +565,15 @@ def save_umap(cr: "CellRepresentation", embeddings, savepath, split="test"):
     sc.tl.umap(adata)
 
     ad.io.write_h5ad(savepath, adata)
+
+
+class PartitionExhausted(Exception):
+
+    def __init__(self, message: str = "Partition exhausted"):
+        super().__init__(message)
+
+
+class AllPartitionsExhausted(Exception):
+
+    def __init__(self, message: str = "All partitions exhausted"):
+        super().__init__(message)

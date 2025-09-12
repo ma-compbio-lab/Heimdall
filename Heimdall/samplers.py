@@ -21,7 +21,6 @@ class PartitionedDistributedSampler(DistributedSampler):
             self.partition_sizes = self.full_dataset._data.partition_sizes
 
         self.rng = np.random.default_rng(seed=self.full_dataset._data._cfg.seed)
-        self.partition_order = list(range(self.full_dataset.num_partitions))  # Provide an arg to shuffle
 
         self.total_samples_per_partition = {}
 
@@ -61,17 +60,11 @@ class PartitionedDistributedSampler(DistributedSampler):
         indices = indices[self.rank : self.total_samples_per_partition[partition] : self.num_replicas]
         assert len(indices) == self.total_samples_per_partition[partition] / self.num_replicas
 
-        return indices
+        yield from indices
 
     def __iter__(self):
-        if self.shuffle:
-            self.rng.shuffle(self.partition_order)
 
-        for partition in self.partition_order:
-            indices = self.generate_partition_indices(partition)
-            # add parition to indices
-            indices = list(zip(indices, [partition] * len(indices)))
-            yield from indices
+        return self.generate_partition_indices(self.full_dataset.partition)
 
     def __len__(self) -> int:
         return sum(self.total_samples_per_partition.values()) // self.num_replicas

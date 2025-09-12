@@ -6,8 +6,11 @@ from typing import TYPE_CHECKING, Tuple, Union
 import numpy as np
 from numpy.typing import NDArray
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
+
+from Heimdall.utils import AllPartitionsExhausted, PartitionExhausted
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
@@ -464,3 +467,64 @@ class PartitionedSubset(Subset):
 
     def __len__(self):
         return sum(len(indices) for indices in self.indices.values())
+
+
+class CustomPartitionDataLoader:
+    """Custom DataLoader that handles multiple partitions and raises custom
+    exceptions."""
+
+    def __init__(self, dataset, **dataloader_kwargs):
+        """
+        Args:
+            **dataloader_kwargs: Additional arguments for DataLoader
+        """
+        self.dataloader_kwargs = dataloader_kwargs
+        self.shuffle = self.dataloader_kwargs.get("shuffle", False)
+        self.dataset = dataset
+        if isinstance(self.dataset, Subset):
+            self.full_dataset = self.dataset.dataset
+        else:
+            self.full_dataset = self.dataset
+
+        self.partition_order = list(range(self.full_dataset.num_partitions))
+
+    def _load_partition(self, part_idx: int):
+
+        # load underlying partition
+        self.full_dataset.partition = self.partition_order[part_idx]
+
+        # create dataloader for partition
+        self.current_dataloader = DataLoader(
+            self.dataset,
+            **self.dataloader_kwargs,
+        )
+        self.current_iterator = iter(self.current_dataloader)
+
+    def next_partition(self):
+
+        self.curr_partition_idx += 1
+
+        self._load_partition(self.curr_partition_idx)
+
+    def __iter__(self):
+        if self.shuffle:
+            self.partition_order = np.random.shuffle(self.partition_order)
+
+        self.curr_partition_idx = 0
+        self._load_partition(self.partition_order[self.curr_partition_idx])
+        return self
+
+    def __next__(self):
+
+        try:
+            return next(self.current_iterator)
+        except StopIteration:
+            if self.curr_partition_idx + 1 < self.full_dataset.num_partitions:
+                raise PartitionExhausted()
+            else:
+                raise AllPartitionsExhausted()
+
+    def __len__(self):
+        raise NotImplementedError  # TODO this is used for
+        # initializign learning rate/ tqdm progress bar need
+        # to figure out a better way to compute this beforehand

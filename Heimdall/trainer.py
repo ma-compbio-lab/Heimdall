@@ -16,6 +16,7 @@ from torchmetrics.classification import Accuracy, ConfusionMatrix, F1Score, Matt
 from torchmetrics.regression import MeanSquaredError, R2Score
 from tqdm import tqdm
 from transformers import get_scheduler
+from utils import AllPartitionsExhausted, PartitionExhausted
 
 import Heimdall.datasets
 import Heimdall.losses
@@ -349,7 +350,7 @@ class HeimdallTrainer:
                 save_umap(self.data, best_val_embed, split="val", savepath=self.results_folder / "val_adata.h5ad")
                 self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
             else:
-                self.print_r0(f"> Skipped saving UMAP")
+                self.print_r0("> Skipped saving UMAP")
 
         if self.accelerator.is_main_process:
             self.print_r0("> Model has finished Training")
@@ -403,50 +404,70 @@ class HeimdallTrainer:
         batched_embeddings = []
 
         y_true_batches, preds_batches = [], []
+        data_exhausted = False
 
         with torch.no_grad():
             with tqdm(dataloader, disable=not self.accelerator.is_main_process) as t:
-                for batch in t:
-                    outputs, loss = self.get_outputs_and_loss(batch, loss)
-                    logits = outputs.logits
-                    labels = batch["labels"].to(outputs.device)
+                while not data_exhausted:
+                    try:
+                        batch = next(t)
+                        outputs, loss = self.get_outputs_and_loss(batch, loss)
+                        logits = outputs.logits
+                        labels = batch["labels"].to(outputs.device)
 
-                    if self.cfg.model.name != "logistic_regression":
-                        batched_embeddings.append(outputs.cls_embeddings.detach().cpu().numpy())
+                        if self.cfg.model.name != "logistic_regression":
+                            batched_embeddings.append(outputs.cls_embeddings.detach().cpu().numpy())
 
-                    if self.cfg.tasks.args.task_type in ("multiclass", "mlm"):
-                        preds = logits.argmax(dim=1)
-                    elif self.cfg.tasks.args.task_type == "binary":
-                        # multi-label binary classification → use sigmoid + threshold
-                        probs = torch.sigmoid(logits)
-                        preds = (probs > 0.5).float()
+                        if self.cfg.tasks.args.task_type in ("multiclass", "mlm"):
+                            preds = logits.argmax(dim=1)
+                        elif self.cfg.tasks.args.task_type == "binary":
+                            # multi-label binary classification → use sigmoid + threshold
+                            probs = torch.sigmoid(logits)
+                            preds = (probs > 0.5).float()
 
-                    elif self.cfg.tasks.args.task_type == "regression":
-                        preds = logits
+                        elif self.cfg.tasks.args.task_type == "regression":
+                            preds = logits
 
-                    else:
-                        raise ValueError(f"Unsupported task_type: {self.cfg.tasks.args.task_type}")
+                        else:
+                            raise ValueError(f"Unsupported task_type: {self.cfg.tasks.args.task_type}")
 
-                    y_true_batches.append(labels.cpu())
-                    preds_batches.append(preds.cpu())
+                        y_true_batches.append(labels.cpu())
+                        preds_batches.append(preds.cpu())
 
-                    for metric_name, metric in metrics.items():  # noqa: B007
-                        # Built-in metric
-                        if self.cfg.tasks.args.task_type in ["multiclass", "mlm"]:
-                            labels = labels.to(torch.int)
-                        if self.cfg.tasks.args.task_type in ["binary"]:
-                            # Step 1: Flatten the tensor
-                            flattened_labels = labels.flatten()
-                            flattened_logits = logits.flatten()
-                            mask = ~torch.isnan(flattened_labels)
+                        for metric_name, metric in metrics.items():  # noqa: B007
+                            # Built-in metric
+                            if self.cfg.tasks.args.task_type in ["multiclass", "mlm"]:
+                                labels = labels.to(torch.int)
+                            if self.cfg.tasks.args.task_type in ["binary"]:
+                                # Step 1: Flatten the tensor
+                                flattened_labels = labels.flatten()
+                                flattened_logits = logits.flatten()
+                                mask = ~torch.isnan(flattened_labels)
 
-                            no_nans_flattened_labels = flattened_labels[mask]
-                            no_nans_flattened_logits = flattened_logits[mask]
-                            labels = no_nans_flattened_labels.to(torch.int)
-                            logits = no_nans_flattened_logits
-                        metric.update(logits, labels)
-                    if self.cfg.trainer.fastdev:
-                        break
+                                no_nans_flattened_labels = flattened_labels[mask]
+                                no_nans_flattened_logits = flattened_logits[mask]
+                                labels = no_nans_flattened_labels.to(torch.int)
+                                logits = no_nans_flattened_logits
+                            metric.update(logits, labels)
+
+                        if self.cfg.trainer.fastdev:
+                            data_exhausted = True
+
+                    except (StopIteration, PartitionExhausted, AllPartitionsExhausted) as e:
+                        if isinstance(e, PartitionExhausted):
+                            self.accelerator.wait_for_everyone()  # wait
+                            # for all processes to finish the current
+                            # partition
+                            self.dataloader_train.next_partition()
+                            # trigger loading of the next partition
+                            # and yielding samples from it
+                        elif isinstance(e, AllPartitionsExhausted):
+                            self.accelerator.wait_for_everyone()  # wait
+                            # for all processes to finish the current
+                            # partition
+                            data_exhausted = True
+                        elif isinstance(e, StopIteration):
+                            data_exhausted = True
 
         all_embeddings = None
         if self.cfg.model.name != "logistic_regression":
@@ -523,49 +544,63 @@ class HeimdallTrainer:
         self.model.train()
         step = len(self.dataloader_train) * epoch
         log_every = 1
+        data_exhausted = False
 
         with tqdm(self.dataloader_train, disable=not self.accelerator.is_main_process) as t:
-            for batch in t:
-                step += 1
-                is_logging = step % log_every == 0
+            while not data_exhausted:
+                try:
+                    batch = next(t)
+                    step += 1
+                    is_logging = step % log_every == 0
 
-                lr = self.lr_scheduler.get_last_lr()[0]
-                with self.accelerator.accumulate(self.model):
-                    outputs, loss = self.get_outputs_and_loss(batch)
+                    lr = self.lr_scheduler.get_last_lr()[0]
+                    with self.accelerator.accumulate(self.model):
+                        outputs, loss = self.get_outputs_and_loss(batch)
 
-                    self.accelerator.backward(loss)
+                        self.accelerator.backward(loss)
 
-                    if self.accelerator.sync_gradients:
-                        grad_norm = self.accelerator.clip_grad_norm_(
-                            self.model.parameters(),
-                            self.cfg.trainer.grad_norm_clip,
-                        )
-                        self.optimizer.step()
-                        self.lr_scheduler.step()
-                        self.optimizer.zero_grad()
-                        self.step += 1
+                        if self.accelerator.sync_gradients:
+                            grad_norm = self.accelerator.clip_grad_norm_(
+                                self.model.parameters(),
+                                self.cfg.trainer.grad_norm_clip,
+                            )
+                            self.optimizer.step()
+                            self.lr_scheduler.step()
+                            self.optimizer.zero_grad()
+                            self.step += 1
 
-                        t.set_description(
-                            f"Epoch: {epoch} "
-                            f"Step {self.step} "
-                            f"Loss: {loss.item():.4f} "
-                            f"LR: {lr:.1e} "
-                            f"grad_norm: {grad_norm:.4f} ",
-                        )
+                            t.set_description(
+                                f"Epoch: {epoch} "
+                                f"Step {self.step} "
+                                f"Loss: {loss.item():.4f} "
+                                f"LR: {lr:.1e} "
+                                f"grad_norm: {grad_norm:.4f} ",
+                            )
 
-                        if is_logging:
-                            log = {
-                                "train_loss": loss.item(),
-                                "global_step": self.step,
-                                "learning_rate": lr,
-                                "epoch": epoch,
-                                "grad_norm": grad_norm,
-                            }
-                            if self.run_wandb and self.accelerator.is_main_process:
-                                self.accelerator.log(log, step=self.step)
+                            if is_logging:
+                                log = {
+                                    "train_loss": loss.item(),
+                                    "global_step": self.step,
+                                    "learning_rate": lr,
+                                    "epoch": epoch,
+                                    "grad_norm": grad_norm,
+                                }
+                                if self.run_wandb and self.accelerator.is_main_process:
+                                    self.accelerator.log(log, step=self.step)
 
-                if self.cfg.trainer.fastdev:
-                    break
+                    if self.cfg.trainer.fastdev:
+                        data_exhausted = True
+
+                except (StopIteration, PartitionExhausted, AllPartitionsExhausted) as e:
+                    if isinstance(e, PartitionExhausted):
+                        self.accelerator.wait_for_everyone()  # wait for all processes to finish the current partition
+                        self.dataloader_train.next_partition()  # trigger loading of the next partition and yielding
+                        # samples from it
+                    elif isinstance(e, AllPartitionsExhausted):
+                        self.accelerator.wait_for_everyone()  # wait for all processes to finish the current partition
+                        data_exhausted = True
+                    elif isinstance(e, StopIteration):
+                        data_exhausted = True
 
     def initialize_checkpointing(self, results_folder_path=None):
         """Initialize checkpoint directory."""
