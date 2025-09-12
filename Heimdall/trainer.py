@@ -314,6 +314,10 @@ class HeimdallTrainer:
                             f"No improvement in validation {track_metric}. "
                             f"Patience counter: {patience_counter}/{early_stopping_patience}",
                         )
+            else:
+                best_val_embed = val_embed
+                best_test_embed = test_embed
+                best_epoch = epoch
 
             # Check early stopping condition
             if early_stopping and patience_counter >= early_stopping_patience:
@@ -342,9 +346,12 @@ class HeimdallTrainer:
             and self.cfg.tasks.args.task_type != "mlm"
             # TODO doesn't seem necessary for pretraining but consult with others
         ):
-            save_umap(self.data, best_test_embed, split="test", savepath=self.results_folder / "test_adata.h5ad")
-            save_umap(self.data, best_val_embed, split="val", savepath=self.results_folder / "val_adata.h5ad")
-            self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
+            if best_test_embed is not None and best_val_embed is not None:
+                save_umap(self.data, best_test_embed, split="test", savepath=self.results_folder / "test_adata.h5ad")
+                save_umap(self.data, best_val_embed, split="val", savepath=self.results_folder / "val_adata.h5ad")
+                self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
+            else:
+                self.print_r0(f"> Skipped saving UMAP")
 
         if self.accelerator.is_main_process:
             self.print_r0("> Model has finished Training")
