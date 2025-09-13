@@ -384,7 +384,6 @@ class HeimdallTrainer:
                     inputs = (batch["identity_inputs"], batch["expression_inputs"])
                     outputs = self.model(
                         inputs=inputs,
-                        conditional_tokens=batch.get("conditional_tokens"),
                         attention_mask=batch.get("expression_padding"),
                     )
                     labels = batch["labels"].to(outputs.device)
@@ -616,7 +615,6 @@ class HeimdallTrainer:
 
                 outputs = self.model(
                     inputs=inputs,
-                    conditional_tokens=batch.get("conditional_tokens"),
                     attention_mask=batch.get("expression_padding"),
                 )
 

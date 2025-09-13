@@ -1,4 +1,4 @@
-type: Heimdall.models.HeimdallTransformer
+type: Heimdall.models.Transformer
 name: transformer
 args:
   d_model: 128
