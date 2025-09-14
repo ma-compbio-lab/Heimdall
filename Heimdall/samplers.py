@@ -63,7 +63,6 @@ class PartitionedDistributedSampler(DistributedSampler):
         yield from indices
 
     def __iter__(self):
-
         return self.generate_partition_indices(self.full_dataset.partition)
 
     def __len__(self) -> int:

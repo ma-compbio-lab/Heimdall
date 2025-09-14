@@ -20,7 +20,7 @@ from scipy.sparse import csc_array
 from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset
 
-from Heimdall.datasets import CustomPartitionDataLoader, Dataset, PartitionedSubset
+from Heimdall.datasets import Dataset, PartitionedDataLoader, PartitionedSubset
 from Heimdall.fc import Fc
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
@@ -226,8 +226,7 @@ class CellRepresentation(SpecialTokenMixin):
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():
             self.check_print(
-                f"> Found already preprocessed \
-                             anndata: {preprocessed_data_path}",
+                f"> Found already preprocessed anndata: {preprocessed_data_path}",
                 cr_setup=True,
                 rank=True,
             )
@@ -280,15 +279,8 @@ class CellRepresentation(SpecialTokenMixin):
             # Store mask of NaNs
             nan_mask = np.isnan(self.adata.X)
 
-            # Temporarily fill NaNs with 0 (so they don't affect normalization)
-            normalized_expression = self.adata.X.copy()
-            normalized_expression[nan_mask] = 0
-
-            # Temporarily assign filled data to adata.X
-            self.adata.X = normalized_expression
+            self.adata.X[nan_mask] = 0
             sc.pp.normalize_total(self.adata, target_sum=1e4)
-
-            # Restore NaNs
             self.adata.X[nan_mask] = np.nan
 
             assert (
@@ -300,34 +292,9 @@ class CellRepresentation(SpecialTokenMixin):
         if get_value(self.dataset_preproc_cfg, "log_1p"):
             self.check_print("> Log Transforming anndata...", cr_setup=True)
 
-            # Store mask of NaNs
-            nan_mask = np.isnan(self.adata.X)
-
-            # Log1p only on valid values
-            normalized_expression = np.log1p(self.adata.X.copy())
-            normalized_expression[nan_mask] = np.nan
-
-            # Assign back
-            self.adata.X = normalized_expression
+            sc.pp.log1p(self.adata)
         else:
             self.check_print("> Skipping Log Transforming anndata..", cr_setup=True)
-
-        # if get_value(self.dataset_preproc_cfg, "normalize"):
-        #     # Normalizing based on target sum
-        #     print("> Normalizing anndata...")
-        #     sc.pp.normalize_total(self.adata, target_sum=1e4)
-        #     assert (
-        #         self.dataset_preproc_cfg.normalize and self.dataset_preproc_cfg.log_1p
-        #     ), "Normalize and Log1P both need to be TRUE"
-        # else:
-        #     print("> Skipping Normalizing anndata...")
-
-        # if get_value(self.dataset_preproc_cfg, "log_1p"):
-        #     # log Transform step
-        #     print("> Log Transforming anndata...")
-        #     sc.pp.log1p(self.adata)
-        # else:
-        #     print("> Skipping Log Transforming anndata..")
 
         if get_value(self.dataset_preproc_cfg, "top_n_genes") and self.dataset_preproc_cfg["top_n_genes"] != "false":
             # Identify highly variable genes
@@ -573,7 +540,7 @@ class PartitionedCellRepresentation(CellRepresentation):
 
         self.partition_sizes = {}
         if auto_setup:
-            for partition, _ in enumerate(self.partition_file_paths):
+            for partition in range(self.num_partitions):
                 self.partition = partition
                 self.partition_sizes[partition] = self.adata.n_obs
 
@@ -631,7 +598,7 @@ class PartitionedCellRepresentation(CellRepresentation):
             self.datasets[split] = PartitionedSubset(full_dataset, overall_splits[split])
 
         self.dataloaders = {
-            split: CustomPartitionDataLoader(
+            split: PartitionedDataLoader(
                 dataset,
                 batch_size=self._cfg.trainer.per_device_batch_size,
                 sampler=PartitionedDistributedSampler(
