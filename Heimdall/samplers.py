@@ -43,6 +43,8 @@ class PartitionedDistributedSampler(DistributedSampler):
         self.partition_order = list(range(self.num_partitions))
         self.partition_idx = None
 
+        self.iterator = PartitionIndexIterator(self)
+
     @property
     def partition_idx(self):
         return self._partition_idx
@@ -68,7 +70,8 @@ class PartitionedDistributedSampler(DistributedSampler):
         #     **self.dataloader_kwargs,
         # )
 
-        self.partition_indices = self.generate_partition_indices(partition)
+        print(f">>> Setting partition_indices with {partition = }...")
+        self.iterator.set_indices(self.generate_partition_indices(partition))
         # self.iterator = iter(self.dataloader)  # TODO: Is this necessary? Isn't DataLoader already an iterator?
 
     def generate_partition_indices(self, partition):
@@ -104,19 +107,31 @@ class PartitionedDistributedSampler(DistributedSampler):
         if self.partition_idx is None:
             self.partition_idx = 0
 
-        return self
-
-    def __next__(self):
-        try:
-            return next(self.partition_indices)
-        except StopIteration:
-            self.full_dataset.data.accelerator.wait_for_everyone()
-            if self.partition_idx + 1 == self.num_partitions:
-                self.partition_idx = None
-                raise AllPartitionsExhausted()
-            else:
-                self.partition_idx += 1
-                return next(self.partition_indices)
+        return self.iterator
 
     def __len__(self) -> int:
         return sum(self.total_samples_per_partition.values()) // self.num_replicas
+
+
+class PartitionIndexIterator:
+    def __init__(self, sampler: PartitionedDistributedSampler):
+        self.sampler = sampler
+
+    def set_indices(self, partition_indices: list):
+        self.partition_indices = partition_indices
+
+    def __next__(self):
+        try:
+            result = next(self.partition_indices)
+            print(result)
+            return result
+        except StopIteration:
+            self.sampler.full_dataset.data.accelerator.wait_for_everyone()
+            if self.sampler.partition_idx + 1 == self.sampler.num_partitions:
+                print(">>> End of all partitions...")
+                self.sampler.partition_idx = None
+                raise AllPartitionsExhausted()
+            else:
+                print(">>> End of partition...")
+                self.sampler.partition_idx += 1
+                return next(self.partition_indices)
