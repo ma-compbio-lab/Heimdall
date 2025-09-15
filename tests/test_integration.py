@@ -6,11 +6,11 @@ import hydra
 import pytest
 from accelerate import Accelerator
 from dotenv import load_dotenv
-from omegaconf import OmegaConf, open_dict
+from omegaconf import OmegaConf
 
 from Heimdall.cell_representations import CellRepresentation
 from Heimdall.models import HeimdallModel
-from Heimdall.trainer import HeimdallTrainer
+from Heimdall.trainer import setup_trainer
 from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
 
 load_dotenv()
@@ -34,51 +34,45 @@ def test_default_hydra_train():
                 "fc=uce",
                 "seed=55",
                 "project_name=demo",
+                "run_wandb=false",
                 "tasks.args.epochs=1",
                 "fc.args.max_input_length=512",
                 "fc.args.tailor_config.args.sample_size=450",
                 # f"user={os.environ['HYDRA_USER']}"
             ],
         )
-        print(OmegaConf.to_yaml(config))
-
-    # get accelerate context
-    accelerator_log_kwargs = {}
-    accelerator_log_kwargs["log_with"] = "wandb"
-    accelerator_log_kwargs["project_dir"] = config.work_dir
-    accelerator = Accelerator(
-        gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
-        step_scheduler_with_optimizer=False,
-        **accelerator_log_kwargs,
-    )
-    if accelerator.is_main_process:
-        print(OmegaConf.to_yaml(config, resolve=True))
-
-    with open_dict(config):
-        only_preprocess_data = config.pop("only_preprocess_data", None)
-        # pop so hash of cfg is not changed depending on value
-
-    cr = instantiate_from_config(config.tasks.args.cell_rep_config, config, accelerator)
-
-    if only_preprocess_data:
-        return
-
-    float_dtype = get_dtype(config.float_dtype)
-
-    model = HeimdallModel(
-        data=cr,
-        model_config=config.model,
-        task_config=config.tasks.args,
-    ).to(float_dtype)
-
-    num_params = count_parameters(model)
-
-    print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
-
-    trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=False)
-
+    trainer = setup_trainer(config, cpu=False)
     trainer.fit(resume_from_checkpoint=False, checkpoint_every_n_epochs=20)
 
     valid_log, _ = trainer.validate_model(trainer.dataloader_val, dataset_type="valid")
 
     assert valid_log["valid_MatthewsCorrCoef"] > 0.25
+
+
+@pytest.mark.integration
+def test_partitioned_hydra_train():
+    with hydra.initialize(version_base=None, config_path="../config"):
+        config = hydra.compose(
+            config_name="config",
+            overrides=[
+                # "+experiments_dev=classification_experiment_dev",
+                "+experiments=pretraining",
+                "dataset=pretrain_dev",
+                # "user=lane-nick"
+                "model=transformer",
+                "model.args.d_model=128",
+                "seed=55",
+                "project_name=demo",
+                "run_wandb=false",
+                "tasks.args.epochs=1",
+                "fc.args.max_input_length=512",
+                # f"user={os.environ['HYDRA_USER']}"
+            ],
+        )
+
+    trainer = setup_trainer(config, cpu=False)
+    trainer.fit(resume_from_checkpoint=False, checkpoint_every_n_epochs=20)
+
+    valid_log, _ = trainer.validate_model(trainer.dataloader_val, dataset_type="valid")
+
+    assert valid_log["valid_MatthewsCorrCoef"] > 0

@@ -30,7 +30,7 @@ def valid_gene_names():
 @fixture(scope="module")
 def plain_toy_data(valid_gene_names):
     adata = ad.AnnData(
-        X=csr_array(np.arange(3 * 10).reshape(10, 3)),
+        X=csr_array(np.arange(3 * 10).reshape(10, 3).astype(np.float32)),
         var=pd.DataFrame(index=valid_gene_names),
     )
 

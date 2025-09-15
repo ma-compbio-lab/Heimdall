@@ -13,7 +13,7 @@ from omegaconf import OmegaConf, open_dict
 from pytest import fixture
 
 from Heimdall.cell_representations import CellRepresentation
-from Heimdall.models import HeimdallModel
+from Heimdall.models import HeimdallModel, setup_experiment
 from Heimdall.utils import get_dtype, instantiate_from_config
 
 load_dotenv()
@@ -392,34 +392,12 @@ def partition_config(request, toy_partitioned_data_path):
 
 
 def instantiate_and_run_model(config):
-    # get accelerate context
-    accelerator_log_kwargs = {}
-    accelerator_log_kwargs["log_with"] = "wandb"
-    accelerator_log_kwargs["project_dir"] = config.work_dir
-    accelerator = Accelerator(
-        gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
-        step_scheduler_with_optimizer=False,
-        **accelerator_log_kwargs,
-    )
-    if accelerator.is_main_process:
-        print(OmegaConf.to_yaml(config, resolve=True))
+    experiment_primitives = setup_experiment(config, cpu=True)
 
-    with open_dict(config):
-        only_preprocess_data = config.pop("only_preprocess_data", None)
-        # pop so hash of cfg is not changed depending on value
-
-    cr = instantiate_from_config(config.tasks.args.cell_rep_config, config, accelerator)
-
-    if only_preprocess_data:
+    if experiment_primitives is None:
         return
 
-    float_dtype = get_dtype(config.float_dtype)
-
-    model = HeimdallModel(
-        data=cr,
-        model_config=config.model,
-        task_config=config.tasks.args,
-    ).to(float_dtype)
+    _, cr, model, _ = experiment_primitives
 
     # Test execution
     batch = next(iter(cr.dataloaders["train"]))

@@ -3,6 +3,7 @@ args:
   label_obsm_name: mlm
   metrics:
     - Accuracy
+    - MatthewsCorrCoef
   train_split: 0.95
   shuffle: True
   batchsize: 512
