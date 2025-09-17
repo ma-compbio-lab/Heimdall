@@ -33,3 +33,5 @@ tasks:
 optimizer:
   args:
     lr: 2e-3
+
+pretrained_ckpt_path:
