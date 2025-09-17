@@ -1,9 +1,12 @@
 from accelerate import Accelerator
 from omegaconf import OmegaConf, open_dict
+from collections import OrderedDict
+from pathlib import Path
 
 from Heimdall.models import HeimdallModel
 from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
 from accelerate import DistributedDataParallelKwargs
+import torch
 
 def setup_experiment(config, cpu=False):
     """Set up Heimdall experiment based on config, including cr, model and
@@ -45,10 +48,23 @@ def setup_experiment(config, cpu=False):
         data=cr,
         model_config=config.model,
         task_config=config.tasks.args,
-    ).to(float_dtype)
+    )
+
+    if config.pretrained_ckpt_path is not None:
+        assert Path(config.pretrained_ckpt_path).is_file(), 'pretrained checkpoint file does not exist'
+        pretrained_state_dict = torch.load(config.pretrained_ckpt_path)['model']
+        filtered_pretrained_params = OrderedDict(filter(lambda param_tuple: 'head.decoder' not in param_tuple[0], pretrained_state_dict.items())) # we drop to pretrained head and load all other params
+
+        model.load_state_dict(filtered_pretrained_params,strict=False)
+        
+        if accelerator.is_main_process:
+            print(f">Finished loading pretrained params loaded from {config.pretrained_ckpt_path}")
+
+    model.to(float_dtype) # to dtype after potentially loading pretrained weights instead of before
 
     if accelerator.is_main_process:
         num_params = count_parameters(model)
         print(f"\nModel constructed:\n{model}\nNumber of trainable parameters {num_params:,}\n")
+            
 
     return accelerator, cr, model, run_wandb

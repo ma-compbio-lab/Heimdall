@@ -263,7 +263,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         preprocessed_data_path_w_cell_cfg, preprocessed_cfg_path, cfg = self.get_preprocessed_data_path(hash_data_only=False)
 
-        if preprocessed_data_path_w_cell_cfg.is_file():
+        if preprocessed_data_path_w_cell_cfg is not None and preprocessed_data_path_w_cell_cfg.is_file():
             is_cached = self.anndata_from_cache(preprocessed_data_path_w_cell_cfg, preprocessed_cfg_path, cfg)
             if is_cached:
                 return
