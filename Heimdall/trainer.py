@@ -493,8 +493,8 @@ class HeimdallTrainer:
 
         if not training:
             outputs["all_embeddings"] = np.concatenate(outputs["all_embeddings"], axis=0)
-            outputs["all_labels"] = np.concatenate(outputs["all_embeddings"], axis=0)
-            outputs["all_preds"] = np.concatenate(outputs["all_embeddings"], axis=0)
+            outputs["all_labels"] = np.concatenate(outputs["all_labels"], axis=0)
+            outputs["all_preds"] = np.concatenate(outputs["all_preds"], axis=0)
 
         return outputs
 
@@ -553,6 +553,8 @@ class HeimdallTrainer:
 
             # 4. Log interactive confusion matrix to WandB (main process only)
             if self.run_wandb and self.accelerator.is_main_process:
+                print("Debug: ", outputs["all_preds"])
+                print("Debug: ", self.class_names)
                 wandb_cm = wandb.plot.confusion_matrix(
                     y_true=outputs["all_labels"],
                     preds=outputs["all_preds"],
