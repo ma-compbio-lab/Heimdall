@@ -21,7 +21,7 @@ if "HYDRA_USER" not in os.environ:
 
 @pytest.mark.integration
 def test_default_hydra_train():
-    with hydra.initialize(version_base=None, config_path="../config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         config = hydra.compose(
             config_name="config",
             overrides=[
@@ -51,7 +51,7 @@ def test_default_hydra_train():
 
 @pytest.mark.integration
 def test_partitioned_hydra_train():
-    with hydra.initialize(version_base=None, config_path="../config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         config = hydra.compose(
             config_name="config",
             overrides=[
