@@ -167,7 +167,33 @@ class ChromosomeAwareFc(Fc):
         Fc.adata.fset(self, val)
         self.extract_gene_positions()
 
+class AdmixtureFc(Fc):
+    def __init__(
+        self,
+        fg: Fg | None,
+        fe: Fe | None,
+        adata: ad.AnnData,
+        tailor_config: DictConfig,
+        order_config: DictConfig,
+        reduce_config: DictConfig,
+        embedding_parameters: DictConfig,
+        max_input_length: Optional[int] = None,
+        float_dtype: str = "float32",
+        rng: int | np.random.Generator = 0,
+    ):
+        self.fg = fg
+        self.fe = fe
+        self._adata = adata
+        self.max_input_length = max_input_length
+        self.float_dtype = float_dtype
+        self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
+        self.rng = np.random.default_rng(rng)
 
+        self.tailor = instantiate_from_config(tailor_config, fc=self)
+        self.order = instantiate_from_config(order_config, fc=self)
+        self.reduce = instantiate_from_config(reduce_config, fc=self)
+
+    
 class DummyFc(Fc):
     def __init__(
         self,

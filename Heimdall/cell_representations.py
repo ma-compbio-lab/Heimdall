@@ -70,6 +70,7 @@ class SpecialTokenMixin:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # review how this works 
         self.special_tokens = {token: self.adata.n_vars + i for i, token in enumerate(self._SPECIAL_TOKENS)}
 
 
@@ -105,6 +106,15 @@ class CellRepresentation(SpecialTokenMixin):
             self.prepare_dataset_loaders()
 
         super().__init__()
+
+        # add cell type tokens of surrounding cells to self.special_tokens (keep string labels in anndata, assign int values here)
+        if get_value(self.dataset_preproc_cfg, "admixture"):
+            cell_types = sorted(self.adata.obs['cell_type'].unique().tolist())
+            print(cell_types[:10])
+            n_tokens = len(self.special_tokens)
+            self.special_tokens = self.special_tokens.update({ct: n_tokens + i for i, ct in enumerate(cell_types)})
+            print(self.special_tokens)
+            exit()
 
     # @property
     # @check_states(adata=True, processed_fcfg=True)
@@ -248,6 +258,18 @@ class CellRepresentation(SpecialTokenMixin):
             self.adata.X = self.adata.X.toarray()
         else:
             print("> Matrix is already dense.")
+
+
+        # Add admixture layer if specified
+        if get_value(self.dataset_preproc_cfg, "admixture"):
+            self.adata.X = self.adata.X + self.adata.layers["admixed"]
+            print("> Added admixture layer to main expression matrix.")
+            # do something with surrounding cell tokens
+            admix_cols = [c for c in self.adata.obs if c.startswith('ADM_ID_')]
+
+            
+            # get binary labels from genes
+            self.adata.obsm["is_transcript_added"] = (self.adata.layers["admixed"] > 0).astype(bool)
 
         if get_value(self.dataset_preproc_cfg, "normalize"):
             print("> Normalizing AnnData...")

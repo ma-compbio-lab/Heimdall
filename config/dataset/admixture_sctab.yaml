@@ -1,0 +1,11 @@
+dataset_name: "admixture_sctab"
+
+preprocess_args:
+  data_path: "/home/jwinchel/seg_cleaner/scTab_GItract_train_admixed.h5ad"
+  top_n_genes: false
+  normalize: false
+  log_1p: false
+  scale_data: false
+  admixture: true
+  admix_layer: "admixture"
+  species: "human"
