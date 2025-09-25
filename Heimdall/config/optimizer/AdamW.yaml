@@ -1,4 +1,4 @@
-name: 'AdamW'
+name: AdamW
 
 args:
   lr: 1e-4

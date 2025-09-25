@@ -5,10 +5,10 @@ args:
   embedding_parameters:
     type: Heimdall.embedding.AutoDiscretizationEmbedding2
     args:
-      dim: ${model.args.d_model} # Replace later
+      dim: ${model.args.d_model}  # Replace later
       bin_num: 100
       bin_alpha: 1
-      mask_token_id: null
-      pad_token_id: null
+      mask_token_id:
+      pad_token_id:
   d_embedding: ${model.args.d_model}
-  drop_zeros: True
+  drop_zeros: true

@@ -1,11 +1,9 @@
 args:
   task_type: mlm
   label_obsm_name: mlm
-  metrics:
-    - Accuracy
-    - MatthewsCorrCoef
+  metrics: [Accuracy, MatthewsCorrCoef]
   train_split: 0.95
-  shuffle: True
+  shuffle: true
   batchsize: 512
   epochs: 10
   dataset_config:
@@ -14,6 +12,8 @@ args:
     #   mask_ratio: 0.15
   head_config:
     type: Heimdall.models.LinearSeqPredHead
-    args: null
+    args:
   cell_rep_config:
     type: Heimdall.cell_representations.PartitionedCellRepresentation
+  loss:
+    type: Heimdall.losses.FlattenCrossEntropyLoss

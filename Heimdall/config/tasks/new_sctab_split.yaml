@@ -1,10 +1,7 @@
 args:
   task_type: multiclass
   label_col_name: cell_type
-  metrics:
-    - Accuracy
-    - MatthewsCorrCoef
-    - ConfusionMatrix
+  metrics: [Accuracy, MatthewsCorrCoef, ConfusionMatrix]
   track_metric: MatthewsCorrCoef
   splits:
     type: predefined
@@ -15,13 +12,15 @@ args:
       test: test
   early_stopping_patience: 5
   early_stopping: true
-  shuffle: True
+  shuffle: true
   batchsize: 32
   epochs: 50
   dataset_config:
     type: Heimdall.datasets.SingleInstanceDataset
   head_config:
     type: Heimdall.models.LinearCellPredHead
-    args: null
+    args:
   cell_rep_config:
     type: Heimdall.cell_representations.CellRepresentation
+  loss:
+    type: Heimdall.losses.FlattenCrossEntropyLoss

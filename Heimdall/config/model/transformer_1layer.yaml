@@ -1,5 +1,6 @@
 type: Heimdall.models.HeimdallTransformer
 name: transformer
+
 args:
   d_model: 32
   pos_enc: BERT

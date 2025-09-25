@@ -9,18 +9,17 @@ command:
   - fc.args.max_input_length=
   - +experiments_baseline=new_sctab_split1
   - user=lane-nick
+
 method: grid
+
 metric:
   goal: maximize
   name: valid_MatthewsCorrCoef
+
 parameters:
   optimizer.args.lr:
-    values:
-      - 1e-2
-      - 1e-3
-      - 3e-4
+    values: [1e-2, 1e-3, 3e-4]
   tasks.args.batchsize:
-    values:
-      - 32
-      - 64
+    values: [32, 64]
+
 program: train.py

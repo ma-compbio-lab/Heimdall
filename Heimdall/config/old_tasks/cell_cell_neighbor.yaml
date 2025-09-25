@@ -7,8 +7,7 @@ args:
       train: Spatial_neigh_train_mask
       val: Spatial_neigh_val_mask
       test: Spatial_neigh_test_mask
-  metrics:
-    - Accuracy
+  metrics: [Accuracy]
   shuffle: true
   batchsize: 32
   epochs: 10
@@ -19,4 +18,4 @@ args:
     type: Heimdall.datasets.PairedInstanceDataset
   head_config:
     type: Heimdall.models.LinearCellPredHead
-    args: null
+    args:

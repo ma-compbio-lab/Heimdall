@@ -5,7 +5,7 @@ args:
     type: Heimdall.embedding.FlexibleTypeEmbedding
     constructor: from_pretrained
     args:
-      embeddings: "gene_embeddings"
+      embeddings: gene_embeddings
   embedding_filepath: ${data_path}/pca_embeds/${dataset.preprocess_args.species}_esm_embeds.pt
   d_embedding: ${model.args.d_model}
-  frozen: True
+  frozen: true

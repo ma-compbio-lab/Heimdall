@@ -1,5 +1,6 @@
 type: Heimdall.models.HeimdallTransformer
 name: transformer_dropout
+
 args:
   d_model: 64
   pos_enc: BERT

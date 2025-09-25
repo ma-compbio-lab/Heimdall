@@ -3,7 +3,7 @@ defaults:
   - lane
 
 # cache_preprocessed_dataset_dir: /scratch/nzh/Heimdall/cache
-cache_preprocessed_dataset_dir: null
+cache_preprocessed_dataset_dir:
 
 # hydra:
 #   job:

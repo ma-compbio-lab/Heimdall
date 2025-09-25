@@ -7,8 +7,7 @@ args:
       train: train
       val: val
       test: test
-  metrics:
-    - Accuracy
+  metrics: [Accuracy]
   shuffle: true
   batchsize: 32
   epochs: 10
@@ -18,4 +17,4 @@ args:
     type: Heimdall.datasets.PairedInstanceDataset
   head_config:
     type: Heimdall.models.LinearCellPredHead
-    args: null
+    args:

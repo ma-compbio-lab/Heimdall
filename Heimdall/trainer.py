@@ -325,7 +325,7 @@ class HeimdallTrainer:
 
     def instantiate_loss_from_config(self, config):
         loss_kwargs = {}
-        loss_name = self.cfg.loss.type.split(".")[-1]
+        loss_name = self.cfg.tasks.args.loss.type.split(".")[-1]
         if loss_name.startswith("Flatten"):
             loss_kwargs["num_labels"] = self.num_labels
 
