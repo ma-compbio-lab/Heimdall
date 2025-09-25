@@ -399,6 +399,7 @@ class TransformerEncoder(nn.Module):
             fa_config = BertConfig(
                 hidden_size=d_model,
                 num_hidden_layers=num_encoder_layers,
+                num_attention_heads=nhead,
                 intermediate_size=d_model * 4,
                 hidden_act=hidden_act,
                 hidden_dropout_prob=hidden_dropout_prob,
