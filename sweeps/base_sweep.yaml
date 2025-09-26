@@ -22,6 +22,7 @@ command:
 # - +experiments=zheng68k
   - accelerate
   - launch
+    #  - --multi_gpu 
   - --mixed_precision=bf16
   - ${program}
   - ${args_no_hyphens}

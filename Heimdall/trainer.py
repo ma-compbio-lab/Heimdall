@@ -332,8 +332,8 @@ class HeimdallTrainer:
             # TODO doesn't seem necessary for pretraining but consult with others
         ):
             if best_test_embed is not None and best_val_embed is not None and not self.cfg.trainer.fastdev:
-                save_umap(self.data, best_test_embed, split="test", savepath=self.results_folder / "test_adata.h5ad")
-                save_umap(self.data, best_val_embed, split="val", savepath=self.results_folder / "val_adata.h5ad")
+                #save_umap(self.data, best_test_embed, split="test", savepath=self.results_folder / "test_adata.h5ad")
+                #save_umap(self.data, best_val_embed, split="val", savepath=self.results_folder / "val_adata.h5ad")
                 self.print_r0(f"> Saved best UMAP checkpoint at epoch {best_epoch}")
             else:
                 self.print_r0("> Skipped saving UMAP")
@@ -471,6 +471,8 @@ class HeimdallTrainer:
                         outputs["loss"] = loss
 
                     if metrics is not None:
+                        #print("Metrics dictionary: ", metrics.keys())
+                      
                         for metric_name, metric in metrics.items():  # noqa: B007
                             # Built-in metric
                             if self.cfg.tasks.args.task_type in ["multiclass", "mlm"]:
@@ -485,7 +487,8 @@ class HeimdallTrainer:
                                 no_nans_flattened_preds = flattened_preds[mask]
                                 labels = no_nans_flattened_labels.to(torch.int)
                                 preds = no_nans_flattened_preds
-
+                            #print("preds shape: ", preds.shape)
+                            #print("labels shape: ", labels.shape)
                             metric.update(preds, labels)
 
                 if self.cfg.trainer.fastdev:
@@ -524,6 +527,7 @@ class HeimdallTrainer:
             loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
+        print("Metrics dictionary: ", metrics.keys())
         for metric_name, metric in metrics.items():
             if metric_name != "ConfusionMatrix":
                 # Built-in metric

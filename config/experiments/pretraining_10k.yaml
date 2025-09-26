@@ -5,7 +5,7 @@
 ####
 defaults:
   - override /model: transformer # the chosen model
-  - override /dataset: pretrain_100k # dataset for the relevant task
+  - override /dataset: pretrain_10k # dataset for the relevant task
   - override /tasks: pretrain_geneformer_dev # dataset for the relevant task
   - override /scheduler: cosine # contains scheduler
   - override /optimizer: AdamW
