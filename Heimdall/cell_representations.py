@@ -1,7 +1,6 @@
 """The Cell Representation Object for Processing."""
 
 import pickle as pkl
-import warnings
 from collections import defaultdict
 from functools import partial, wraps
 from pathlib import Path
