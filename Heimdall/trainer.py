@@ -260,7 +260,6 @@ class HeimdallTrainer:
 
         # If the tracked parameter is specified
         track_metric = defaultdict(lambda: None)
-        task = self.data.tasklist[None]
         best_metric = defaultdict(dict)
         for subtask_name, subtask in self.data.tasklist:
             if subtask.track_metric is not None:
@@ -343,7 +342,7 @@ class HeimdallTrainer:
                 self.print_r0(f"> Saved regular checkpoint at epoch {epoch}")
 
         if self.run_wandb and self.accelerator.is_main_process:
-            for subtask_name, subtask in self.data.tasklist:
+            for subtask_name, _ in self.data.tasklist:
                 if track_metric[subtask_name] is not None:  # logging the best val score and the tracked test scores
                     self.accelerator.log(best_metric[subtask_name], step=self.step)
             self.accelerator.end_training()
@@ -503,7 +502,7 @@ class HeimdallTrainer:
                                     self.accelerator.log(log, step=self.step)
                         loss = None
                     else:
-                        for subtask_name, subtask in self.data.tasklist:
+                        for subtask_name, _ in self.data.tasklist:
                             if self.has_embeddings:
                                 outputs["all_embeddings"][subtask_name].append(
                                     batch_outputs[subtask_name].cls_embeddings.detach().cpu().numpy(),
@@ -539,7 +538,7 @@ class HeimdallTrainer:
                     break
 
         if not training:
-            for subtask_name, subtask in self.data.tasklist:
+            for subtask_name, _ in self.data.tasklist:
                 outputs["all_embeddings"][subtask_name] = np.concatenate(
                     outputs["all_embeddings"][subtask_name],
                     axis=0,
@@ -575,7 +574,7 @@ class HeimdallTrainer:
             loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
-        for subtask_name, subtask in self.data.tasklist:
+        for subtask_name, _ in self.data.tasklist:
             for metric_name, metric in metrics[subtask_name].items():
                 if metric_name != "ConfusionMatrix":
                     # Built-in metric
