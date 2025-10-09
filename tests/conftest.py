@@ -53,7 +53,7 @@ def toy_single_data_path(pytestconfig, plain_toy_data):
 
 
 @fixture(scope="module")
-def toy_paried_data_path(pytestconfig, plain_toy_data):
+def toy_paired_data_path(pytestconfig, plain_toy_data):
     data_path = pytestconfig.cache.mkdir("toy_data")
 
     adata = plain_toy_data.copy()
@@ -63,7 +63,7 @@ def toy_paried_data_path(pytestconfig, plain_toy_data):
         if key != "task":
             adata.obsp[key][i, i] = 1
 
-    path = data_path / "toy_single_adata.h5ad"
+    path = data_path / "toy_paired_adata.h5ad"
     adata.write_h5ad(path)
 
     return path
