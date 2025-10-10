@@ -168,30 +168,51 @@ class ChromosomeAwareFc(Fc):
         self.extract_gene_positions()
 
 class AdmixtureFc(Fc):
+    # TODO: 
+    # 1. encode surrounding cell types as special tokens
+    # 2. modify `__getitem__` to include surrounding cell type tokens (negative values)
+    # 3. tailor function
     def __init__(
         self,
-        fg: Fg | None,
-        fe: Fe | None,
-        adata: ad.AnnData,
-        tailor_config: DictConfig,
-        order_config: DictConfig,
-        reduce_config: DictConfig,
-        embedding_parameters: DictConfig,
-        max_input_length: Optional[int] = None,
-        float_dtype: str = "float32",
-        rng: int | np.random.Generator = 0,
-    ):
-        self.fg = fg
-        self.fe = fe
-        self._adata = adata
-        self.max_input_length = max_input_length
-        self.float_dtype = float_dtype
-        self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
-        self.rng = np.random.default_rng(rng)
+        *fc_args,
+        gene_metadata_filepath: str | Path,
+        ensembl_dir: str | Path,
+        species: str,
+        **fc_kwargs,
+        ):
 
-        self.tailor = instantiate_from_config(tailor_config, fc=self)
-        self.order = instantiate_from_config(order_config, fc=self)
-        self.reduce = instantiate_from_config(reduce_config, fc=self)
+        self.gene_metadata = pd.read_csv(gene_metadata_filepath)
+        self.ensembl_dir = ensembl_dir
+        self.species = species
+        self.admixture_token_offset = 1
+        
+        super().__init__(*fc_args, **fc_kwargs)
+
+
+    def extract_surr_cell_types(self, cell_index: int):
+        # get surrounding cell types from anndata
+        surr_cell_cols = [c for c in self.adata.obs if c.startswith('ADM_ID_')]
+        surr_cell_ids = self.adata.obs.iloc[cell_index][surr_cell_cols]
+        surr_cell_types = [self.adata.obs.loc[cid,'cell_type'] for cid in surr_cell_ids]
+        surr_cell_tokens = [self.adata.uns['cell_type_dict'][t] for t in surr_cell_types]
+
+        # update fc field
+        self.surr_cell_tokens = surr_cell_tokens
+
+
+    def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray,NDArray]:
+
+        # TEST TO MAKE SURE THE BATCHES TAILOR CELLS IN SEQUENCE NOT IN PARALLEL
+        # updates fc field to be used in tailoring
+        self.extract_surr_cell_types(cell_index)
+
+        # get padded, limited gene identities and expression
+        identity_inputs, expression_inputs, padding_mask = super().__getitem__(cell_index)
+        
+        
+        # retrieve embeddings corresponding to surrounding cell type tokens 
+        return identity_inputs, expression_inputs, padding_mask
+
 
     
 class DummyFc(Fc):

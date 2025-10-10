@@ -55,6 +55,7 @@ class HeimdallTrainer:
         # Unified label key handling: support .obs or .obsm
         label_key = getattr(args, "label_col_name", None)
         label_obsm_key = getattr(args, "label_obsm_name", None)
+        print(label_obsm_key)
 
         if label_key is not None:
             # Single-label classification using .obs[label_key]
@@ -65,6 +66,7 @@ class HeimdallTrainer:
 
         elif label_obsm_key is not None:
             # Multi-label classification using .obsm[label_obsm_key]
+            
             self.class_names = self.data.adata.obsm[label_obsm_key].columns.tolist()
             self.num_labels = len(self.class_names)
 
@@ -386,6 +388,8 @@ class HeimdallTrainer:
                         inputs=inputs,
                         attention_mask=batch.get("expression_padding"),
                     )
+
+                    # REORDER BASED ON TAILORED ORDER
                     labels = batch["labels"].to(outputs.device)
                     if (masks := batch.get("masks")) is not None:
                         masks = masks.to(outputs.device)

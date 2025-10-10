@@ -167,8 +167,11 @@ class SingleInstanceDataset(Dataset):
             raise ValueError(f"Unknown split type {split_type!r}")
 
     def __getitem__(self, idx) -> Tuple[CellFeatType, LabelType]:
-        identity_inputs, expression_inputs, expression_padding = self.data.fc[idx]
+        identity_inputs, expression_inputs, expression_padding = self.data.fc[idx] # just change __getitem__ to set new attribute 
+        # ^ embeddings that have been ordered/tailored, so can't depend 
+        # gene_ordering = self.fc.get_gene_ordering(idx); have to store ordering in fc class for each cell index
 
+        # 
         return {
             "identity_inputs": identity_inputs,
             "expression_inputs": expression_inputs,
@@ -176,7 +179,25 @@ class SingleInstanceDataset(Dataset):
             "labels": self.data.labels[idx],
         }
 
+class AdmixtureInstanceDataset(SingleInstanceDataset):
+    def __getitem__(self, idx) -> Tuple[CellFeatType, LabelType]:
+        identity_inputs, expression_inputs, expression_padding = self.data.fc[idx] # just change __getitem__ to set new attribute
 
+        context_length = len(identity_inputs)-3
+        identity_token_order = self.fc.adata.var["identity_embedding_index"]
+        new_label_order = [np.where(identity_token_order == i)[0][0] for i in identity_inputs[3:]]
+        
+        assert len(self.data.labels[idx][new_label_order]) == context_length
+        
+        return {
+            "identity_inputs": identity_inputs,
+            "expression_inputs": expression_inputs,
+            "expression_padding": expression_padding,
+            "labels": self.data.labels[idx][new_label_order],
+        }
+
+
+    
 class PairedInstanceDataset(Dataset):
     def _setup_idx(self):
         # NOTE: full mask is set up during runtime given split masks or the data

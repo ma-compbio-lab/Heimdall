@@ -212,6 +212,49 @@ class ChromosomeTailor(Tailor):
         return super().__call__(identity_inputs, expression_inputs, gene_order)
 
 
+class AdmixtureTailor(Tailor):
+    def __init__(self, fc: Fc):
+        super().__init__(fc=fc)
+        self.cell_type_dict = self.fc.adata.uns['cell_type_dict']
+    
+    # limits number of genes
+    def limit(
+        self,
+        identity_inputs: NDArray,
+        expression_inputs: NDArray,
+        gene_order: NDArray,
+    ) -> tuple[NDArray, NDArray]:
+
+        return super().limit(identity_inputs, expression_inputs, gene_order)
+    
+    # pads with zeros to achieve target number of genes
+    def pad(
+        self,
+        identity_inputs: NDArray,
+        expression_inputs: NDArray,
+        gene_order: NDArray,
+    ) -> tuple[NDArray, NDArray]:
+
+        return super().pad(identity_inputs, expression_inputs, gene_order)
+    
+    # 
+    def __call__(self, identity_inputs: NDArray, expression_inputs: NDArray, gene_order: NDArray) -> NDArray:
+
+        # appends cell type tokens for incorporation into embeddings (in the AdmixtureSumReduce)
+        # lookup via metadata_embeddings
+        identity_inputs, expression_inputs = self.append_cell_type(identity_inputs, expression_inputs)
+        # prepend cell_type integer ids to identity_inputs, expression_inputs 
+
+        return super().__call__(identity_inputs, expression_inputs, gene_order)
+    
+    def append_cell_type(self, identity_inputs: NDArray, expression_inputs: NDArray) -> tuple[NDArray, NDArray]:
+
+        identity_inputs = np.append(self.fc.surr_cell_tokens,identity_inputs, axis=0)
+        expression_inputs = np.append(self.fc.surr_cell_tokens,expression_inputs, axis=0)
+
+        return identity_inputs, expression_inputs
+
+
 class WeightedResampleTailor(Tailor):
     def __init__(self, fc: Fc, sample_size: int):
         self.sample_size = sample_size
@@ -262,4 +305,4 @@ class WeightedResampleTailor(Tailor):
     def __call__(self, identity_inputs: NDArray, expression_inputs: NDArray, gene_order: NDArray) -> NDArray:
         identity_inputs, expression_inputs = self.weighted_resampling(identity_inputs, expression_inputs, gene_order)
 
-        return super().__call__(identity_inputs, expression_inputs, gene_order)
+        super().__call__(identity_inputs, expression_inputs, gene_order)

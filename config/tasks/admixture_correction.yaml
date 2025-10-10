@@ -5,7 +5,7 @@ args:
     type: predefined
     keys_:
       train: train
-      val: valid
+      val: val
       test: test
   metrics:
     - F1Score

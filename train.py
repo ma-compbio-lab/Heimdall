@@ -13,7 +13,6 @@ def main(config):
 
     # After preparing your f_g and f_c, use the Heimdall Cell_Representation object to load in and
     # preprocess the dataset
-
     cr = CellRepresentation(config)  # takes in the whole config from hydra
 
     # Create the model and the types of inputs that it may use

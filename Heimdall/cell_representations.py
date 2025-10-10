@@ -107,14 +107,8 @@ class CellRepresentation(SpecialTokenMixin):
 
         super().__init__()
 
-        # add cell type tokens of surrounding cells to self.special_tokens (keep string labels in anndata, assign int values here)
-        if get_value(self.dataset_preproc_cfg, "admixture"):
-            cell_types = sorted(self.adata.obs['cell_type'].unique().tolist())
-            print(cell_types[:10])
-            n_tokens = len(self.special_tokens)
-            self.special_tokens = self.special_tokens.update({ct: n_tokens + i for i, ct in enumerate(cell_types)})
-            print(self.special_tokens)
-            exit()
+
+            
 
     # @property
     # @check_states(adata=True, processed_fcfg=True)
@@ -240,8 +234,8 @@ class CellRepresentation(SpecialTokenMixin):
         preprocessed_data_path, preprocessed_cfg_path, cfg = self.get_preprocessed_data_path()
         if preprocessed_data_path is not None:
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
-            if is_cached:
-                return
+            # if is_cached:
+            #     return
 
         self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
         print(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
@@ -261,15 +255,23 @@ class CellRepresentation(SpecialTokenMixin):
 
 
         # Add admixture layer if specified
-        if get_value(self.dataset_preproc_cfg, "admixture"):
-            self.adata.X = self.adata.X + self.adata.layers["admixed"]
+        print(get_value(self.dataset_preproc_cfg, "admix_layer"))
+        if get_value(self.dataset_preproc_cfg, "admix_layer"):
+            admix_layer_name = get_value(self.dataset_preproc_cfg, "admix_layer")
+            self.adata.X = self.adata.X + self.adata.layers[admix_layer_name]
             print("> Added admixture layer to main expression matrix.")
-            # do something with surrounding cell tokens
-            admix_cols = [c for c in self.adata.obs if c.startswith('ADM_ID_')]
 
             
             # get binary labels from genes
-            self.adata.obsm["is_transcript_added"] = (self.adata.layers["admixed"] > 0).astype(bool)
+            self.adata.obsm[get_value(self.dataset_preproc_cfg, "binary_layer")] = pd.DataFrame(data=(self.adata.layers[admix_layer_name] > 0).astype(bool), 
+                                                              columns=self.adata.var_names, 
+                                                              index=self.adata.obs_names)
+            print(pd.DataFrame(data=(self.adata.layers[admix_layer_name] > 0).astype(bool), 
+                                                              columns=self.adata.var_names, 
+                                                              index=self.adata.obs_names))
+            # print(self.adata.obsm['is_transcript_added'].columns())
+            
+            print("> Added binary 'is_transcript_added' layer as obsm.")
 
         if get_value(self.dataset_preproc_cfg, "normalize"):
             print("> Normalizing AnnData...")

@@ -143,3 +143,30 @@ class ChromosomeSumReduce(Reduce):
         expression_embeddings[chrom_token_mask] = metadata_embedding_layer(chrom_token_indices)
 
         return gene_embeddings + expression_embeddings
+
+
+class AdmixtureSumReduce(Reduce):
+    def __call__(
+        self,
+        identity_inputs: Tensor,
+        gene_embedding_layer: Module | None,
+        expression_inputs: Tensor,
+        expression_embedding_layer: Module | None,
+        metadata_embedding_layer: Module | None,
+    ) -> Tensor:
+        """Embed cells using neighboring-cell-type-aware sequences"""
+
+        admixture_token_mask = identity_inputs < 0
+        admixture_token_indices = identity_inputs[identity_inputs < 0]
+        admixture_token_indices = -admixture_token_indices - self.fc.admixture_token_offset
+
+        identity_inputs[admixture_token_mask] = 0
+        expression_inputs[admixture_token_mask] = 0
+
+        gene_embeddings = gene_embedding_layer(identity_inputs)
+        expression_embeddings = expression_embedding_layer(expression_inputs)
+
+        gene_embeddings[admixture_token_mask] = metadata_embedding_layer(admixture_token_indices)
+        expression_embeddings[admixture_token_mask] = metadata_embedding_layer(admixture_token_indices)
+
+        return gene_embeddings + expression_embeddings
