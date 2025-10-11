@@ -1,6 +1,7 @@
 """Heimdall model."""
 
 import warnings
+from collections import defaultdict
 
 import torch
 import torch.nn as nn
@@ -55,51 +56,44 @@ class HeimdallModel(nn.Module):
             head = instantiate_from_config(subtask.head_config, dim_in=dim_in, dim_out=num_labels)
             self.heads[subtask_name] = head
 
-    def encode_cell(self, cell_inputs, attention_mask=None):
+    def encode_cell(self, cell_inputs):
+        """Given the either single- or multiple-cells, use the cell encoder to
+        embed the cell(s)."""
         outputs = {}
         maskless_encoding = None
+        masks = cell_inputs.pop("masks", None)
         for subtask_name, _ in self.tasklist:
-            masks = cell_inputs.pop("masks", None)
-            if masks is None:
-                if maskless_encoding is None:
-                    encoded_cell = self.encoder(cell_inputs, attention_mask=attention_mask)
-                    outputs[subtask_name] = encoded_cell
-                    maskless_encoding = encoded_cell
-                else:
-                    outputs[subtask_name] = maskless_encoding
+            subtask_inputs = {key: cell_inputs[key][subtask_name] for key in cell_inputs}
+            attention_mask = subtask_inputs.pop("expression_padding", None)
+            if maskless_encoding is None:
+                outputs[subtask_name] = self.encoder(subtask_inputs, attention_mask=attention_mask)
+                if masks is None:
+                    maskless_encoding = outputs[subtask_name]
             else:
-                for subtask_name, _ in self.tasklist:
-                    mask = masks[subtask_name]
-                    subtask_inputs = cell_inputs.copy()
-                    subtask_inputs["identity_inputs"] = subtask_inputs["identity_inputs"].clone()
-                    subtask_inputs["identity_inputs"][mask] = self.tasklist.data.special_tokens["mask"]
-
-                    outputs[subtask_name] = self.encoder(subtask_inputs, attention_mask)
+                outputs[subtask_name] = maskless_encoding  # TODO: only reuses encoding if all are unmasked
 
         return outputs
 
-    def forward(self, inputs, attention_mask=None):
+    def forward(self, inputs):
         if self.reducers:
             encoded_cells = []
-            for index in range(2):  # Two cells (can be generalized to more
-                if attention_mask is None:
-                    cell_mask = None
-                else:
-                    cell_mask = attention_mask[index]
-
-                cell_inputs = {}
+            for index in range(2):  # Two cells (can be generalized to more)
+                cell_inputs = defaultdict(dict)
                 for key, value in inputs.items():
-                    cell_inputs[key] = value[index]
+                    for subtask_name, _ in self.reducers.items():
+                        cell_inputs[key][subtask_name] = value[subtask_name][index]
 
-                encoded_cell = self.encode_cell(cell_inputs, attention_mask=cell_mask)
+                encoded_cell = self.encode_cell(cell_inputs)
                 encoded_cells.append(encoded_cell)
 
+            # Apply reducers
             outputs = {}
             for subtask_name, reducer in self.reducers.items():
                 outputs[subtask_name] = reducer([encoded_cell[subtask_name] for encoded_cell in encoded_cells])
         else:
-            outputs = self.encode_cell(inputs, attention_mask)
+            outputs = self.encode_cell(inputs)
 
+        # Apply heads
         outputs = {subtask_name: self.heads[subtask_name](output) for subtask_name, output in outputs.items()}
 
         return outputs

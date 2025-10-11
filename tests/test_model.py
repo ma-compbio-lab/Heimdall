@@ -170,10 +170,7 @@ def instantiate_and_run_model(config):
     # Test execution
     batch = next(iter(cr.dataloaders["train"]))
     inputs = {input_key: batch[input_key] for input_key in INPUT_KEYS if input_key in batch}
-    model(
-        inputs=inputs,
-        attention_mask=batch["expression_padding"],
-    )
+    model(inputs=inputs)
 
 
 @pytest.mark.parametrize(

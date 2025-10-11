@@ -33,11 +33,11 @@ INPUT_KEYS = {
     "identity_inputs",
     "expression_inputs",
     "masks",
+    "expression_padding",
 }
 
 MAIN_KEYS = {
     *INPUT_KEYS,
-    "expression_padding",
     "labels",
     "adjacency_matrix",
     "subgraph_indices",

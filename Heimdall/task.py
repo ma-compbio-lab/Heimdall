@@ -187,8 +187,10 @@ class PairedInstanceTask(Task):
 
 class MLMMixin:
     def get_inputs(self, idx, shared_inputs):
+        identity_inputs = shared_inputs["identity_inputs"]
         return {
-            "labels": shared_inputs["identity_inputs"].astype(int),
+            "identity_inputs": identity_inputs,
+            "labels": identity_inputs.astype(int),
         }
 
     def setup_labels(self):
@@ -232,7 +234,7 @@ class SeqMaskedMLMTask(TransformationMixin, MaskedMixin, MLMMixin, SingleInstanc
         is_padding = data["labels"] == self.data.special_tokens["pad"]
         mask[is_padding] = False
 
-        # data["identity_inputs"][mask] = self.mask_token
+        data["identity_inputs"][mask] = self.mask_token
         # data["expression_inputs"][mask] = self.mask_token
         data["masks"] = mask
 

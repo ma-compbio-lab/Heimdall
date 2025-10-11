@@ -393,10 +393,7 @@ class HeimdallTrainer:
 
         # inputs = (batch["identity_inputs"], batch["expression_inputs"])
 
-        outputs = self.model(
-            inputs=inputs,
-            attention_mask=batch.get("expression_padding"),
-        )
+        outputs = self.model(inputs=inputs)
 
         batch_loss = 0
         preds = {}

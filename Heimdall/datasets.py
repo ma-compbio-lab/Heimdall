@@ -90,16 +90,17 @@ class Dataset(PyTorchDataset, ABC):
         for subtask_name, subtask in self.data.tasklist:
             subtask_inputs = subtask.get_inputs(idx, shared_inputs)
             for key in MAIN_KEYS:
-                subtask_input = subtask_inputs.get(key, None)
+                default_value = shared_inputs[key] if key in shared_inputs else None
+                subtask_input = subtask_inputs.get(key, default_value)
                 all_inputs[key][subtask_name] = subtask_input
 
         for key in MAIN_KEYS:
             if all(value is None for value in all_inputs[key].values()):
                 del all_inputs[key]
 
-        for key in shared_inputs:
-            if key not in all_inputs:
-                all_inputs[key] = shared_inputs[key]
+        # for key in shared_inputs:
+        #     if key not in all_inputs:
+        #         all_inputs[key] = shared_inputs[key]
 
         return all_inputs
 
