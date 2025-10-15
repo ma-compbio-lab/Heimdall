@@ -83,6 +83,9 @@ class Dataset(PyTorchDataset, ABC):
     @abstractmethod
     def _setup_predefined_splits(self, task: Task): ...
 
+    @abstractmethod
+    def get_shared_inputs(self, idx): ...
+
     def __getitem__(self, idx) -> Tuple[CellFeatType, LabelType]:
         shared_inputs = self.get_shared_inputs(idx)
 
@@ -94,9 +97,9 @@ class Dataset(PyTorchDataset, ABC):
                 subtask_input = subtask_inputs.get(key, default_value)
                 all_inputs[key][subtask_name] = subtask_input
 
-        for key in MAIN_KEYS:
-            if all(value is None for value in all_inputs[key].values()):
-                del all_inputs[key]
+        # for key in MAIN_KEYS:
+        #     if all(value is None for value in all_inputs[key].values()):
+        #         del all_inputs[key]
 
         # for key in shared_inputs:
         #     if key not in all_inputs:

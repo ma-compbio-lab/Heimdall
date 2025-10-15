@@ -60,17 +60,17 @@ class HeimdallModel(nn.Module):
         """Given the either single- or multiple-cells, use the cell encoder to
         embed the cell(s)."""
         outputs = {}
-        maskless_encoding = None
+        cached_encoding = None
         masks = cell_inputs.pop("masks", None)
         for subtask_name, _ in self.tasklist:
             subtask_inputs = {key: cell_inputs[key][subtask_name] for key in cell_inputs}
             attention_mask = subtask_inputs.pop("expression_padding", None)
-            if maskless_encoding is None:
+            if masks is None and cached_encoding is not None:
+                outputs[subtask_name] = cached_encoding  # TODO: only reuses encoding if all are unmasked
+            else:
                 outputs[subtask_name] = self.encoder(subtask_inputs, attention_mask=attention_mask)
                 if masks is None:
-                    maskless_encoding = outputs[subtask_name]
-            else:
-                outputs[subtask_name] = maskless_encoding  # TODO: only reuses encoding if all are unmasked
+                    cached_encoding = outputs[subtask_name]
 
         return outputs
 
