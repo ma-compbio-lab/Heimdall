@@ -295,7 +295,9 @@ class HeimdallTrainer:
             for subtask_name, subtask in self.data.tasklist:
                 if track_metric[subtask_name] is not None:
                     val_metric = valid_log.get(f"valid_{subtask_name}_{track_metric}", float("-inf"))
-                    if val_metric > best_metric[subtask_name][f"best_val_{subtask_name}_{track_metric}"]:
+                    if (
+                        val_metric > best_metric[subtask_name][f"best_val_{subtask_name}_{track_metric}"]
+                    ):  # Change to >= if you want to debug UMAP
                         self.best_val_embed[subtask_name] = val_embed[subtask_name]
                         self.best_test_embed[subtask_name] = test_embed[subtask_name]
                         self.best_epoch[subtask_name] = epoch
@@ -421,8 +423,8 @@ class HeimdallTrainer:
 
             preds[subtask_name] = subtask_preds
 
-            if (masks := batch.get("masks")) is not None:
-                masks = masks[subtask_name].to(logits.device)
+            if (masks := batch.get("masks")[subtask_name]) is not None:
+                masks = masks.to(logits.device)
                 logits, subtask_labels = logits[masks], subtask_labels[masks]
 
             # perform a .clone() so that the subtask_labels are not updated in-place

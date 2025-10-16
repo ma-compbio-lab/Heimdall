@@ -16,6 +16,7 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
         gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
         step_scheduler_with_optimizer=False,
         cpu=cpu,
+        mixed_precision="bf16",
         **accelerator_log_kwargs,
     )
 

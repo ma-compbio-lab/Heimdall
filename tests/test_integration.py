@@ -28,7 +28,7 @@ def test_default_hydra_train():
                 # "+experiments_dev=classification_experiment_dev",
                 "+experiments=spatial_cancer_split1",
                 # "user=lane-nick"
-                "model=transformer",
+                "model=transformer_flash",
                 "fg=pca_esm2",
                 "fe=identity",
                 "fc=uce",
@@ -36,8 +36,8 @@ def test_default_hydra_train():
                 "project_name=demo",
                 "run_wandb=false",
                 "tasks.args.epochs=1",
-                "fc.args.max_input_length=512",
-                "fc.args.tailor_config.args.sample_size=450",
+                "fc.args.max_input_length=256",
+                "fc.args.tailor_config.args.sample_size=200",
                 # f"user={os.environ['HYDRA_USER']}"
             ],
         )

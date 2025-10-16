@@ -72,6 +72,9 @@ class HeimdallModel(nn.Module):
                 if masks is None:
                     cached_encoding = outputs[subtask_name]
 
+                print(f"{outputs[subtask_name].shape=} for {subtask_name=}")
+                print(f"{outputs[subtask_name].requires_grad=} for {subtask_name=}")
+
         return outputs
 
     def forward(self, inputs):

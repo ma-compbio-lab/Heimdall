@@ -154,7 +154,7 @@ def count_parameters(model):
 
 
 # Dataset Preparation collation tool
-def heimdall_collate_fn(examples):
+def heimdall_collate_fn(batch):
     """Heimdall data collate function.
 
     This function helps the dataloader prepare the dataset into a consistent
@@ -171,16 +171,32 @@ def heimdall_collate_fn(examples):
     "labels" (these are mandatory).
 
     """
-    # Collate batch using pytorch's default collate function
-    flat_batch = default_collate(examples)
+    # # Collate batch using pytorch's default collate function
+    # flat_batch = default_collate(examples)
 
-    # Regroup by keys
-    batch = {}
-    for key, val in flat_batch.items():
-        if key in MAIN_KEYS:
-            batch[key] = val
+    # # Regroup by keys
+    # batch = {}
+    # for key, val in flat_batch.items():
+    #     if key in MAIN_KEYS:
+    #         batch[key] = val
 
-    return batch
+    # return batch
+    collated = {}
+    first_sample = batch[0]
+    for key in MAIN_KEYS:
+        inner_dict = {}
+        for subtask_name in first_sample[key]:
+            values = [b[key][subtask_name] for b in batch]
+            # Drop Nones, or replace with zeros
+            is_invalid = [v is None for v in values]
+            if all(is_invalid):
+                inner_dict[subtask_name] = None
+            elif any(is_invalid):
+                raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
+            else:
+                inner_dict[subtask_name] = default_collate(values)
+        collated[key] = inner_dict
+    return dict(collated)
 
 
 def deprecate(func: Optional[Callable] = None, raise_error: bool = False):
