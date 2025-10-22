@@ -39,8 +39,8 @@ INPUT_KEYS = {
 MAIN_KEYS = {
     *INPUT_KEYS,
     "labels",
-    "adjacency_matrix",
-    "subgraph_indices",
+    # "adjacency_matrix",
+    # "subgraph_indices",
 }
 
 
@@ -154,49 +154,28 @@ def count_parameters(model):
 
 
 # Dataset Preparation collation tool
-def heimdall_collate_fn(batch):
-    """Heimdall data collate function.
+def get_collation_closure(keys=MAIN_KEYS):
+    """Heimdall data collate function."""
 
-    This function helps the dataloader prepare the dataset into a consistent
-    format, specifically the dataset is likely prepared as such:
+    def collate_fn(batch):
+        collated = {}
+        first_sample = batch[0]
+        for key in keys:
+            inner_dict = {}
+            for subtask_name in first_sample[key]:
+                values = [b[key][subtask_name] for b in batch]
+                # Drop Nones, or replace with zeros
+                is_invalid = [v is None for v in values]
+                if all(is_invalid):
+                    inner_dict[subtask_name] = None
+                elif any(is_invalid):
+                    raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
+                else:
+                    inner_dict[subtask_name] = default_collate(values)
+            collated[key] = inner_dict
+        return dict(collated)
 
-    .. code-block:: python
-
-        ds_train = Dataset.from_dict({"inputs": train_x,
-                                      'labels': train_y,
-                                    )
-
-    This
-    will process the output of a batch to be a dictionary with keys: "inputs",
-    "labels" (these are mandatory).
-
-    """
-    # # Collate batch using pytorch's default collate function
-    # flat_batch = default_collate(examples)
-
-    # # Regroup by keys
-    # batch = {}
-    # for key, val in flat_batch.items():
-    #     if key in MAIN_KEYS:
-    #         batch[key] = val
-
-    # return batch
-    collated = {}
-    first_sample = batch[0]
-    for key in MAIN_KEYS:
-        inner_dict = {}
-        for subtask_name in first_sample[key]:
-            values = [b[key][subtask_name] for b in batch]
-            # Drop Nones, or replace with zeros
-            is_invalid = [v is None for v in values]
-            if all(is_invalid):
-                inner_dict[subtask_name] = None
-            elif any(is_invalid):
-                raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
-            else:
-                inner_dict[subtask_name] = default_collate(values)
-        collated[key] = inner_dict
-    return dict(collated)
+    return collate_fn
 
 
 def deprecate(func: Optional[Callable] = None, raise_error: bool = False):

@@ -30,8 +30,8 @@ from Heimdall.task import Tasklist
 from Heimdall.utils import (
     convert_to_ensembl_ids,
     get_cached_paths,
+    get_collation_closure,
     get_value,
-    heimdall_collate_fn,
     instantiate_from_config,
 )
 
@@ -293,6 +293,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         # Set up data loaders
         # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
+        heimdall_collate_fn = get_collation_closure()
         dataloader_kwargs = {"num_workers": 4}  # TODO: we can parse additional data loader kwargs from config
         self.dataloaders = {
             split: DataLoader(
@@ -549,6 +550,7 @@ class PartitionedCellRepresentation(CellRepresentation):
             self.datasets[split] = PartitionedSubset(full_dataset, partition_splits)
 
         self.dataloaders = {}
+        heimdall_collate_fn = get_collation_closure()
         self.dataloaders = {
             split: DataLoader(
                 dataset,

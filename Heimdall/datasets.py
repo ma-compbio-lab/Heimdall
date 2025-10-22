@@ -22,9 +22,10 @@ SPLIT_MASK_KEYS = {"full_mask", "train_mask", "val_mask", "test_mask", "full", "
 class Dataset(PyTorchDataset, ABC):
     SPLITS = ["train", "val", "test"]
 
-    def __init__(self, data: "CellRepresentation"):
+    def __init__(self, data: "CellRepresentation", keys=MAIN_KEYS):
         super().__init__()
         self._data = data
+        self.keys = keys
 
         self.splits = {}
         split_type = "predefined"
@@ -92,7 +93,7 @@ class Dataset(PyTorchDataset, ABC):
         all_inputs = defaultdict(dict)
         for subtask_name, subtask in self.data.tasklist:
             subtask_inputs = subtask.get_inputs(idx, shared_inputs)
-            for key in MAIN_KEYS:
+            for key in self.keys:
                 default_value = shared_inputs[key] if key in shared_inputs else None
                 subtask_input = subtask_inputs.get(key, default_value)
                 all_inputs[key][subtask_name] = subtask_input
@@ -156,9 +157,9 @@ class SingleInstanceDataset(Dataset):
 
 
 class PairedInstanceDataset(Dataset):
-    def __init__(self, data: "CellRepresentation"):
+    def __init__(self, data: "CellRepresentation", keys=MAIN_KEYS):
         self._setup_obsp_task_keys(data)
-        super().__init__(data)
+        super().__init__(data, keys=keys)
 
     def _setup_idx(self):
         # NOTE: full mask is set up during runtime given split masks or the data
