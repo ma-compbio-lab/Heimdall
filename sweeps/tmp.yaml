@@ -11,10 +11,10 @@ command:
 - fc=geneformer
 - model.args.pos_enc=BERT
 - fc.args.max_input_length=1024
-- +experiments=rp20_sum
+- +experiments=reverse_perturbation
 - user=ehaber
-- seed=60
-- project_name=rp_geneformer_sum
+- seed=62
+- project_name=geneformer_reverse_perturb_fa
 method: grid
 metric:
   goal: maximize
@@ -22,8 +22,8 @@ metric:
 parameters:
   optimizer.args.lr:
     values:
-    - 1e-2
     - 1e-3
+    - 1e-2
     - 3e-4
   tasks.args.batchsize:
     values:
