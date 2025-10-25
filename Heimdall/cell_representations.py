@@ -94,14 +94,6 @@ class CellRepresentation(SpecialTokenMixin):
         self._cfg = config
 
         self.dataset_preproc_cfg = config.dataset.preprocess_args
-        if hasattr(config.tasks.args, "subtask_configs"):
-            self.tasklist = instantiate_from_config(config.tasks, self)
-        else:
-            self.tasklist = Tasklist(self, subtask_configs={"default": config.tasks})
-            # task = instantiate_from_config(config.tasks, self)
-            # self.tasklist["default"] = task
-
-        self.num_subtasks = self.tasklist.num_subtasks
 
         self.fg_cfg = config.fg
         self.fc_cfg = config.fc
@@ -120,6 +112,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     def setup(self):
         self.preprocess_anndata()
+        self.setup_tasklist()
         self.tokenize_cells()
         super().__init__()
         # if hasattr(self, "datasets") and "full" in self.datasets:
@@ -199,6 +192,16 @@ class CellRepresentation(SpecialTokenMixin):
         print("> Writing preprocessed Anndata Object")
         self.adata.write(preprocessed_data_path)
         print("> Finished writing preprocessed Anndata Object")
+
+    def setup_tasklist(self):
+        if hasattr(self._cfg.tasks.args, "subtask_configs"):
+            self.tasklist = instantiate_from_config(self._cfg.tasks, self)
+        else:
+            self.tasklist = Tasklist(self, subtask_configs={"default": self._cfg.tasks})
+            # task = instantiate_from_config(config.tasks, self)
+            # self.tasklist["default"] = task
+
+        self.num_subtasks = self.tasklist.num_subtasks
 
     def preprocess_anndata(self):
         if self.adata is not None:
