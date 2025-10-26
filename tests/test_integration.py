@@ -66,7 +66,7 @@ def test_partitioned_hydra_train():
                 "project_name=demo",
                 "run_wandb=false",
                 "tasks.args.epochs=1",
-                "fc.args.max_input_length=512",
+                "fc.args.max_input_length=256",
                 # f"user={os.environ['HYDRA_USER']}"
             ],
         )
