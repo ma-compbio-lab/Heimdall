@@ -115,7 +115,7 @@ class NonnegativeFactorizationMixin(nn.Module):
         """
         super().__init__()
         self.dim_reducer = nn.Linear(in_features=dim_in, out_features=k)
-        self.sigmoid = nn.Sigmoid()
+        self.sigmoid = nn.ReLU()
         self.metafeature_multiplier = nn.Linear(in_features=k, out_features=dim_out, bias=False)
         self.metafeatures = self.metafeature_multiplier.weight
         with no_grad():

@@ -508,7 +508,7 @@ class HeimdallTrainer:
                             with torch.no_grad():
                                 for param in constrained_params:
                                     # TODO: make this more robust to different types of PGD
-                                    project2simplex_(param, dim=1)
+                                    project2simplex_(param, dim=0)
 
                         loss = None
                     else:
