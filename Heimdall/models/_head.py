@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 import torch
-from torch import nn
+from torch import nn, no_grad
 
 
 @dataclass
@@ -99,3 +99,32 @@ class ExpressionOnlyCellPredHead(GenericPredHeadMixin, LinearDecoderMixin):
 
 class LinearSeqPredHead(SeqPredHeadMixin, LinearDecoderMixin):
     """Linear sequence prediction head."""
+
+
+class NonnegativeFactorizationMixin(nn.Module):
+    def __init__(self, dim_in: int, dim_out: int, k: int = 20, **kwargs):
+        """Constrained Nonnegative Matrix Factorization (NMF) embedding.
+
+        Args:
+            dim_in: embedding size from previous layer's output
+            dim_out: number of features in target output
+            k: number of metafeatures
+
+        """
+        super().__init__()
+        self.dim_reducer = nn.Linear(in_features=dim_in, out_features=k)
+        self.sigmoid = nn.Sigmoid()
+        self.metafeature_multiplier = nn.Linear(in_features=k, out_features=dim_out, bias=False)
+        self.metafeatures = self.metafeature_multiplier.weight
+        with no_grad():
+            project2simplex_(self.metafeatures, dim=1)
+
+        self.decoder = nn.Sequential(
+            self.dim_reducer,
+            self.sigmoid,
+            self.metafeature_multiplier,
+        )
+
+
+class NonnegativeFactorizationPredHead(GenericPredHeadMixin, NonnegativeFactorizationMixin):
+    """Nonnegative matrix factorization prediction head."""

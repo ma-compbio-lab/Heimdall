@@ -3,6 +3,7 @@ from Heimdall.models._head import (
     GenericPredHeadMixin,
     LinearCellPredHead,
     LinearSeqPredHead,
+    NonnegativeFactorizationPredHead,
     SeqPredHeadMixin,
     TransformerOutput,
 )
@@ -30,6 +31,7 @@ __all__ = [
     LinearCellPredHead.__name__,
     LinearSeqPredHead.__name__,
     ExpressionOnlyCellPredHead.__name__,
+    NonnegativeFactorizationPredHead.__name__,
     SumReducer.__name__,
     MeanReducer.__name__,
     SymmetricConcatReducer.__name__,
