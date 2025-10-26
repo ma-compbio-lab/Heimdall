@@ -31,9 +31,6 @@ class Dataset(PyTorchDataset, ABC):
         split_type = "predefined"
         self._setup_predefined_splits()  # predefined splits may be set up here
 
-        for _, subtask in self.data.tasklist:
-            subtask.setup_labels()
-
         # NOTE: need to setup labels first, index sizes might depend on it
         self._setup_idx()
 
@@ -126,6 +123,8 @@ class SingleInstanceDataset(Dataset):
         if self.data.tasklist.splits is None or self.splits:
             return
 
+        print("> Found predefined splits in config, extracting splits.")
+
         split_type = self.data.tasklist.splits.get("type", None)
         if split_type == "predefined":
             splits = {}
@@ -201,6 +200,7 @@ class PairedInstanceDataset(Dataset):
             full_mask = np.sum([np.abs(adata.obsp[i]) for i in self.data.obsp_task_keys], axis=-1) > 0
             nz = np.nonzero(full_mask)
         elif (split_type := self.data.tasklist.splits.type) == "predefined":
+            print("> Found predefined splits in config, extracting splits.")
             masks = {}
             for split in self.SPLITS:
                 if (split_key := self.data.tasklist.splits.keys_.get(split)) is None:

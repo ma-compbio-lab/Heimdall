@@ -106,14 +106,27 @@ class CellRepresentation(SpecialTokenMixin):
         self.rng = np.random.default_rng(seed)
 
         if auto_setup:
+            self.create_tasklist()
             self.setup()
             self.prepare_full_dataset()
+            self.setup_labels()
             self.prepare_dataset_loaders()
+
+    def setup_labels(self):
+        """Can only be called after `self.adata` and `self.datasets` is
+        populated."""
+
+        if not hasattr(self, "datasets"):
+            return
+
+        for _, subtask in self.tasklist:
+            subtask.setup_labels()
 
     def setup(self):
         self.preprocess_anndata()
-        self.setup_tasklist()
         self.tokenize_cells()
+        self.setup_labels()
+
         super().__init__()
         # if hasattr(self, "datasets") and "full" in self.datasets:
         #     self.prepare_dataset_loaders()
@@ -193,7 +206,7 @@ class CellRepresentation(SpecialTokenMixin):
         self.adata.write(preprocessed_data_path)
         print("> Finished writing preprocessed Anndata Object")
 
-    def setup_tasklist(self):
+    def create_tasklist(self):
         if hasattr(self._cfg.tasks.args, "subtask_configs"):
             self.tasklist = instantiate_from_config(self._cfg.tasks, self)
         else:
@@ -496,12 +509,14 @@ class PartitionedCellRepresentation(CellRepresentation):
 
         self.partition_sizes = {}
         if auto_setup:
+            self.create_tasklist()
             for partition in range(self.num_partitions):
                 self.partition = partition
                 self.partition_sizes[partition] = self.adata.n_obs
 
             self.cr_setup = True
             self.prepare_full_dataset()
+            self.setup_labels()
             self.prepare_dataset_loaders()
 
             self.partition = 0  # TODO: don't hardcode
@@ -511,6 +526,7 @@ class PartitionedCellRepresentation(CellRepresentation):
     def setup(self):
         self.preprocess_anndata()
         self.tokenize_cells(hash_vars=(self.partition,))
+        self.setup_labels()
 
     def close_partition(self):
         """Close current partition."""
