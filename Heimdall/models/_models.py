@@ -12,12 +12,6 @@ from Heimdall.datasets import PairedInstanceDataset
 from Heimdall.embedding import PositionalEncoding
 from Heimdall.utils import get_dtype, instantiate_from_config
 
-try:
-    from flash_attn.bert_padding import pad_input, unpad_input
-    from flash_attn.modules.mha import MHA
-except ImportError:
-    warnings.warn("`flash-attn` is not available.", UserWarning, stacklevel=1)
-
 
 class HeimdallModel(nn.Module):
     def __init__(
@@ -456,6 +450,15 @@ class FlashTransformerEncoderLayer(nn.Module):
 
 class FlashTransformerEncoder(nn.Module):
     def __init__(self, d_model, nhead, num_layers, dim_feedforward=None, dropout=0.1, activation="gelu"):
+
+        try:
+            from flash_attn.bert_padding import pad_input, unpad_input
+            from flash_attn.modules.mha import MHA
+        except ImportError:
+            raise ImportError(
+                "`flash-attn` is not available. Please instlal `flash-attn`, or default to the standard `model=transformer` config.",
+            )
+
         super().__init__()
         self.layers = nn.ModuleList(
             [

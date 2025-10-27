@@ -1,4 +1,8 @@
-from accelerate import Accelerator
+from collections import OrderedDict
+from pathlib import Path
+
+import torch
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from omegaconf import OmegaConf, open_dict
 
 from Heimdall.models import HeimdallModel
@@ -12,12 +16,15 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
         accelerator_log_kwargs["log_with"] = "wandb"
         accelerator_log_kwargs["project_dir"] = config.work_dir
 
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+
     accelerator = Accelerator(
         gradient_accumulation_steps=config.trainer.accumulate_grad_batches,
         step_scheduler_with_optimizer=False,
         cpu=cpu,
         mixed_precision="bf16",
         **accelerator_log_kwargs,
+        kwargs_handlers=[ddp_kwargs],
     )
 
     return accelerator
@@ -51,7 +58,9 @@ def setup_experiment(config, cpu=False, accelerator=None):
     model = HeimdallModel(
         data=cr,
         model_config=config.model,
-    ).to(float_dtype)
+    )
+
+    model.to(float_dtype)  # to dtype after potentially loading pretrained weights instead of before
 
     if accelerator.is_main_process:
         num_params = count_parameters(model)

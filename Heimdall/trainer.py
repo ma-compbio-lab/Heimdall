@@ -793,6 +793,20 @@ def setup_trainer(config, cpu=True):
         return
 
     accelerator, cr, model, run_wandb = experiment_primitives
+    if "pretrained_ckpt_path" in config:
+        if not Path(config.pretrained_ckpt_path).is_file():
+            raise FileNotFoundError(f"{pretrained_ckpt_path=} does not exist.")
+
+        pretrained_state_dict = torch.load(config.pretrained_ckpt_path)["model"]
+        filtered_pretrained_params = OrderedDict(
+            filter(lambda param_tuple: "decoder" not in param_tuple[0], pretrained_state_dict.items()),
+        )  # we drop the pretrained head and load all other params
+
+        model.load_state_dict(filtered_pretrained_params, strict=False)
+
+        if accelerator.is_main_process:
+            print(f">Finished loading pretrained params loaded from {config.pretrained_ckpt_path}")
+
     trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=run_wandb)
 
     return trainer
