@@ -51,13 +51,6 @@ class Fc:
         self.reduce = instantiate_from_config(reduce_config, fc=self)
 
     
-    def _order_inputs_from_X(self, cell_index: int, identity_inputs: NDArray) -> NDArray:
-        X = self.adata.X
-        if hasattr(X, "getrow"):
-            sub = X.getrow(cell_index)[:, identity_inputs] # 1 x k
-            return sub.toarray().ravel()
-        else:
-            return np.asarray(X[cell_index, identity_inputs]).ravel()
         
     
     def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray]:
@@ -97,19 +90,12 @@ class Fc:
 
         identity_inputs = identity_inputs_pd.to_numpy()
 
-        if getattr(self.order, "uses_raw_for_order", False):
-            #builds raw values from .X after masking so lengths match
-            X = self.adata.X
-            sub = X.getrow(cell_index)[:, identity_indices] if hasattr(X, "getrow") else X[cell_index, identity_indices]
-
-            if hasattr(sub, "toarray"):
-                sub = sub.toarray()
-            order_inputs = np.asarray(sub, dtype=np.float32).ravel()
-        else:
-            order_inputs = np.asarray(expression_inputs, dtype=np.float32)
-        
-        
-        gene_order = self.order(identity_inputs, order_inputs)
+        gene_order = self.order(
+                identity_inputs=identity_inputs,                      
+                expression_inputs=expression_inputs,                  
+                cell_index=cell_index,                                
+                identity_indices=np.asarray(identity_indices, int), 
+        )
 
 
         # Padding and truncating
