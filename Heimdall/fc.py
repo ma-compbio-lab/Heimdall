@@ -85,7 +85,7 @@ class Fc:
             identity_inputs=identity_inputs,
             expression_inputs=expression_inputs,
             cell_index=cell_index,
-            identity_indices=np.asarray(identity_indices, int),
+            identity_indices=identity_indices,
         )
         # Padding and truncating
         identity_inputs, expression_inputs = self.tailor(
