@@ -61,7 +61,6 @@ class Fc:
         if cell_index == -1:  # Dummy `cell_index`
             identity_inputs = pd.array(np.full(self.max_input_length, self.fg.pad_value), dtype="Int64")
             expression_inputs = np.full(self.max_input_length, self.fe.pad_value)
-            padding_mask = expression_inputs == self.fe.pad_value
         else:
             identity_indices, expression_inputs = self.fe[cell_index]
 
@@ -89,7 +88,8 @@ class Fc:
                 expression_inputs,
                 gene_order,
             )
-            padding_mask = expression_inputs == self.fe.pad_value
+
+        padding_mask = expression_inputs == self.fe.pad_value
 
         return identity_inputs, expression_inputs, padding_mask
 
