@@ -53,6 +53,10 @@ class PartitionedDistributedSampler(DistributedSampler):
     def num_partitions(self):
         return self.full_dataset.num_partitions
 
+    @property
+    def num_cells(self):
+        return self.full_dataset.num_cells
+
     @partition_idx.setter
     def partition_idx(self, partition_idx: int | None):
         self._partition_idx = partition_idx
@@ -116,7 +120,7 @@ class PartitionIndexIterator:
         try:
             return next(self.partition_indices)
         except StopIteration as e:
-            self.sampler.full_dataset.data.accelerator.wait_for_everyone()
+            # self.sampler.full_dataset.data.accelerator.wait_for_everyone()
             if self.sampler.partition_idx + 1 == self.sampler.num_partitions:
                 raise AllPartitionsExhausted()
 
@@ -124,6 +128,14 @@ class PartitionIndexIterator:
 
 
 class PartitionedBatchSampler(BatchSampler):
+    """Virtualized batched sampling from multiple partitions.
+
+    Iterates through the indices provided by the PartitionedDistributedSampler for a partition until
+    the end, and then moves onto the next partition and tries again. If no more partitions exist
+    (as detected by an `AllPartitionsExhausted` exception), the epoch is finished.
+
+    """
+
     def __iter__(self):
         while True:
             try:

@@ -555,11 +555,12 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.num_partitions = len(self.partition_file_paths)
 
         self.partition_sizes = {}
+        self.num_cells = {}
         if auto_setup:
             self.create_tasklist()
             for partition in range(self.num_partitions):
                 self.partition = partition
-                self.partition_sizes[partition] = self.adata.n_obs
+                self.set_partition_size()
 
             self.cr_setup = True
             self.prepare_full_dataset()
@@ -569,6 +570,11 @@ class PartitionedCellRepresentation(CellRepresentation):
             self.partition = 0  # TODO: don't hardcode
 
             SpecialTokenMixin.__init__(self)
+
+    def set_partition_size(self):
+        """Get the size of the current partition."""
+        self.partition_sizes[self.partition] = self.adata.n_obs
+        self.num_cells[self.partition] = self.adata.n_obs
 
     def setup(self):
         self.preprocess_anndata()

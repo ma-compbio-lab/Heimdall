@@ -38,6 +38,7 @@ class Dataset(PyTorchDataset, ABC):
         if not self.splits:
             split_type = "random"
             self._setup_random_splits()
+
         split_size_str = "\n  ".join(f"{i}: {len(j):,}" for i, j in self.splits.items())
         print(f"> Dataset splits sizes ({split_type}):\n  {split_size_str}")
 
@@ -256,6 +257,10 @@ class PartitionedDataset(SingleInstanceDataset):
     def partition_sizes(self):
         return self._data.partition_sizes
 
+    @property
+    def num_cells(self):
+        return self._data.num_cells
+
     def __len__(self):
         return self.partition_sizes[self.partition]
 
@@ -338,10 +343,11 @@ class PartitionedSubset(Subset):
         if isinstance(idx, list):
             return self.__getitems__(idx)
 
-        index, partition = idx
-        if partition != self.dataset.partition:
-            self.dataset.partition = partition
-        return self.dataset[self.indices[self.dataset.partition][index]]
+        index = idx
+        # index, partition = idx
+        # if partition != self.dataset.partition:
+        #     self.dataset.partition = partition
+        return self.dataset[self.indices[self.dataset.partition][idx]]
 
     def __getitems__(self, indices: list[tuple[int, int]]) -> list:
         # add batched sampling support when parent dataset supports it.
