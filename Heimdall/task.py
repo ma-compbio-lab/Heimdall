@@ -110,7 +110,7 @@ class Task(ABC):
             filename=f"{task_name}_labels.npy",
         )
         np.save(processed_data_path, self.labels)
-        self.check_print(f"Finished writing task {task_name} labels at {processed_data_path}", cr_setup=True)
+        self.data.check_print(f"Finished writing task {task_name} labels at {processed_data_path}", cr_setup=True)
 
     def from_cache(self, cache_dir, hash_vars, task_name):
         processed_data_path = self.data.get_tokenizer_cache_path(
@@ -118,8 +118,8 @@ class Task(ABC):
             hash_vars,
             filename=f"{task_name}_labels.npy",
         )
-        if processed_data_path is not None:
-            self.check_print(
+        if processed_data_path.is_file():
+            self.data.check_print(
                 f"> Found already processed labels for task {task_name}: {processed_data_path}",
                 cr_setup=True,
                 rank=True,

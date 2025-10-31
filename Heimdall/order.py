@@ -44,7 +44,7 @@ class ExpressionOrder(Order):
         # cols = np.asarray(identity_indices, dtype=int)
 
         adata = self.fc.adata
-        cell_slice = adata[cell_index].copy()
+        cell_slice = adata[cell_index]
         raw_expression_values = np.squeeze(cell_slice.X.toarray())
         raw_expression_values = raw_expression_values[identity_indices]
 

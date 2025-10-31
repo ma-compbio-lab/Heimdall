@@ -121,12 +121,14 @@ class CellRepresentation(SpecialTokenMixin):
 
         for subtask_name, subtask in self.tasklist:
             if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-                is_cached = subtask.from_cache(cache_dir, hash_vars=hash_vars, subtask_name=subtask_name)
+                is_cached = subtask.from_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
                 if is_cached:
                     return
             subtask.setup_labels()
             if cache_dir is not None:
-                subtask.to_cache(cache_dir, hash_vars=hash_vars, subtask_name=subtask_name)
+                subtask.to_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
+
+        self.check_print(f"> Finished setting up labels", cr_setup=True)
 
     def setup(self):
         self.load_anndata()
@@ -224,7 +226,7 @@ class CellRepresentation(SpecialTokenMixin):
             self.check_print(f"> Finished Processing Anndata Object:\n{self.adata}", cr_setup=True, rank=True)
             return True
 
-        OmegaConf.save(cfg, preprocessed_cfg_path)
+        # OmegaConf.save(cfg, preprocessed_cfg_path)
 
         return False
 
@@ -420,11 +422,13 @@ class CellRepresentation(SpecialTokenMixin):
             {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
         )
         cfg = {**cfg, "hash_vars": hash_vars}
+        # print(f"{cfg=}")
         processed_data_path, _ = get_cached_paths(
             cfg,
             Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "processed_data",
             filename,
         )
+        # print(f'{processed_data_path=}')
 
         return processed_data_path
 
@@ -463,7 +467,8 @@ class CellRepresentation(SpecialTokenMixin):
 
             return True
 
-        OmegaConf.save(cfg, processed_cfg_path)
+        # TODO: add back
+        # OmegaConf.save(cfg, processed_cfg_path)
         return False
 
     def save_tokenizer_to_cache(self, cache_dir, hash_vars):
@@ -572,14 +577,16 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.num_cells = {}
         if auto_setup:
             self.create_tasklist()
-            for partition in range(self.num_partitions):
+            for partition in range(self.num_partitions):  # Setting up AnnData and sizes
                 self.partition = partition
                 self.set_partition_size()
 
             self.cr_setup = True
             self.prepare_full_dataset()
-            print("Setting up labels...")
-            self.setup_labels()
+
+            for partition in range(self.num_partitions):  # Setting up labels
+                self.partition = partition
+
             self.prepare_dataset_loaders()
 
             self.partition = 0  # TODO: don't hardcode
