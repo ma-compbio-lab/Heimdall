@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from os import PathLike
-from typing import Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Dict, Optional, Sequence
 
-import anndata as ad
 import numpy as np
 import pandas as pd
 import torch
@@ -10,6 +9,9 @@ from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from pandas.api.typing import NAType
+
+if TYPE_CHECKING:
+    from Heimdall.cell_representations import CellRepresentation
 
 
 class Fg(ABC):
@@ -24,7 +26,6 @@ class Fg(ABC):
     def __init__(
         self,
         data: "CellRepresentation",
-        # adata: ad.AnnData,
         embedding_parameters: DictConfig,
         d_embedding: int,
         vocab_size: int,
@@ -34,7 +35,6 @@ class Fg(ABC):
         rng: int | np.random.Generator = 0,
     ):
         self.data = data
-        # self.adata = adata
         self.d_embedding = d_embedding
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.vocab_size = vocab_size

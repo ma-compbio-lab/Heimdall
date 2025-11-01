@@ -330,7 +330,6 @@ class PartitionedSubset(Subset):
         if isinstance(idx, list):
             return self.__getitems__(idx)
 
-        index = idx
         # index, partition = idx
         # if partition != self.dataset.partition:
         #     self.dataset.partition = partition

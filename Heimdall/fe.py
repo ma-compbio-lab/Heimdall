@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
-import anndata as ad
 import numpy as np
 import torch
 from numpy.typing import NDArray
@@ -10,6 +9,9 @@ from omegaconf.dictconfig import DictConfig
 from scipy.sparse import csr_array
 
 from Heimdall.utils import _get_inputs_from_csr, issparse
+
+if TYPE_CHECKING:
+    from Heimdall.cell_representations import CellRepresentation
 
 
 class Fe(ABC):

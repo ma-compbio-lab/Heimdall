@@ -128,7 +128,7 @@ class CellRepresentation(SpecialTokenMixin):
             if cache_dir is not None:
                 subtask.to_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
 
-        self.check_print(f"> Finished setting up labels", cr_setup=True, rank=True)
+        self.check_print("> Finished setting up labels", cr_setup=True, rank=True)
 
     def setup(self):
         self.load_anndata()

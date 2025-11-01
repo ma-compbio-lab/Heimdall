@@ -1,7 +1,6 @@
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import anndata as ad
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -11,6 +10,9 @@ from omegaconf.dictconfig import DictConfig
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
 from Heimdall.utils import instantiate_from_config
+
+if TYPE_CHECKING:
+    from Heimdall.cell_representations import CellRepresentation
 
 
 class Fc:
@@ -30,7 +32,6 @@ class Fc:
         fg: Fg | None,
         fe: Fe | None,
         data: "CellRepresentation",
-        # adata: ad.AnnData,
         tailor_config: DictConfig,
         order_config: DictConfig,
         reduce_config: DictConfig,
@@ -42,7 +43,6 @@ class Fc:
         self.fg = fg
         self.fe = fe
         self.data = data
-        # self._adata = adata
         self.max_input_length = max_input_length
         self.float_dtype = float_dtype
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)

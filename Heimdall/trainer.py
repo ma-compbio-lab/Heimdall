@@ -276,7 +276,7 @@ class HeimdallTrainer:
             start_epoch = self.load_checkpoint()
 
         if start_epoch >= self.data.tasklist.epochs:
-            last_epoch = max(0, start_epoch - 1)
+            # last_epoch = max(0, start_epoch - 1)
             # Run one eval pass on the loaded weights to get embeddings
             _, val_embed = self.validate_model(self.dataloader_val, "valid")
             _, test_embed = self.validate_model(self.dataloader_test, "test")
