@@ -1,3 +1,4 @@
+import pickle as pkl
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -107,16 +108,18 @@ class Task(ABC):
         processed_data_path = self.data.get_tokenizer_cache_path(
             cache_dir,
             hash_vars,
-            filename=f"{task_name}_labels.npy",
+            filename=f"{task_name}_labels.pkl",
         )
-        np.save(processed_data_path, self.labels)
-        self.data.check_print(f"Finished writing task {task_name} labels at {processed_data_path}", cr_setup=True)
+        with open(processed_data_path, "wb") as label_file:
+            pkl.dump(self.labels, label_file)
+
+        self.data.check_print(f"> Finished writing task {task_name} labels at {processed_data_path}", cr_setup=True)
 
     def from_cache(self, cache_dir, hash_vars, task_name):
         processed_data_path = self.data.get_tokenizer_cache_path(
             cache_dir,
             hash_vars,
-            filename=f"{task_name}_labels.npy",
+            filename=f"{task_name}_labels.pkl",
         )
         if processed_data_path.is_file():
             self.data.check_print(
@@ -124,7 +127,8 @@ class Task(ABC):
                 cr_setup=True,
                 rank=True,
             )
-            self.labels = np.load(processed_data_path)
+            with open(processed_data_path, "rb") as label_file:
+                self.labels = pkl.load(label_file)
             return True
 
         return False
@@ -277,7 +281,6 @@ class Tasklist:
 
     PROPERTIES = (
         "splits",
-        "dataset_config",
         "shuffle",
         "batchsize",
         "epochs",
@@ -290,6 +293,7 @@ class Tasklist:
         self,
         data: "CellRepresentation",
         subtask_configs: DictConfig | dict,
+        dataset_config: DictConfig | dict,
     ):
 
         self.data = data
@@ -299,6 +303,7 @@ class Tasklist:
         }
 
         self.set_unique_properties()
+        self.dataset_config = dataset_config
         self.num_subtasks = len(self._tasks)
 
     def set_unique_properties(self):

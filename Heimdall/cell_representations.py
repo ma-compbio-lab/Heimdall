@@ -123,12 +123,12 @@ class CellRepresentation(SpecialTokenMixin):
             if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
                 is_cached = subtask.from_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
                 if is_cached:
-                    return
+                    continue
             subtask.setup_labels()
             if cache_dir is not None:
                 subtask.to_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
 
-        self.check_print(f"> Finished setting up labels", cr_setup=True)
+        self.check_print(f"> Finished setting up labels", cr_setup=True, rank=True)
 
     def setup(self):
         self.load_anndata()
@@ -238,9 +238,14 @@ class CellRepresentation(SpecialTokenMixin):
 
     def create_tasklist(self):
         if hasattr(self._cfg.tasks.args, "subtask_configs"):
+            print(f"{self._cfg.tasks=}")
             self.tasklist = instantiate_from_config(self._cfg.tasks, self)
         else:
-            self.tasklist = Tasklist(self, subtask_configs={"default": self._cfg.tasks})
+            self.tasklist = Tasklist(
+                self,
+                subtask_configs={"default": self._cfg.tasks},
+                dataset_config=self._cfg.tasks.args.dataset_config,
+            )
             # task = instantiate_from_config(config.tasks, self)
             # self.tasklist["default"] = task
 
@@ -368,7 +373,7 @@ class CellRepresentation(SpecialTokenMixin):
         }
 
         dataset_str = pformat(self.datasets).replace("\n", "\n\t")
-        self.check_print(f"> Finished setting up datasets (and loaders):\n\t{dataset_str}", rank=True)
+        self.check_print(f"> Finished setting up datasets (and loaders):\n\t{dataset_str}", cr_setup=True, rank=True)
 
     def rebalance_dataset(self, df):
         # Step 1: Find which label has a lower number
@@ -581,11 +586,12 @@ class PartitionedCellRepresentation(CellRepresentation):
                 self.partition = partition
                 self.set_partition_size()
 
-            self.cr_setup = True
             self.prepare_full_dataset()
 
             for partition in range(self.num_partitions):  # Setting up labels
                 self.partition = partition
+
+            self.cr_setup = True
 
             self.prepare_dataset_loaders()
 
