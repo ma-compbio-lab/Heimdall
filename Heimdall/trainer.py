@@ -21,7 +21,7 @@ import Heimdall.datasets
 import Heimdall.losses
 import wandb
 from Heimdall.models import setup_experiment
-from Heimdall.utils import INPUT_KEYS, instantiate_from_config, project2simplex_, save_umap
+from Heimdall.utils import INPUT_KEYS, get_dtype, instantiate_from_config, project2simplex_, save_umap
 
 
 class HeimdallTrainer:
@@ -98,18 +98,18 @@ class HeimdallTrainer:
             self.model,
             self.optimizer,
             self.lr_scheduler,
-            self.dataloader_train,
-            self.dataloader_val,
-            self.dataloader_test,
-            self.dataloader_full,
+            # self.dataloader_train,
+            # self.dataloader_val,
+            # self.dataloader_test,
+            # self.dataloader_full,
         ) = self.accelerator.prepare(
             self.model,
             self.optimizer,
             self.lr_scheduler,
-            self.dataloader_train,
-            self.dataloader_val,
-            self.dataloader_test,
-            self.dataloader_full,
+            # self.dataloader_train,
+            # self.dataloader_val,
+            # self.dataloader_test,
+            # self.dataloader_full,
         )
 
         if self.accelerator.is_main_process:
@@ -282,8 +282,10 @@ class HeimdallTrainer:
             _, test_embed = self.validate_model(self.dataloader_test, "test")
             if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
                 # self.save_adata_umap(test_embed, val_embed)
-                self.print_r0(f"> Saved UMAP from checkpoint epoch {last_epoch}")
+                # self.print_r0(f"> Saved UMAP from checkpoint epoch {last_epoch}")
+                pass
             return
+
         # If the tracked parameter is specified
         track_metric = defaultdict(lambda: None)
         best_metric = defaultdict(dict)
@@ -413,6 +415,11 @@ class HeimdallTrainer:
         return loss_functions
 
     def get_outputs_and_loss(self, batch, loss=None):
+        for values in batch.values():
+            for subtask_name, value in values.items():
+                if value is not None:
+                    values[subtask_name] = value.to(self.accelerator.device)
+
         inputs = {input_key: batch[input_key] for input_key in INPUT_KEYS if input_key in batch}
 
         # inputs = (batch["identity_inputs"], batch["expression_inputs"])
@@ -424,7 +431,7 @@ class HeimdallTrainer:
         labels = batch["labels"]
         for subtask_name, subtask in self.data.tasklist:
             logits = outputs[subtask_name].logits
-            subtask_labels = labels[subtask_name].to(logits.device)
+            subtask_labels = labels[subtask_name]
 
             if subtask.task_type == "multiclass":
                 subtask_preds = logits.argmax(dim=1)
@@ -441,8 +448,7 @@ class HeimdallTrainer:
 
             preds[subtask_name] = subtask_preds
 
-            if (masks := batch.get("masks")[subtask_name]) is not None:
-                masks = masks.to(logits.device)
+            if (masks := batch["masks"][subtask_name]) is not None:
                 logits, subtask_labels = logits[masks], subtask_labels[masks]
 
             # perform a .clone() so that the subtask_labels are not updated in-place
@@ -579,7 +585,10 @@ class HeimdallTrainer:
     def validate_model(self, dataloader, dataset_type):
         self.model.eval()
         metrics = self._initialize_metrics()
-        loss = 0
+        loss = torch.tensor(0, dtype=get_dtype(self.data._cfg.float_dtype), device=self.accelerator.device)
+
+        if len(dataloader) == 0:
+            raise ValueError("`DataLoader` length cannot be zero. Check custom sampler implementation.")
 
         with torch.no_grad():
             outputs = self.iterate_dataloader(
@@ -602,6 +611,7 @@ class HeimdallTrainer:
             loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
+
         for subtask_name, subtask in self.data.tasklist:
             for metric_name, metric in metrics[subtask_name].items():
                 if metric_name != "ConfusionMatrix":
