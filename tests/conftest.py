@@ -11,8 +11,8 @@ from scipy.sparse import csr_array
 
 from Heimdall.cell_representations import CellRepresentation
 from Heimdall.fc import ChromosomeAwareFc, Fc
-from Heimdall.fe import BinningFe, IdentityFe, ScBERTBinningFe, ZeroFe
-from Heimdall.fg import IdentityFg
+from Heimdall.fe import BinningFe, Fe, IdentityFe, ScBERTBinningFe, ZeroFe
+from Heimdall.fg import Fg, IdentityFg
 from Heimdall.utils import convert_to_ensembl_ids, instantiate_from_config
 
 load_dotenv()
@@ -25,6 +25,16 @@ from dataclasses import dataclass
 class MockCellRepresentation(CellRepresentation):
     adata: ad.AnnData
     _cfg: OmegaConf
+
+    def set_representation_functions(
+        self,
+        fg: Fg | None = None,
+        fe: Fe | None = None,
+        fc: Fc | None = None,
+    ):
+        self.fg = fg
+        self.fe = fe
+        self.fc = fc
 
 
 @fixture(scope="module")

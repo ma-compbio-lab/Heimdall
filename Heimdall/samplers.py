@@ -120,7 +120,6 @@ class PartitionIndexIterator:
         try:
             return next(self.partition_indices)
         except StopIteration as e:
-            # self.sampler.full_dataset.data.accelerator.wait_for_everyone()
             if self.sampler.partition_idx + 1 == self.sampler.num_partitions:
                 raise AllPartitionsExhausted()
 

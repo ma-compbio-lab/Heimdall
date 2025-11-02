@@ -27,7 +27,6 @@ class Fe(ABC):
     def __init__(
         self,
         data: "CellRepresentation",
-        # adata: ad.AnnData,
         vocab_size: int,
         embedding_parameters: DictConfig,
         d_embedding: int,
@@ -37,7 +36,6 @@ class Fe(ABC):
         rng: int | np.random.Generator = 0,
     ):
         self.data = data
-        # self.adata = adata
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.d_embedding = d_embedding
         self.vocab_size = vocab_size
@@ -315,3 +313,11 @@ class IdentityFe(Fe):
 
     def __getitem__(self, cell_index: int):
         return self._get_inputs_from_csr(cell_index)
+
+
+# class ZeroFe(IdentityFe):
+#     def __getitem__(self, cell_index: int):
+#         cell_identity_inputs, cell_expression_inputs = super().__getitem__(cell_index)
+#         cell_expression_inputs = np.zeros_like(cell_expression_inputs)
+#
+#         return cell_identity_inputs, cell_expression_inputs

@@ -516,18 +516,20 @@ def _get_inputs_from_csr(data: "CellRepresentation", cell_index: int, drop_zeros
         cell_index: cell for which to process expression values and get indices, as stored in `adata`.
 
     """
+
     adata = data.adata
+    identity_valid_mask = data.fg.identity_valid_mask
     if drop_zeros is True:
         if issparse(adata.X):
-            cell = adata[[cell_index], data.gene_names].X.toarray().flatten()
+            cell = adata.X[[cell_index], :].toarray().flatten()[identity_valid_mask]
             (cell_identity_inputs,) = cell.nonzero()
             cell_expression_inputs = cell[cell_identity_inputs]
         else:
-            cell_expression_inputs_full = adata[cell_index, data.gene_names].X
+            cell_expression_inputs_full = adata.X[cell_index, :][identity_valid_mask]
             (cell_identity_inputs,) = np.nonzero(cell_expression_inputs_full)
             cell_expression_inputs = cell_expression_inputs_full[cell_identity_inputs]
     else:
-        cell_expression_inputs = adata[[cell_index], data.gene_names].X.toarray().flatten()
+        cell_expression_inputs = adata.X[[cell_index], :].toarray().flatten()[identity_valid_mask]
         cell_identity_inputs = np.arange(data.num_genes)
 
     return cell_identity_inputs, cell_expression_inputs

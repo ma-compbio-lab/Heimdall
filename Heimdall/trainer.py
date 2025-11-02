@@ -105,18 +105,10 @@ class HeimdallTrainer:
             self.model,
             self.optimizer,
             self.lr_scheduler,
-            # self.dataloader_train,
-            # self.dataloader_val,
-            # self.dataloader_test,
-            # self.dataloader_full,
         ) = self.accelerator.prepare(
             self.model,
             self.optimizer,
             self.lr_scheduler,
-            # self.dataloader_train,
-            # self.dataloader_val,
-            # self.dataloader_test,
-            # self.dataloader_full,
         )
 
         if self.accelerator.is_main_process:

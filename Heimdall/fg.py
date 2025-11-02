@@ -91,12 +91,15 @@ class Fg(ABC):
             return embedding_indices
 
     @property
+    def adata(self):
+        return self.data.adata
+
+    @property
     def identity_valid_mask(self):
-        return self._identity_valid_mask
+        return self.adata.var["identity_valid_mask"]
 
     @identity_valid_mask.setter
     def identity_valid_mask(self, val):
-        self._identity_valid_mask = val
         self.vocab_size -= self.adata.n_vars - np.sum(val)
 
         self.adata.var["identity_valid_mask"] = val

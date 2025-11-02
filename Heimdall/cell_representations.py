@@ -159,9 +159,14 @@ class CellRepresentation(SpecialTokenMixin):
 
     @property
     def gene_names(self, mask_key: str = "identity_valid_mask"):
+        if hasattr(self, "_gene_names"):
+            return self._gene_names
+
         if mask_key in self.adata.var:
             valid_mask = self.adata.var[mask_key]
-            return self.adata.var_names[valid_mask]
+            self._gene_names = self.adata.var_names[valid_mask]
+
+            return self._gene_names
 
         return self.adata.var_names
 
@@ -246,8 +251,6 @@ class CellRepresentation(SpecialTokenMixin):
                 subtask_configs={"default": self._cfg.tasks},
                 dataset_config=self._cfg.tasks.args.dataset_config,
             )
-            # task = instantiate_from_config(config.tasks, self)
-            # self.tasklist["default"] = task
 
         self.num_subtasks = self.tasklist.num_subtasks
 
@@ -410,21 +413,6 @@ class CellRepresentation(SpecialTokenMixin):
 
         return df_balanced
 
-    def drop_invalid_genes(self):
-        """Modify `self.adata` to only contain valid genes after preprocessing
-        with the `Fg`."""
-
-        valid_mask = self.adata.var["identity_valid_mask"]
-        self.adata.raw = self.adata.copy()
-        self.adata = self.adata[:, valid_mask].copy()
-
-        self.fc.adata = self.adata
-
-        preprocessed_data_path, *_ = self.get_preprocessed_data_path(hash_data_only=False)
-        self.anndata_to_cache(preprocessed_data_path)
-
-        self.check_print(f"> Finished dropping invalid genes, yielding new AnnData: :\n{self.adata}", cr_setup=True)
-
     def get_tokenizer_cache_path(self, cache_dir, hash_vars, filename: str = "data.pkl"):
         cfg = DictConfig(
             {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
@@ -441,15 +429,6 @@ class CellRepresentation(SpecialTokenMixin):
         return processed_data_path
 
     def load_tokenizer_from_cache(self, cache_dir, hash_vars):
-        # cfg = DictConfig(
-        #     {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
-        # )
-        # cfg = {**cfg, "hash_vars": hash_vars}
-        # processed_data_path, processed_cfg_path = get_cached_paths(
-        #     cfg,
-        #     Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "processed_data",
-        #     "data.pkl",
-        # )
         processed_data_path = self.get_tokenizer_cache_path(cache_dir, hash_vars)
         if processed_data_path.is_file():
             self.check_print(
@@ -486,15 +465,6 @@ class CellRepresentation(SpecialTokenMixin):
         gene_embeddings = self.fg.gene_embeddings
         expression_embeddings = self.fe.expression_embeddings
 
-        # cfg = DictConfig(
-        #     {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
-        # )
-        # cfg = {**cfg, "hash_vars": hash_vars}
-        # processed_data_path, processed_cfg_path = get_cached_paths(
-        #     cfg,
-        #     Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "processed_data",
-        #     "data.pkl",
-        # )
         processed_data_path = self.get_tokenizer_cache_path(cache_dir, hash_vars)
         if not processed_data_path.is_file():
             with open(processed_data_path, "wb") as rep_file:
@@ -599,7 +569,8 @@ class PartitionedCellRepresentation(CellRepresentation):
 
             self.partition = 0  # TODO: don't hardcode
 
-            SpecialTokenMixin.__init__(self)
+            SpecialTokenMixin.__init__(self)  # TODO: this works because all partitions have the
+            # same var_names. Can we enforce that during preprocessing?
 
     def set_partition_size(self):
         """Get the size of the current partition."""

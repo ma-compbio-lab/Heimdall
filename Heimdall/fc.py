@@ -67,8 +67,8 @@ class Fc:
         else:
             identity_indices, expression_inputs = self.fe[cell_index]
 
-            gene_list = gene_names[identity_indices]
-            # gene_list = cell_slice.var_names[identity_indices]  # convert to ENSEMBL Gene Names
+            gene_names = self.data.gene_names
+            gene_list = gene_names[identity_indices]  # convert to ENSEMBL Gene Names
             identity_inputs = self.fg[gene_list]  # convert the genes into fg
 
             if len(identity_inputs) != len(expression_inputs):
@@ -82,10 +82,11 @@ class Fc:
             valid_mask = ~np.isnan(expression_inputs)
 
             identity_inputs = identity_inputs[valid_mask].to_numpy()
-            identity_indices = identity_indices[valid_mask]
+            # identity_indices = identity_indices[valid_mask]
             expression_inputs = expression_inputs[valid_mask]
 
-            gene_order = self.order(cell_index, identity_indices, expression_inputs)
+            # gene_order = self.order(cell_index, identity_indices, expression_inputs)
+            gene_order = self.order(identity_inputs, expression_inputs)
 
             # Padding and truncating
             identity_inputs, expression_inputs = self.tailor(
