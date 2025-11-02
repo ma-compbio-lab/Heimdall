@@ -58,7 +58,7 @@ class Fe(ABC):
             cell_index: cell for which to process expression values and get indices, as stored in `self.adata`.
 
         """
-        return _get_inputs_from_csr(self.adata, cell_index=cell_index, drop_zeros=self.drop_zeros)
+        return _get_inputs_from_csr(self.data, cell_index=cell_index, drop_zeros=self.drop_zeros)
 
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         """Preprocess expression embeddings and store them for use during model

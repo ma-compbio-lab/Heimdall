@@ -76,7 +76,7 @@ class SpecialTokenMixin:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.special_tokens = {token: self.adata.n_vars + i for i, token in enumerate(self._SPECIAL_TOKENS)}
+        self.special_tokens = {token: self.num_genes + i for i, token in enumerate(self._SPECIAL_TOKENS)}
 
 
 class CellRepresentation(SpecialTokenMixin):
@@ -403,20 +403,6 @@ class CellRepresentation(SpecialTokenMixin):
 
         return df_balanced
 
-    def drop_invalid_genes(self):
-        """Modify `self.adata` to only contain valid genes after preprocessing
-        with the `Fg`."""
-        # TODO: Move to `Fg`...?
-
-        valid_mask = self.adata.var["identity_valid_mask"]
-        # self.adata.raw = self.adata.copy()
-        self.adata = self.adata[:, valid_mask].copy()
-
-        # preprocessed_data_path, *_ = self.get_preprocessed_data_path(hash_data_only=False)
-        # self.anndata_to_cache(preprocessed_data_path)
-
-        self.check_print(f"> Finished dropping invalid genes, yielding new AnnData: :\n{self.adata}", cr_setup=True)
-
     def get_tokenizer_cache_path(self, cache_dir, hash_vars, filename: str = "data.pkl"):
         cfg = DictConfig(
             {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
@@ -453,8 +439,6 @@ class CellRepresentation(SpecialTokenMixin):
 
             self.fg.load_from_cache(identity_embedding_index, identity_valid_mask, gene_embeddings)
             self.fe.load_from_cache(expression_embeddings)
-
-            self.drop_invalid_genes()
 
             self.processed_fcfg = True
 
@@ -531,10 +515,6 @@ class CellRepresentation(SpecialTokenMixin):
         self.fg.preprocess_embeddings()
         self.check_print(f"> Finished calculating fg with {self.fg_cfg.type}", cr_setup=True)
 
-        # print(f"Debugging identity valid mask values {self.adata.var['identity_valid_mask']}")
-        self.drop_invalid_genes()
-        self.check_print("> Finished dropping invalid genes from AnnData", cr_setup=True)
-
         self.fe.preprocess_embeddings()
         self.check_print(f"> Finished calculating fe with {self.fe_cfg.type}", cr_setup=True)
 
@@ -579,7 +559,8 @@ class PartitionedCellRepresentation(CellRepresentation):
 
             self.partition = 0  # TODO: don't hardcode
 
-            SpecialTokenMixin.__init__(self)
+            SpecialTokenMixin.__init__(self)  # TODO: this works because all partitions have the
+            # same var_names. Can we enforce that during preprocessing?
 
     def set_partition_size(self):
         """Get the size of the current partition."""
