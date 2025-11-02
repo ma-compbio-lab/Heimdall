@@ -16,7 +16,7 @@ class PartitionedDistributedSampler(DistributedSampler):
         if isinstance(self.dataset, Subset):
             subset = dataset
             self.full_dataset = subset.dataset
-            self.partition_sizes = {partition: len(indices) for partition, indices in subset.indices.items()}
+            self.partition_sizes = {partition: len(indices) for partition, indices in subset._indices.items()}
         else:
             self.full_dataset = dataset
             self.partition_sizes = self.full_dataset._data.partition_sizes
