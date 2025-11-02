@@ -250,7 +250,6 @@ class Tasklist:
 
     PROPERTIES = (
         "splits",
-        "dataset_config",
         "shuffle",
         "batchsize",
         "epochs",
@@ -263,6 +262,7 @@ class Tasklist:
         self,
         data: "CellRepresentation",
         subtask_configs: DictConfig | dict,
+        dataset_config: DictConfig | dict,
     ):
 
         self.data = data
@@ -273,6 +273,7 @@ class Tasklist:
 
         self.set_unique_properties()
         self.num_subtasks = len(self._tasks)
+        self.dataset_config = dataset_config
 
     def set_unique_properties(self):
         for property_name in self.PROPERTIES:
