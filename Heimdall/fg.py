@@ -91,10 +91,6 @@ class Fg(ABC):
             return embedding_indices
 
     @property
-    def adata(self):
-        return self.data.adata
-
-    @property
     def identity_valid_mask(self):
         return self.adata.var["identity_valid_mask"]
 
