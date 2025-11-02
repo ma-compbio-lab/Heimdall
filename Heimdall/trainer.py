@@ -594,7 +594,7 @@ class HeimdallTrainer:
             loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
-        for subtask_name, _ in self.data.tasklist:
+        for subtask_name, subtask in self.data.tasklist:
             for metric_name, metric in metrics[subtask_name].items():
                 if metric_name != "ConfusionMatrix":
                     # Built-in metric

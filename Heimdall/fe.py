@@ -298,3 +298,11 @@ class IdentityFe(Fe):
 
     def __getitem__(self, cell_index: int):
         return self._get_inputs_from_csr(cell_index)
+
+
+# class ZeroFe(IdentityFe):
+#     def __getitem__(self, cell_index: int):
+#         cell_identity_inputs, cell_expression_inputs = super().__getitem__(cell_index)
+#         cell_expression_inputs = np.zeros_like(cell_expression_inputs)
+#
+#         return cell_identity_inputs, cell_expression_inputs

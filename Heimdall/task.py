@@ -1,3 +1,4 @@
+import pickle as pkl
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ class Task(ABC):
     head_config: DictConfig
     loss_config: DictConfig
     interaction_type: str | None = None
+    top_k: list[int] | None = None
     label_obsm_name: str | None = None
     label_col_name: str | None = None
     reducer_config: DictConfig | None = None
@@ -101,6 +103,35 @@ class Task(ABC):
 
     @abstractmethod
     def setup_labels(self): ...
+
+    def to_cache(self, cache_dir, hash_vars, task_name):
+        processed_data_path = self.data.get_tokenizer_cache_path(
+            cache_dir,
+            hash_vars,
+            filename=f"{task_name}_labels.pkl",
+        )
+        with open(processed_data_path, "wb") as label_file:
+            pkl.dump(self.labels, label_file)
+
+        self.data.check_print(f"> Finished writing task {task_name} labels at {processed_data_path}", cr_setup=True)
+
+    def from_cache(self, cache_dir, hash_vars, task_name):
+        processed_data_path = self.data.get_tokenizer_cache_path(
+            cache_dir,
+            hash_vars,
+            filename=f"{task_name}_labels.pkl",
+        )
+        if processed_data_path.is_file():
+            self.data.check_print(
+                f"> Found already processed labels for task {task_name}: {processed_data_path}",
+                cr_setup=True,
+                rank=True,
+            )
+            with open(processed_data_path, "rb") as label_file:
+                self.labels = pkl.load(label_file)
+            return True
+
+        return False
 
     def get_inputs(self, idx, shared_inputs):
         return {
@@ -272,8 +303,8 @@ class Tasklist:
         }
 
         self.set_unique_properties()
-        self.num_subtasks = len(self._tasks)
         self.dataset_config = dataset_config
+        self.num_subtasks = len(self._tasks)
 
     def set_unique_properties(self):
         for property_name in self.PROPERTIES:
