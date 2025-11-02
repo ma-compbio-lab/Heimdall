@@ -23,7 +23,7 @@ class Fg(ABC):
 
     def __init__(
         self,
-        adata: ad.AnnData,
+        data: "CellRepresentation",
         embedding_parameters: DictConfig,
         d_embedding: int,
         vocab_size: int,
@@ -32,7 +32,7 @@ class Fg(ABC):
         frozen: bool = False,
         rng: int | np.random.Generator = 0,
     ):
-        self.adata = adata
+        self.data = data
         self.d_embedding = d_embedding
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.vocab_size = vocab_size
@@ -87,6 +87,10 @@ class Fg(ABC):
             return embedding_indices, valid_mask
         else:
             return embedding_indices
+
+    @property
+    def adata(self):
+        return self.data.adata
 
     @property
     def identity_valid_mask(self):

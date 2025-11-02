@@ -24,7 +24,7 @@ class Fe(ABC):
 
     def __init__(
         self,
-        adata: ad.AnnData,
+        data: "CellRepresentation",
         vocab_size: int,
         embedding_parameters: DictConfig,
         d_embedding: int,
@@ -33,7 +33,7 @@ class Fe(ABC):
         drop_zeros: bool = True,
         rng: int | np.random.Generator = 0,
     ):
-        self.adata = adata
+        self.data = data
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.d_embedding = d_embedding
         self.vocab_size = vocab_size
@@ -110,6 +110,10 @@ class Fe(ABC):
             else:
                 continue
             self.embedding_parameters["args"][key] = value
+
+    @property
+    def adata(self):
+        return self.data.adata
 
 
 class ScBERTBinningFe(Fe):

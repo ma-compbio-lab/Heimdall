@@ -29,7 +29,7 @@ class Fc:
         self,
         fg: Fg | None,
         fe: Fe | None,
-        adata: ad.AnnData,
+        data: "CellRepresentation",
         tailor_config: DictConfig,
         order_config: DictConfig,
         reduce_config: DictConfig,
@@ -40,7 +40,8 @@ class Fc:
     ):
         self.fg = fg
         self.fe = fe
-        self._adata = adata
+        self.data = data
+
         self.max_input_length = max_input_length
         self.float_dtype = float_dtype
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
@@ -93,13 +94,12 @@ class Fc:
 
     @property
     def adata(self):
-        return self._adata
+        return self.data.adata
 
-    @adata.setter
-    def adata(self, val):
-        self._adata = val
-        self.fg.adata = val
-        self.fe.adata = val
+    # @adata.setter
+    # def adata(self, val):
+    #     self.fg.adata = val
+    #     self.fe.adata = val
 
 
 class ChromosomeAwareFc(Fc):

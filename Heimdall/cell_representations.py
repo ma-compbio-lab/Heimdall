@@ -157,6 +157,23 @@ class CellRepresentation(SpecialTokenMixin):
     def splits(self) -> Dict[str, NDArray[np.int_]]:
         return self._splits
 
+    @property
+    def gene_names(self, mask_key: str = "identity_valid_mask"):
+        if hasattr(self, "_gene_names"):
+            return self._gene_names
+
+        if mask_key in self.adata.var:
+            valid_mask = self.adata.var[mask_key]
+            self._gene_names = self.adata.var_names[valid_mask]
+
+            return self._gene_names
+
+        return self.adata.var_names
+
+    @property
+    def num_genes(self):
+        return len(self.gene_names)
+
     def convert_to_ensembl_ids(self, data_dir, species="human"):
         """Converts gene symbols in the anndata object to Ensembl IDs using a
         provided mapping.
@@ -406,8 +423,6 @@ class CellRepresentation(SpecialTokenMixin):
         self.adata.raw = self.adata.copy()
         self.adata = self.adata[:, valid_mask].copy()
 
-        self.fc.adata = self.adata
-
         preprocessed_data_path, *_ = self.get_preprocessed_data_path(hash_data_only=False)
         self.anndata_to_cache(preprocessed_data_path)
 
@@ -502,14 +517,14 @@ class CellRepresentation(SpecialTokenMixin):
         self.fc: Fc
         self.fg, fg_name = instantiate_from_config(
             self.fg_cfg,
-            self.adata,
+            self,
             vocab_size=self.adata.n_vars + 2,
             rng=self.rng,
             return_name=True,
         )
         self.fe, fe_name = instantiate_from_config(
             self.fe_cfg,
-            self.adata,
+            self,
             vocab_size=self.adata.n_vars + 2,  # TODO: figure out a way to fix the number of expr tokens
             rng=self.rng,
             return_name=True,
@@ -518,7 +533,7 @@ class CellRepresentation(SpecialTokenMixin):
             self.fc_cfg,
             self.fg,
             self.fe,
-            self.adata,
+            self,
             float_dtype=self.float_dtype,
             rng=self.rng,
             return_name=True,
