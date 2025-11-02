@@ -12,6 +12,7 @@ class PartitionedDistributedSampler(DistributedSampler):
 
     def __init__(self, dataset: PartitionedSubset | PartitionedDataset, *args, **kwargs):
         super().__init__(dataset, *args, **kwargs)
+        self.unshuffled = True
 
         if isinstance(self.dataset, Subset):
             subset = dataset
@@ -97,8 +98,9 @@ class PartitionedDistributedSampler(DistributedSampler):
     #     return self.generate_partition_indices(self.full_dataset.partition)
 
     def __iter__(self):
-        if self.shuffle:
+        if self.shuffle and self.unshuffled:
             self.partition_order = self.rng.permutation(self.partition_order)
+            self.unshuffled = False
 
         if self.partition_idx is None:
             self.partition_idx = 0
@@ -121,6 +123,7 @@ class PartitionIndexIterator:
             return next(self.partition_indices)
         except StopIteration as e:
             if self.sampler.partition_idx + 1 == self.sampler.num_partitions:
+                self.sampler.unshuffled = True
                 raise AllPartitionsExhausted()
 
             raise e
