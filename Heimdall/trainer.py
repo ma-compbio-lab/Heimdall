@@ -24,7 +24,6 @@ import wandb
 from Heimdall.models import setup_experiment
 from Heimdall.utils import (
     INPUT_KEYS,
-    conditional_print,
     get_dtype,
     instantiate_from_config,
     project2simplex_,

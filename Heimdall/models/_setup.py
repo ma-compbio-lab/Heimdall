@@ -2,7 +2,9 @@ from accelerate import Accelerator, DistributedDataParallelKwargs
 from omegaconf import OmegaConf, open_dict
 
 from Heimdall.models import HeimdallModel
-from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
+from Heimdall.utils import count_parameters, instantiate_from_config
+
+# from Heimdall.utils import get_dtype
 
 
 def setup_accelerator(config, cpu=False, run_wandb=False):
