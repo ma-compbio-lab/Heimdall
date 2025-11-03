@@ -12,7 +12,7 @@ import psutil
 import torch
 from accelerate import Accelerator
 from accelerate.utils import set_seed
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from torchmetrics.classification import Accuracy, ConfusionMatrix, F1Score, MatthewsCorrCoef, Precision, Recall
 from torchmetrics.regression import MeanSquaredError, R2Score
 from tqdm import tqdm
@@ -24,6 +24,7 @@ import wandb
 from Heimdall.models import setup_experiment
 from Heimdall.utils import (
     INPUT_KEYS,
+    get_cached_paths,
     get_dtype,
     instantiate_from_config,
     project2simplex_,
@@ -32,6 +33,8 @@ from Heimdall.utils import (
 
 
 class HeimdallTrainer:
+    CHECKPOINT_KEYS = ("fg", "fe", "fc", "model")
+
     def __init__(
         self,
         cfg,
@@ -265,8 +268,6 @@ class HeimdallTrainer:
 
     def fit(self, resume_from_checkpoint=True, checkpoint_every_n_epochs=1):
         """Train the model with automatic checkpointing and resumption."""
-        # Initialize checkpointing
-        self.initialize_checkpointing()
 
         # Try to resume from checkpoint if requested
         start_epoch = 0
@@ -377,7 +378,12 @@ class HeimdallTrainer:
             and not isinstance(self.data.datasets["full"], Heimdall.datasets.PairedInstanceDataset)
             # TODO doesn't seem necessary for pretraining but consult with others
         ):
-            if self.best_test_embed and self.best_val_embed and not self.cfg.trainer.fastdev:
+            if (
+                self.best_test_embed
+                and self.best_val_embed
+                and hasattr(self, "results_folder")
+                and not self.cfg.trainer.fastdev
+            ):
                 for subtask_name, _ in self.data.tasklist:
                     save_umap(
                         self.data,
@@ -695,12 +701,21 @@ class HeimdallTrainer:
             epoch=epoch,
         )
 
-    def initialize_checkpointing(self, results_folder_path=None):
+    def initialize_checkpointing(self, additional_keys: tuple = ()):
         """Initialize checkpoint directory."""
-        if results_folder_path is None:
+        keys = self.CHECKPOINT_KEYS + additional_keys
+        if getattr(self.cfg, "work_dir") is not None:
             self.results_folder = Path(self.cfg.work_dir)
         else:
-            self.results_folder = Path(results_folder_path)
+            cache_dir = self.cfg.cache_preprocessed_dataset_dir
+            cfg = DictConfig(
+                {key: OmegaConf.to_container(getattr(self.cfg, key), resolve=True) for key in keys},
+            )
+            self.results_folder, _ = get_cached_paths(
+                cfg,
+                Path(cache_dir).resolve() / "checkpoints",
+                "",
+            )
 
         # Create directory if it doesn't exist
         if self.accelerator.is_main_process:
@@ -794,6 +809,15 @@ class HeimdallTrainer:
         model = self.accelerator.unwrap_model(self.model)
         model.load_state_dict(data["model"])
 
+        epoch = self.load_trainer_state(data)
+
+        if "version" in data:
+            self.print_r0(f"> Checkpoint version: {data['version']}")
+        self.print_r0(f"> Resumed from epoch {epoch}, step {self.step}")
+
+        return epoch + 1
+
+    def load_trainer_state(self, data):
         # Restore optimizer and scheduler states
         self.optimizer.load_state_dict(data["optimizer"])
         if (data["scaler"] is not None) and (self.accelerator.scaler is not None):
@@ -828,13 +852,41 @@ class HeimdallTrainer:
 
         epoch = data["epoch"]
         self.step = data["step"]
-        # step = data.get("step", epoch * len(self.dataloader_train))
 
-        if "version" in data:
-            self.print_r0(f"> Checkpoint version: {data['version']}")
-        self.print_r0(f"> Resumed from epoch {epoch}, step {self.step}")
+        return epoch
 
-        return epoch + 1  # Return the next epoch to start from
+    def load_pretrained(self):
+        self.initialize_checkpointing()
+
+        # Load the checkpoint
+        load_path = self.results_folder / f"model-{self.cfg.pretrained_milestone}.pt"
+        if not load_path.exists():
+            self.print_r0(
+                f"> Checkpoint file {load_path} does not exist. `{self.cfg.pretrained_milestone=}` is invalid.",
+            )
+            return
+
+        self.print_r0(f"> Loading pretrained model state from {load_path}")
+
+        # Load the data
+        device = self.accelerator.device
+        data = torch.load(str(load_path), map_location=device, weights_only=False)
+
+        pretrained_state_dict = data["model"]
+
+        filtered_pretrained_params = OrderedDict(
+            filter(lambda param_tuple: "decoder" not in param_tuple[0], pretrained_state_dict.items()),
+        )  # we drop the pretrained head and load all other params
+
+        # Unwrap model and restore parameters
+        model = self.accelerator.unwrap_model(self.model)
+        model.load_state_dict(filtered_pretrained_params, strict=False)
+        # model.load_state_dict(data["model"])
+
+        epoch = self.load_trainer_state(data)
+
+        if self.accelerator.is_main_process:
+            print(f">Finished loading pretrained params loaded from {load_path}")
 
 
 def setup_trainer(config, cpu=True):
@@ -843,20 +895,8 @@ def setup_trainer(config, cpu=True):
         return
 
     accelerator, cr, model, run_wandb = experiment_primitives
-    if "pretrained_ckpt_path" in config:
-        if not Path(config.pretrained_ckpt_path).is_file():
-            raise FileNotFoundError(f"{config.pretrained_ckpt_path=} does not exist.")
-
-        pretrained_state_dict = torch.load(config.pretrained_ckpt_path)["model"]
-        filtered_pretrained_params = OrderedDict(
-            filter(lambda param_tuple: "decoder" not in param_tuple[0], pretrained_state_dict.items()),
-        )  # we drop the pretrained head and load all other params
-
-        model.load_state_dict(filtered_pretrained_params, strict=False)
-
-        if accelerator.is_main_process:
-            print(f">Finished loading pretrained params loaded from {config.pretrained_ckpt_path}")
-
     trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=run_wandb)
+    if "pretrained_milestone" in config:
+        trainer.load_pretrained()
 
     return trainer
