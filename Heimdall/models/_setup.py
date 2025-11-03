@@ -49,12 +49,12 @@ def setup_experiment(config, cpu=False, accelerator=None):
     # Create the model and the types of inputs that it may use
     # `type` can either be `learned`, which is integer tokens and learned nn.embeddings,
     # or `predefined`, which expects the dataset to prepare batchsize x length x hidden_dim
-    float_dtype = get_dtype(config.float_dtype)
 
     model = HeimdallModel(
         data=cr,
         model_config=config.model,
     )
+    # float_dtype = get_dtype(config.float_dtype)
     # model.to(float_dtype)  # to dtype after potentially loading pretrained weights instead of before
 
     if accelerator.is_main_process:

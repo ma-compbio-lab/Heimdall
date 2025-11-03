@@ -10,14 +10,12 @@ from typing import Callable, Dict, Optional, Union
 
 import anndata as ad
 import numpy as np
-import pandas as pd
 import scanpy as sc
 from accelerate import Accelerator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
 from scipy import sparse
 from scipy.sparse import csc_array
-from sklearn.utils import resample
 from torch.utils.data import DataLoader, Subset
 
 from Heimdall.datasets import Dataset, PartitionedSubset
