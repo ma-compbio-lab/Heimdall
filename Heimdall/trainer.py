@@ -422,7 +422,12 @@ class HeimdallTrainer:
         for values in batch.values():
             for subtask_name, value in values.items():
                 if value is not None:
-                    values[subtask_name] = value.to(self.accelerator.device)
+                    if isinstance(value, list):
+                        value = [subvalue.to(self.accelerator.device) for subvalue in value]
+                    else:
+                        value = value.to(self.accelerator.device)
+
+                    values[subtask_name] = value
 
         inputs = {input_key: batch[input_key] for input_key in INPUT_KEYS if input_key in batch}
 
@@ -701,7 +706,7 @@ class HeimdallTrainer:
             epoch=epoch,
         )
 
-    def initialize_checkpointing(self, additional_keys: tuple = ()):
+    def initialize_checkpointing(self, additional_keys: tuple = (), hash_vars: tuple = ()):
         """Initialize checkpoint directory."""
         if getattr(self.cfg, "work_dir", None) is not None:
             self.results_folder = Path(self.cfg.work_dir)
@@ -712,6 +717,7 @@ class HeimdallTrainer:
                 self.cfg,
                 cache_dir,
                 keys=keys,
+                hash_vars=hash_vars,
             )
             # self.results_folder, _ = get_cached_paths(
             #     cfg,
@@ -861,11 +867,23 @@ class HeimdallTrainer:
         self.initialize_checkpointing()
 
         # Load the checkpoint
-        load_path = self.results_folder / f"model-{self.cfg.pretrained_milestone}.pt"
-        if not load_path.exists():
-            self.print_r0(
-                f"> Checkpoint file {load_path} does not exist. `{self.cfg.pretrained_milestone=}` is invalid.",
-            )
+        config = self.cfg
+        if "pretrained_milestone" in config:
+            trainer.load_pretrained()
+            load_path = self.results_folder / f"model-{config.pretrained_milestone}.pt"
+            if not load_path.exists():
+                self.print_r0(
+                    f"> Checkpoint file {load_path} does not exist. `{config.pretrained_milestone=}` is invalid.",
+                )
+                return
+        elif "pretrained_ckpt_path" in config:
+            load_path = Path(config.pretrained_ckpt_path)
+            if not load_path.exists():
+                self.print_r0(
+                    f"> Checkpoint file {load_path} does not exist. Check the value of `{config.pretrained_ckpt_path=}` for correctness.",
+                )
+                return
+        else:
             return
 
         self.print_r0(f"> Loading pretrained model state from {load_path}")
@@ -898,7 +916,6 @@ def setup_trainer(config, cpu=True):
 
     accelerator, cr, model, run_wandb = experiment_primitives
     trainer = HeimdallTrainer(cfg=config, model=model, data=cr, accelerator=accelerator, run_wandb=run_wandb)
-    if "pretrained_milestone" in config:
-        trainer.load_pretrained()
+    trainer.load_pretrained()
 
     return trainer
