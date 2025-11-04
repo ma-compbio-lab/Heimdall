@@ -22,10 +22,10 @@ import Heimdall.datasets
 import Heimdall.losses
 import wandb
 from Heimdall.models import setup_experiment
-from Heimdall.utils import (
+from Heimdall.utils import (  # get_cached_paths,
     INPUT_KEYS,
-    get_cached_paths,
     get_dtype,
+    get_fully_qualified_cache_paths,
     instantiate_from_config,
     project2simplex_,
     save_umap,
@@ -703,19 +703,21 @@ class HeimdallTrainer:
 
     def initialize_checkpointing(self, additional_keys: tuple = ()):
         """Initialize checkpoint directory."""
-        keys = self.CHECKPOINT_KEYS + additional_keys
         if getattr(self.cfg, "work_dir") is not None:
             self.results_folder = Path(self.cfg.work_dir)
         else:
             cache_dir = self.cfg.cache_preprocessed_dataset_dir
-            cfg = DictConfig(
-                {key: OmegaConf.to_container(getattr(self.cfg, key), resolve=True) for key in keys},
+            keys = self.CHECKPOINT_KEYS + additional_keys
+            self.results_folder, _, _ = get_fully_qualified_cache_paths(
+                self.cfg,
+                cache_dir,
+                keys=keys,
             )
-            self.results_folder, _ = get_cached_paths(
-                cfg,
-                Path(cache_dir).resolve() / "checkpoints",
-                "",
-            )
+            # self.results_folder, _ = get_cached_paths(
+            #     cfg,
+            #     Path(cache_dir).resolve() / "checkpoints",
+            #     "",
+            # )
 
         # Create directory if it doesn't exist
         if self.accelerator.is_main_process:

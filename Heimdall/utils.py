@@ -64,6 +64,43 @@ def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str) -> Tuple[
     return cached_file_path, cached_cfg_path
 
 
+def generate_minimal_config(cfg, keys=(), hash_vars=()):
+    if len(keys) == 0:
+        raise ValueError("Config `keys` used for caching cannot be an empty.")
+    cfg = DictConfig(
+        {key: OmegaConf.to_container(getattr(cfg, key), resolve=True) for key in keys},
+    )
+    if len(hash_vars) > 0:
+        cfg = {**cfg, "hash_vars": hash_vars}
+
+    return cfg
+
+
+def get_fully_qualified_cache_paths(
+    cfg,
+    cache_dir,
+    filename="",
+    keys: set | tuple = {},
+    hash_vars=(),
+    verbose: int = 0,
+):
+    """Get fully-resolved path to unique cache directory, given the config keys
+    that distinguish the object being cached."""
+    keys = set(keys)  # Make unique
+    if verbose:
+        print(f"Hashing with {keys=}")
+
+    cfg = generate_minimal_config(cfg, keys)
+
+    fully_qualified_file_path, fully_qualified_cfg_path = get_cached_paths(
+        cfg,
+        Path(cache_dir).resolve(),
+        filename,
+    )
+
+    return fully_qualified_file_path, fully_qualified_cfg_path, cfg
+
+
 def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
     """Vectorization of `np.searchsorted` for 2D `bin_edges` array.
 

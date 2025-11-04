@@ -31,6 +31,7 @@ from Heimdall.utils import (
     convert_to_ensembl_ids,
     get_cached_paths,
     get_collation_closure,
+    get_fully_qualified_cache_paths,
     get_value,
     instantiate_from_config,
 )
@@ -79,6 +80,9 @@ class SpecialTokenMixin:
 
 
 class CellRepresentation(SpecialTokenMixin):
+    TOKENIZER_KEYS = ("fg", "fe", "fc")
+    DATASET_KEYS = ("dataset",)
+
     def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True):
         """Initialize the Cell Rep object with configuration and AnnData object.
 
@@ -132,6 +136,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         for subtask_name, subtask in self.tasklist:
             if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+                cache_dir = Path(cache_dir)
                 is_cached = subtask.from_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
                 if is_cached:
                     continue
@@ -200,28 +205,27 @@ class CellRepresentation(SpecialTokenMixin):
         _, gene_mapping = convert_to_ensembl_ids(self.adata, data_dir, species=species, verbose=not self.setup_finished)
         return self.adata, gene_mapping
 
-    def get_preprocessed_data_path(self, hash_data_only=True):
-        preprocessed_data_path = preprocessed_cfg_path = cfg = None
-        if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+    # def get_preprocessed_data_path(self, additional_keys: tuple = (), filename: str):
+    #     keys = self.DATASET_KEY + additional_keys
 
-            cfg = DictConfig({"dataset": OmegaConf.to_container(self._cfg.dataset, resolve=True)})
+    #     preprocessed_data_path = preprocessed_cfg_path = cfg = None
+    #     if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
 
-            if not hash_data_only:
-                cell_repre_cfg = DictConfig(
-                    {
-                        key: OmegaConf.to_container(getattr(self, key), resolve=True)
-                        for key in ("fg_cfg", "fe_cfg", "fc_cfg")
-                    },
-                )
-                cfg = {**cfg, **cell_repre_cfg}
+    #         # cfg = DictConfig({"dataset": OmegaConf.to_container(self._cfg.dataset, resolve=True)})
+    #         cfg = DictConfig(
+    #             {
+    #                 key: OmegaConf.to_container(getattr(self.cfg, key), resolve=True)
+    #                 for key in keys,
+    #             },
+    #         )
 
-            preprocessed_data_path, preprocessed_cfg_path = get_cached_paths(
-                cfg,
-                Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "preprocessed_anndata",
-                "data.h5ad",
-            )
+    #         preprocessed_data_path, preprocessed_cfg_path = get_cached_paths(
+    #             cfg,
+    #             Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "preprocessed_anndata",
+    #             "data.h5ad",
+    #         )
 
-        return preprocessed_data_path, preprocessed_cfg_path, cfg
+    #     return preprocessed_data_path, preprocessed_cfg_path, cfg
 
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():
@@ -235,8 +239,6 @@ class CellRepresentation(SpecialTokenMixin):
                 preprocessed_data_path,
                 backed="r",
             )  # add backed argument to prevent entire dataset from being read into mem
-            self.sequence_length = len(self.adata.var)
-            self.print_during_setup(f"> Finished processing Anndata Object:\n{self.adata}", is_printable_process=True)
             return True
 
         # OmegaConf.save(cfg, preprocessed_cfg_path)
@@ -276,16 +278,25 @@ class CellRepresentation(SpecialTokenMixin):
         #     if is_cached:
         #         return
 
-        preprocessed_data_path, preprocessed_cfg_path, cfg = self.get_preprocessed_data_path()
-        if preprocessed_data_path is not None:
+        keys = self.DATASET_KEYS
+        preprocessed_data_path = preprocessed_cfg_path = cfg = None
+        if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+            cache_dir = Path(cache_dir)
+            preprocessed_data_path, preprocessed_cfg_path, cfg = get_fully_qualified_cache_paths(
+                self._cfg,
+                cache_dir / "processed_anndata",
+                "data.h5ad",
+                keys=keys,
+            )
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
             if is_cached:
+                self.print_during_setup(f"> Finished loading AnnData with shape: {self.adata.shape}")
                 return
 
         self.preprocess_anndata()
         self.anndata_to_cache(preprocessed_data_path)
 
-        self.print_during_setup(f"> Finished loading AnnData:\n{self.adata}")
+        self.print_during_setup(f"> Finished loading AnnData with shape: {self.adata.shape}")
 
     def preprocess_anndata(self):
         self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
@@ -353,7 +364,7 @@ class CellRepresentation(SpecialTokenMixin):
             gene_medians = np.array([np.median(gene_nonzeros) for gene_nonzeros in genewise_nonzero_expression])
             self.adata.var["medians"] = gene_medians
 
-        self.print_during_setup(f"> Finished Processing Anndata Object:\n{self.adata}")
+        self.print_during_setup(f"> Finished processing AnnData object:\n{self.adata}")
 
     @check_states(adata=True, processed_fcfg=True)
     def prepare_full_dataset(self):
@@ -390,18 +401,17 @@ class CellRepresentation(SpecialTokenMixin):
             is_printable_process=True,
         )
 
+    # FIX CACHING111
     def get_tokenizer_cache_path(self, cache_dir, hash_vars, filename: str = "data.pkl"):
-        cfg = DictConfig(
-            {key: OmegaConf.to_container(getattr(self, key), resolve=True) for key in ("fg_cfg", "fe_cfg", "fc_cfg")},
-        )
-        cfg = {**cfg, "hash_vars": hash_vars}
-        # print(f"{cfg=}")
-        processed_data_path, _ = get_cached_paths(
-            cfg,
-            Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "processed_data",
+        keys = set(self.DATASET_KEYS).union(set(self.TOKENIZER_KEYS))
+
+        processed_data_path, _, _ = get_fully_qualified_cache_paths(
+            self._cfg,
+            cache_dir / "processed_data",
             filename,
+            keys=keys,
+            hash_vars=hash_vars,
         )
-        # print(f'{processed_data_path=}')
 
         return processed_data_path
 
@@ -451,7 +461,7 @@ class CellRepresentation(SpecialTokenMixin):
                     expression_embeddings,
                 )
                 pkl.dump(cache_representation, rep_file)
-                print(f"Finished writing cell representations at {processed_data_path}")
+                print(f"> Finished writing cell representations at {processed_data_path}")
 
     def instantiate_representation_functions(self):
         """Instantiate `f_g`, `fe` and `f_c` according to config."""
@@ -494,6 +504,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         self.instantiate_representation_functions()
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+            cache_dir = Path(cache_dir)
             is_cached = self.load_tokenizer_from_cache(cache_dir, hash_vars=hash_vars)
             if is_cached:
                 return
@@ -530,14 +541,14 @@ class PartitionedCellRepresentation(CellRepresentation):
 
         # Expect `data_path` to hold parent directory, not filepath
         self.partition_file_paths = sorted(
-            Path(self._cfg.dataset.preprocess_args.data_path).glob("*.h5ad"),
+            Path(self.dataset_preproc_cfg.data_path).glob("*.h5ad"),
         )
         self.num_partitions = len(self.partition_file_paths)
 
         if self.num_partitions == 0:
             raise ValueError(
                 "No partitions were found under the directory at "
-                f"'{self._cfg.dataset.preprocess_args.data_path}'. The dataset path "
+                f"'{self.dataset_preproc_cfg.data_path}'. The dataset path "
                 "(`config.dataset.preprocess_args.data_path`) is probably set incorrectly.",
             )
 
