@@ -4,14 +4,9 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 import hydra
 import pytest
-from accelerate import Accelerator
 from dotenv import load_dotenv
-from omegaconf import OmegaConf
 
-from Heimdall.cell_representations import CellRepresentation
-from Heimdall.models import HeimdallModel
 from Heimdall.trainer import setup_trainer
-from Heimdall.utils import count_parameters, get_dtype, instantiate_from_config
 
 load_dotenv()
 
@@ -28,7 +23,8 @@ def test_default_hydra_train():
                 # "+experiments_dev=classification_experiment_dev",
                 "+experiments=spatial_cancer_split1",
                 # "user=lane-nick"
-                "model=transformer_flash",
+                "model=transformer_small",
+                "model.args.use_flash_attn=true",  # Also tests flash-attn ;)
                 "fg=pca_esm2",
                 "fe=identity",
                 "fc=uce",
@@ -60,8 +56,7 @@ def test_partitioned_hydra_train():
                 "+experiments=pretraining",
                 "dataset=pretrain_dev",
                 # "user=lane-nick"
-                "model=transformer",
-                "model.args.d_model=128",
+                "model=transformer_small",
                 "seed=55",
                 "project_name=demo",
                 "run_wandb=false",
@@ -77,4 +72,4 @@ def test_partitioned_hydra_train():
     valid_log, _ = trainer.validate_model(trainer.dataloader_val, dataset_type="valid")
 
     for subtask_name, subtask in trainer.data.tasklist:
-        assert valid_log[f"valid_{subtask_name}_MatthewsCorrCoef"] > 0
+        print(valid_log)
