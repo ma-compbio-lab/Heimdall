@@ -349,7 +349,8 @@ class HeimdallTrainer:
                 # Check early stopping condition
                 if early_stopping and patience_counter[subtask_name] >= early_stopping_patience:
                     self.print_r0(
-                        f"Early stopping triggered. No improvement in {subtask.track_metric} for {early_stopping_patience} epochs.",
+                        f"Early stopping triggered. No improvement in {subtask.track_metric} for "
+                        f"{early_stopping_patience} epochs.",
                     )
                     break
 
@@ -880,7 +881,8 @@ class HeimdallTrainer:
             load_path = Path(config.pretrained_ckpt_path)
             if not load_path.exists():
                 self.print_r0(
-                    f"> Checkpoint file {load_path} does not exist. Check the value of `{config.pretrained_ckpt_path=}` for correctness.",
+                    f"> Checkpoint file {load_path} does not exist. Check the value of "
+                    f"`{config.pretrained_ckpt_path=}` for correctness.",
                 )
                 return
         else:
