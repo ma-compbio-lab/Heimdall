@@ -184,7 +184,7 @@ class PretrainedFg(Fg, ABC):
         if len(first_embedding) > self.d_embedding:
             print(
                 f"> Warning, the `Fg` embedding dim {first_embedding.shape} is larger than the model "
-                "dim {self.d_embedding}, truncation may occur.",
+                f"dim {self.d_embedding}, truncation may occur.",
             )
 
         valid_gene_names = list(embedding_map.keys())
