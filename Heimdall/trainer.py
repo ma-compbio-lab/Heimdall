@@ -298,6 +298,8 @@ class HeimdallTrainer:
         early_stopping = self.data.tasklist.early_stopping
         early_stopping_patience = self.data.tasklist.early_stopping_patience
         patience_counter = defaultdict(int)
+        
+        stop_training = False
 
         for epoch in range(start_epoch, self.data.tasklist.epochs):
             # Validation and test evaluation
@@ -321,7 +323,7 @@ class HeimdallTrainer:
                         best_metric[subtask_name]["reported_epoch"] = epoch  # log the epoch for convenience
                         for metric in subtask.metrics:
                             best_metric[subtask_name][f"reported_test_{metric}"] = test_log.get(
-                                f"test_{metric}",
+                                f"test_{subtask_name}_{metric}",
                                 float("-inf"),
                             )
 
@@ -351,7 +353,11 @@ class HeimdallTrainer:
                     self.print_r0(
                         f"Early stopping triggered. No improvement in {subtask.track_metric} for {early_stopping_patience} epochs.",
                     )
+                    stop_training=True
                     break
+            
+            if stop_training:
+                break
 
             # Train for one epoch
             self.train_epoch(epoch)
@@ -636,7 +642,7 @@ class HeimdallTrainer:
                 if metric_name != "ConfusionMatrix":
                     # Built-in metric
                     log[f"{dataset_type}_{subtask_name}_{metric_name}"] = metric.compute().item()
-                    if metric_name.startswith(("Accuracy", "Precision", "Recall", "F1Score", "MathewsCorrCoef")):
+                    if metric_name.startswith(("Accuracy", "Precision", "Recall", "F1Score")):
                         log[
                             f"{dataset_type}_{subtask_name}_{metric_name}"
                         ] *= 100  # Convert to percentage for these metrics
@@ -673,7 +679,7 @@ class HeimdallTrainer:
                 # 3. Per-class accuracy vector (for dashboard scalars)
                 per_class_acc = cm_norm.diag().cpu().numpy() * 100
                 log[f"{dataset_type}_{subtask_name}_per_class_accuracy"] = {
-                    name: float(acc) for name, acc in zip(self.class_names, per_class_acc)
+                    name: float(acc) for name, acc in zip(self.class_names[subtask_name], per_class_acc)
                 }
 
                 # 4. Log interactive confusion matrix to WandB (main process only)
