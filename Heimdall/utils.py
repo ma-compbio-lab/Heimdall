@@ -595,6 +595,7 @@ def save_umap(
         sc.tl.leiden(adata)
         sc.tl.umap(adata)
         sc.pl.umap(adata, ax=ax, show=False)
+
         ad.io.write_h5ad(savepath, adata)
 
         return fig
@@ -615,7 +616,7 @@ def save_umap(
                 partition_savepath = Path(savepath)
                 partition_savepath = partition_savepath.parent / f"partition_{partition}_{partition_savepath.name}"
 
-                adata = cr.adata[cr.splits[split]].copy(savepath)
+                adata = cr.adata[cr.splits[split]].copy(partition_savepath)
                 fig = save_partition_umap(
                     adata=adata,
                     embeddings=embeddings[start:end],
