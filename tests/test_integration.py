@@ -15,7 +15,7 @@ if "HYDRA_USER" not in os.environ:
 
 
 @pytest.mark.integration
-def test_default_hydra_train():
+def test_default_hydra_train(session_cache_dir):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         config = hydra.compose(
             config_name="config",
@@ -34,6 +34,8 @@ def test_default_hydra_train():
                 "tasks.args.epochs=1",
                 "fc.args.max_input_length=256",
                 "fc.args.tailor_config.args.sample_size=200",
+                "work_dir=null",
+                f"cache_preprocessed_dataset_dir={session_cache_dir}",
                 # f"user={os.environ['HYDRA_USER']}"
             ],
         )
@@ -47,7 +49,7 @@ def test_default_hydra_train():
 
 
 @pytest.mark.integration
-def test_partitioned_hydra_train():
+def test_partitioned_hydra_train(session_cache_dir):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         config = hydra.compose(
             config_name="config",
@@ -61,6 +63,8 @@ def test_partitioned_hydra_train():
                 "project_name=demo",
                 "run_wandb=false",
                 "tasks.args.epochs=1",
+                "work_dir=null",
+                f"cache_preprocessed_dataset_dir={session_cache_dir}",
                 "fc.args.max_input_length=256",
                 # f"user={os.environ['HYDRA_USER']}"
             ],
