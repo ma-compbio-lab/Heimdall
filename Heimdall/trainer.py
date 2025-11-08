@@ -635,7 +635,6 @@ class HeimdallTrainer:
             for metric_name, metric in metrics[subtask_name].items():
                 if metric_name != "ConfusionMatrix":
                     # Built-in metric
-                    print(f"{metric.compute().item()=}")
                     log[f"{dataset_type}_{subtask_name}_{metric_name}"] = metric.compute().item()
                     if metric_name.startswith(("Accuracy", "Precision", "Recall", "F1Score", "MathewsCorrCoef")):
                         log[
