@@ -13,7 +13,14 @@ import torch
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
-from torchmetrics.classification import Accuracy, ConfusionMatrix, F1Score, MatthewsCorrCoef, Precision, Recall
+from torchmetrics.classification import (
+    Accuracy,
+    ConfusionMatrix,
+    F1Score,
+    MatthewsCorrCoef,
+    Precision,
+    Recall,
+)
 from torchmetrics.regression import MeanSquaredError, R2Score
 from tqdm import tqdm
 from transformers import get_scheduler
@@ -299,6 +306,8 @@ class HeimdallTrainer:
         early_stopping_patience = self.data.tasklist.early_stopping_patience
         patience_counter = defaultdict(int)
 
+        stop_training = False
+
         for epoch in range(start_epoch, self.data.tasklist.epochs):
             # Validation and test evaluation
             valid_log, val_embed = self.validate_model(self.dataloader_val, dataset_type="valid")
@@ -321,7 +330,7 @@ class HeimdallTrainer:
                         best_metric[subtask_name]["reported_epoch"] = epoch  # log the epoch for convenience
                         for metric in subtask.metrics:
                             best_metric[subtask_name][f"reported_test_{metric}"] = test_log.get(
-                                f"test_{metric}",
+                                f"test_{subtask_name}_{metric}",
                                 float("-inf"),
                             )
 
@@ -352,7 +361,11 @@ class HeimdallTrainer:
                         f"Early stopping triggered. No improvement in {subtask.track_metric} for "
                         f"{early_stopping_patience} epochs.",
                     )
+                    stop_training = True
                     break
+
+            if stop_training:
+                break
 
             # Train for one epoch
             self.train_epoch(epoch)
@@ -636,7 +649,7 @@ class HeimdallTrainer:
                 if metric_name != "ConfusionMatrix":
                     # Built-in metric
                     log[f"{dataset_type}_{subtask_name}_{metric_name}"] = metric.compute().item()
-                    if metric_name.startswith(("Accuracy", "Precision", "Recall", "F1Score", "MathewsCorrCoef")):
+                    if metric_name.startswith(("Accuracy", "Precision", "Recall", "F1Score")):
                         log[
                             f"{dataset_type}_{subtask_name}_{metric_name}"
                         ] *= 100  # Convert to percentage for these metrics
@@ -673,14 +686,25 @@ class HeimdallTrainer:
                 # 3. Per-class accuracy vector (for dashboard scalars)
                 per_class_acc = cm_norm.diag().cpu().numpy() * 100
                 log[f"{dataset_type}_{subtask_name}_per_class_accuracy"] = {
-                    name: float(acc) for name, acc in zip(self.class_names, per_class_acc)
+                    name: float(acc) for name, acc in zip(self.class_names[subtask_name], per_class_acc)
                 }
 
                 # 4. Log interactive confusion matrix to WandB (main process only)
                 if self.run_wandb and self.accelerator.is_main_process:
+                    y_true_np = outputs["all_labels"][subtask_name]
+                    y_pred_np = outputs["all_preds"][subtask_name]
+
+                    # Convert logits/probs to hard labels if needed
+                    if y_pred_np.ndim > 1:  # shape (N, C)
+                        y_pred_np = y_pred_np.argmax(axis=1)
+
+                    # Flatten & convert to Python lists
+                    y_true_list = y_true_np.reshape(-1).tolist()
+                    y_pred_list = y_pred_np.reshape(-1).tolist()
+
                     wandb_cm = wandb.plot.confusion_matrix(
-                        y_true=outputs["all_labels"][subtask_name],
-                        preds=outputs["all_preds"][subtask_name],
+                        y_true=y_true_list,
+                        preds=y_pred_list,
                         class_names=self.class_names[subtask_name],  # same order as metric
                     )
                     self.accelerator.log(

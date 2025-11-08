@@ -596,6 +596,7 @@ def save_umap(
         sc.tl.umap(adata)
         sc.pl.umap(adata, ax=ax, show=False)
 
+        sc.pl.umap(adata, ax=ax, show=False)
         ad.io.write_h5ad(savepath, adata)
 
         return fig

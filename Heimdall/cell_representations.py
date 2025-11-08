@@ -399,7 +399,6 @@ class CellRepresentation(SpecialTokenMixin):
             is_printable_process=True,
         )
 
-    # FIX CACHING111
     def get_tokenizer_cache_path(self, cache_dir, hash_vars, filename: str = "data.pkl"):
         keys = set(self.DATASET_KEYS).union(set(self.TOKENIZER_KEYS))
 
