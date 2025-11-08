@@ -37,12 +37,12 @@ INPUT_KEYS = {
     "expression_inputs",
     "masks",
     "expression_padding",
+    "idx",
 }
 
 MAIN_KEYS = {
     *INPUT_KEYS,
     "labels",
-    "idx",
 }
 
 
