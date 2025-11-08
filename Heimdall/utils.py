@@ -42,8 +42,7 @@ INPUT_KEYS = {
 MAIN_KEYS = {
     *INPUT_KEYS,
     "labels",
-    # "adjacency_matrix",
-    # "subgraph_indices",
+    "idx",
 }
 
 
