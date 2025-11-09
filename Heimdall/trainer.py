@@ -626,7 +626,7 @@ class HeimdallTrainer:
                         loss = None
                     else:
                         for subtask_name, _ in self.data.tasklist:
-                            for key, value in batch_outputs[subtask_name].items():
+                            for key in batch_outputs[subtask_name]:
                                 outputs[key][subtask_name].extend(value.detach().cpu().numpy())
 
                     if metrics is not None and not self.get_precomputed:
