@@ -505,13 +505,13 @@ class HeimdallTrainer:
 
         for subtask_name, _ in self.data.tasklist:
             if self.has_embeddings:
-                batch_outputs[subtask_name]["all_embeddings"] = outputs[subtask_name].cls_embeddings
+                batch_outputs[subtask_name]["embeddings"] = outputs[subtask_name].cls_embeddings
 
-            batch_outputs[subtask_name]["all_labels"] = labels[subtask_name]
+            batch_outputs[subtask_name]["labels"] = labels[subtask_name]
 
         if self.get_precomputed:
             for subtask_name, _ in self.data.tasklist:
-                batch_outputs[subtask_name]["all_preds"] = torch.zeros_like(labels[subtask_name])
+                batch_outputs[subtask_name]["preds"] = torch.zeros_like(labels[subtask_name])
 
             return batch_outputs, batch_loss
 
@@ -548,7 +548,7 @@ class HeimdallTrainer:
             cumulative_loss += batch_loss
 
         for subtask_name, _ in self.data.tasklist:
-            batch_outputs[subtask_name]["all_preds"] = preds[subtask_name]
+            batch_outputs[subtask_name]["preds"] = preds[subtask_name]
 
         return batch_outputs, cumulative_loss
 
@@ -629,8 +629,8 @@ class HeimdallTrainer:
                         for subtask_name, subtask in self.data.tasklist:
                             for metric_name, metric in metrics[subtask_name].items():  # noqa: B007
                                 # Built-in metric
-                                subtask_labels = batch_outputs[subtask_name]["all_labels"]
-                                subtask_preds = batch_outputs[subtask_name]["all_preds"]
+                                subtask_labels = batch_outputs[subtask_name]["labels"]
+                                subtask_preds = batch_outputs[subtask_name]["preds"]
 
                                 if subtask.task_type in ["multiclass", "mlm"]:
                                     subtask_labels = subtask_labels.to(torch.int)
@@ -749,8 +749,8 @@ class HeimdallTrainer:
 
                 # 4. Log interactive confusion matrix to WandB (main process only)
                 if self.run_wandb and self.accelerator.is_main_process:
-                    y_true_np = outputs["all_labels"][subtask_name]
-                    y_pred_np = outputs["all_preds"][subtask_name]
+                    y_true_np = outputs["labels"][subtask_name]
+                    y_pred_np = outputs["preds"][subtask_name]
 
                     # Convert logits/probs to hard labels if needed
                     if y_pred_np.ndim > 1:  # shape (N, C)
@@ -779,7 +779,7 @@ class HeimdallTrainer:
         if not self.run_wandb and self.accelerator.is_main_process:
             print(f"{dataset_type}_log = {pformat(log)}")
 
-        return log, outputs["all_embeddings"]
+        return log, outputs["embeddings"]
 
     def train_epoch(self, epoch):
         self.model.train()
