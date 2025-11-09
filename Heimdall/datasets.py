@@ -101,7 +101,7 @@ class Dataset(PyTorchDataset, ABC):
 
 class SingleInstanceDataset(Dataset):
     def _setup_idx(self):
-        self.data._idx = np.arange(self.data.adata.shape[0])
+        self.data._idx = np.arange(self.data.adata.n_obs)
 
     def _setup_predefined_splits(self):
         adata = self.data.adata
@@ -228,6 +228,10 @@ class PartitionedDataset(SingleInstanceDataset):
     def __init__(self, data, *args, **kwargs):
         self.partition_splits = {}
         super().__init__(data, *args, **kwargs)
+
+    @property
+    def idx(self):
+        return np.arange(self.data.adata.n_obs)
 
     @property
     def partition(self):
