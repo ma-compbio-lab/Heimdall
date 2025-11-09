@@ -28,7 +28,7 @@ from transformers import get_scheduler
 import Heimdall.datasets
 import Heimdall.losses
 import wandb
-from Heimdall.models import setup_experiment
+from Heimdall.models import TransformerOutput, setup_experiment
 from Heimdall.utils import (  # get_cached_paths,
     INPUT_KEYS,
     get_dtype,
@@ -37,6 +37,8 @@ from Heimdall.utils import (  # get_cached_paths,
     project2simplex_,
     save_umap,
 )
+
+# from Heimdall.cell_representations import PartitionedCellRepresentation
 
 
 class HeimdallTrainer:
@@ -142,6 +144,22 @@ class HeimdallTrainer:
         self._data = data
         for split in ["train", "val", "test", "full"]:
             setattr(self, f"dataloader_{split}", data.dataloaders[split])
+
+    @property
+    def save_precomputed(self):
+        return self.data._save_precomputed
+
+    @save_precomputed.setter
+    def save_precomputed(self, val):
+        self.data._save_precomputed = val
+
+    @property
+    def get_precomputed(self):
+        return self.data._get_precomputed
+
+    @get_precomputed.setter
+    def get_precomputed(self, val):
+        self.data._get_precomputed = val
 
     def print_r0(self, message):
         self.data.print_r0(message)
@@ -390,26 +408,25 @@ class HeimdallTrainer:
                 self.best_test_embed
                 and self.best_val_embed
                 and hasattr(self, "results_folder")
-                and not self.cfg.trainer.fastdev
+                and self.cfg.trainer.save_umaps
             ):
-                for subtask_name, _ in self.data.tasklist:
-                    save_umap(
-                        self.data,
-                        self.best_test_embed[subtask_name],
-                        embedding_name=f"{subtask_name}_latents",
-                        split="test",
-                        savepath=self.results_folder / "test_adata.h5ad",
-                        log_umap=self.run_wandb,
-                    )
-                    save_umap(
-                        self.data,
-                        self.best_val_embed[subtask_name],
-                        embedding_name=f"{subtask_name}_latents",
-                        split="val",
-                        savepath=self.results_folder / "val_adata.h5ad",
-                        log_umap=self.run_wandb,
-                    )
-                    self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
+                save_umap(
+                    self.data,
+                    self.best_test_embed,
+                    embedding_name=f"{subtask_name}_latents",
+                    split="test",
+                    savepath=self.results_folder,
+                    log_umap=self.run_wandb,
+                )
+                save_umap(
+                    self.data,
+                    self.best_val_embed,
+                    embedding_name=f"{subtask_name}_latents",
+                    split="val",
+                    savepath=self.results_folder,
+                    log_umap=self.run_wandb,
+                )
+                self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
             else:
                 self.print_r0("> Skipped saving UMAP")
 
@@ -443,11 +460,41 @@ class HeimdallTrainer:
 
         # inputs = (batch["identity_inputs"], batch["expression_inputs"])
 
-        outputs = self.model(inputs=inputs)
+        if self.get_precomputed:
+            outputs = {}
+            for subtask_name, _ in self.data.tasklist:
+                cell_index = inputs["idx"][subtask_name].to(torch.int32).tolist()
+                cls_embeddings = self.data.adata.obsm[f"{subtask_name}_cls_embeddings"][cell_index]
+                cls_embeddings = torch.from_numpy(cls_embeddings).to(device=self.data.accelerator.device)
+
+                head_output = TransformerOutput(
+                    logits=torch.zeros_like(cls_embeddings),
+                    sequence_embeddings=torch.zeros_like(cls_embeddings),
+                    cls_embeddings=cls_embeddings,
+                )
+                outputs[subtask_name] = head_output
+        else:
+            outputs = self.model(inputs=inputs)
+
+        if self.save_precomputed:
+            for subtask_name, _ in self.data.tasklist:
+                head_output = outputs[subtask_name]
+                cls_embeddings = head_output.cls_embeddings.detach().cpu().numpy()
+                if f"{subtask_name}_cls_embeddings" not in self.data.adata.obsm:
+                    _, d_model = cls_embeddings.shape
+                    self.data.adata.obsm[f"{subtask_name}_cls_embeddings"] = np.zeros(
+                        (self.data.adata.n_obs, *cls_embeddings.shape[1:]),
+                    )
+
+                cell_index = inputs["idx"][subtask_name].to(torch.int32).tolist()
+                self.data.adata.obsm[f"{subtask_name}_cls_embeddings"][cell_index] = cls_embeddings
 
         batch_loss = 0
         preds = {}
         labels = batch["labels"]
+        if self.get_precomputed:
+            return outputs, labels, preds, batch_loss
+
         for subtask_name, subtask in self.data.tasklist:
             logits = outputs[subtask_name].logits
             subtask_labels = labels[subtask_name]
@@ -560,12 +607,13 @@ class HeimdallTrainer:
                                     batch_outputs[subtask_name].cls_embeddings.detach().cpu().numpy(),
                                 )
 
-                            outputs["all_labels"][subtask_name].append(labels[subtask_name].detach().cpu().numpy())
-                            outputs["all_preds"][subtask_name].append(preds[subtask_name].detach().cpu().numpy())
+                            if not self.get_precomputed:
+                                outputs["all_labels"][subtask_name].append(labels[subtask_name].detach().cpu().numpy())
+                                outputs["all_preds"][subtask_name].append(preds[subtask_name].detach().cpu().numpy())
 
                         outputs["loss"] = loss
 
-                    if metrics is not None:
+                    if metrics is not None and not self.get_precomputed:
                         for subtask_name, subtask in self.data.tasklist:
                             for metric_name, metric in metrics[subtask_name].items():  # noqa: B007
                                 # Built-in metric
@@ -609,8 +657,9 @@ class HeimdallTrainer:
                     outputs["all_embeddings"][subtask_name],
                     axis=0,
                 )
-                outputs["all_labels"][subtask_name] = np.concatenate(outputs["all_labels"][subtask_name], axis=0)
-                outputs["all_preds"][subtask_name] = np.concatenate(outputs["all_preds"][subtask_name], axis=0)
+                if not self.get_precomputed:
+                    outputs["all_labels"][subtask_name] = np.concatenate(outputs["all_labels"][subtask_name], axis=0)
+                    outputs["all_preds"][subtask_name] = np.concatenate(outputs["all_preds"][subtask_name], axis=0)
 
         return outputs
 
@@ -629,7 +678,6 @@ class HeimdallTrainer:
                 metrics=metrics,
             )
             loss += outputs["loss"]
-
         loss = loss / len(dataloader)
 
         if self.accelerator.num_processes > 1:
@@ -643,6 +691,9 @@ class HeimdallTrainer:
             loss = self.accelerator.gather(loss_tensor).mean().item()
 
         log = {f"{dataset_type}_loss": loss}
+
+        if self.save_precomputed:
+            return log, outputs
 
         for subtask_name, subtask in self.data.tasklist:
             for metric_name, metric in metrics[subtask_name].items():
@@ -744,11 +795,6 @@ class HeimdallTrainer:
                 keys=keys,
                 hash_vars=hash_vars,
             )
-            # self.results_folder, _ = get_cached_paths(
-            #     cfg,
-            #     Path(cache_dir).resolve() / "checkpoints",
-            #     "",
-            # )
 
         # Create directory if it doesn't exist
         if self.accelerator.is_main_process:
@@ -944,3 +990,37 @@ def setup_trainer(config, cpu=True):
     trainer.load_pretrained()
 
     return trainer
+
+
+class PrecomputationContext:
+    ATTRIBUTES = ("save_precomputed", "get_precomputed", "run_wandb")
+
+    def __init__(
+        self,
+        trainer: HeimdallTrainer,
+        save_precomputed: bool,
+        get_precomputed: bool,
+        run_wandb: bool = False,
+    ):
+        self.trainer = trainer
+        self.save_precomputed = save_precomputed
+        self.get_precomputed = get_precomputed
+        self.run_wandb = run_wandb
+
+    def swap(self):
+        for attribute in self.ATTRIBUTES:
+            context_attr = getattr(self, attribute)
+            trainer_attr = getattr(self.trainer, attribute)
+            setattr(self.trainer, attribute, context_attr)
+            setattr(self, attribute, trainer_attr)
+
+    def __enter__(self):
+        self.swap()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # if self.trainer.save_precomputed and isinstance(trainer, PartitionedCellRepresentation):
+        #     self.trainer.data.partition = None
+
+        self.swap()
+
+        return False

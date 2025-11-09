@@ -92,6 +92,8 @@ class CellRepresentation(SpecialTokenMixin):
         self.num_replicas = accelerator.num_processes
         self.accelerator = accelerator
         self._indent = ""
+        self._save_precomputed = False
+        self._get_precomputed = False
 
         self.setup_finished = False
         self._cfg = config
@@ -124,6 +126,14 @@ class CellRepresentation(SpecialTokenMixin):
     @indent.setter
     def indent(self, val: int):
         self._indent = " " * (val * 4)
+
+    @property
+    def save_precomputed(self):
+        return self._save_precomputed
+
+    @property
+    def get_precomputed(self):
+        return self._get_precomputed
 
     def setup_labels(self, hash_vars=()):
         """Can only be called after `self.adata` and `self.datasets` is
@@ -203,28 +213,6 @@ class CellRepresentation(SpecialTokenMixin):
         _, gene_mapping = convert_to_ensembl_ids(self.adata, data_dir, species=species, verbose=not self.setup_finished)
         return self.adata, gene_mapping
 
-    # def get_preprocessed_data_path(self, additional_keys: tuple = (), filename: str):
-    #     keys = self.DATASET_KEY + additional_keys
-
-    #     preprocessed_data_path = preprocessed_cfg_path = cfg = None
-    #     if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-
-    #         # cfg = DictConfig({"dataset": OmegaConf.to_container(self._cfg.dataset, resolve=True)})
-    #         cfg = DictConfig(
-    #             {
-    #                 key: OmegaConf.to_container(getattr(self.cfg, key), resolve=True)
-    #                 for key in keys,
-    #             },
-    #         )
-
-    #         preprocessed_data_path, preprocessed_cfg_path = get_cached_paths(
-    #             cfg,
-    #             Path(cache_dir).resolve() / self._cfg.dataset.dataset_name / "preprocessed_anndata",
-    #             "data.h5ad",
-    #         )
-
-    #     return preprocessed_data_path, preprocessed_cfg_path, cfg
-
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():
             self.print_during_setup(
@@ -265,16 +253,6 @@ class CellRepresentation(SpecialTokenMixin):
         """Load AnnData into memory (and preprocess, if necessary)."""
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
-
-        # preprocessed_data_path_w_cell_cfg, preprocessed_cfg_path, cfg = self.get_preprocessed_data_path(
-        #     hash_data_only=False,
-        # )
-
-        # if preprocessed_data_path_w_cell_cfg is not None and preprocessed_data_path_w_cell_cfg.is_file():
-        #     print("Loading tokenized AnnData?")
-        #     is_cached = self.anndata_from_cache(preprocessed_data_path_w_cell_cfg, preprocessed_cfg_path, cfg)
-        #     if is_cached:
-        #         return
 
         keys = self.DATASET_KEYS
         preprocessed_data_path = preprocessed_cfg_path = cfg = None
@@ -591,6 +569,9 @@ class PartitionedCellRepresentation(CellRepresentation):
         if self.adata is not None:
             self.adata.file.close()
 
+            if self.save_precomputed:
+                self.adata.write_h5ad(self.adata.filename)
+
             del self.adata
             self.adata = None
 
@@ -601,11 +582,15 @@ class PartitionedCellRepresentation(CellRepresentation):
     def prepare_partition(self, partition):
         self.close_partition()
         self._partition = partition
-        self.dataset_preproc_cfg.data_path = self.partition_file_paths[partition]
-        self.print_during_setup(
-            f"> Opening partition {partition + 1} of {self.num_partitions}",
-            is_printable_process=True,
-        )
+        if partition is not None:
+            self.dataset_preproc_cfg.data_path = self.partition_file_paths[partition]
+            self.print_during_setup(
+                f"> Opening partition {partition + 1} of {self.num_partitions}",
+                is_printable_process=True,
+            )
+            return True
+
+        return False
 
     @partition.setter
     def partition(self, partition):
@@ -614,8 +599,9 @@ class PartitionedCellRepresentation(CellRepresentation):
             return
 
         # Preprocess partition AnnData
-        self.prepare_partition(partition)
-        super().setup(hash_vars=(int(self.partition),), setup_labels=True)
+        partition_prepared = self.prepare_partition(partition)
+        if partition_prepared:
+            super().setup(hash_vars=(int(self.partition),), setup_labels=True)
 
     @check_states(adata=True, processed_fcfg=True)
     def prepare_dataset_loaders(self):

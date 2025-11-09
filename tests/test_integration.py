@@ -6,7 +6,7 @@ import hydra
 import pytest
 from dotenv import load_dotenv
 
-from Heimdall.trainer import setup_trainer
+from Heimdall.trainer import PrecomputationContext, setup_trainer
 
 load_dotenv()
 
@@ -67,6 +67,7 @@ def test_partitioned_hydra_train(session_cache_dir):
                 f"cache_preprocessed_dataset_dir={session_cache_dir}",
                 "fc.args.max_input_length=256",
                 # f"user={os.environ['HYDRA_USER']}"
+                "trainer.save_umaps=false",
             ],
         )
 
@@ -77,3 +78,38 @@ def test_partitioned_hydra_train(session_cache_dir):
 
     for subtask_name, subtask in trainer.data.tasklist:
         print(valid_log)
+
+
+@pytest.mark.integration
+def test_partitioned_precomputation(session_cache_dir):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+        config = hydra.compose(
+            config_name="config",
+            overrides=[
+                # "+experiments_dev=classification_experiment_dev",
+                "+experiments=pretraining",
+                "dataset=pretrain_dev",
+                # "user=lane-nick"
+                "model=transformer_small",
+                "seed=55",
+                "project_name=demo",
+                "run_wandb=false",
+                "tasks.args.epochs=1",
+                "work_dir=null",
+                f"cache_preprocessed_dataset_dir={session_cache_dir}",
+                "fc.args.max_input_length=256",
+                # f"user={os.environ['HYDRA_USER']}"
+                "trainer.save_umaps=false",
+            ],
+        )
+
+    trainer = setup_trainer(config, cpu=False)
+
+    trainer.data.partition = 0
+    print("> Precomputing embeddings...")
+    with PrecomputationContext(trainer, save_precomputed=True, get_precomputed=False, run_wandb=False):
+        _, full_embed = trainer.validate_model(trainer.dataloader_full, "full")
+
+    print("> Retrieving precomputed embeddings...")
+    with PrecomputationContext(trainer, save_precomputed=False, get_precomputed=True, run_wandb=False):
+        _, full_embed = trainer.validate_model(trainer.dataloader_full, "full")

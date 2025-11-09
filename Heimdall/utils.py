@@ -23,7 +23,7 @@ from numpy.random import Generator
 from numpy.typing import NDArray
 from omegaconf import DictConfig, OmegaConf
 from scipy import sparse as sp
-from torch import Tensor
+from torch import FloatTensor, LongTensor, Tensor, sparse_coo_tensor
 from torch.utils.data import default_collate
 from tqdm.auto import tqdm
 
@@ -31,6 +31,7 @@ import wandb
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
+    from Heimdall.trainer import HeimdallTrainer
 
 INPUT_KEYS = {
     "identity_inputs",
@@ -586,16 +587,22 @@ def save_umap(
     split="test",
     log_umap: bool = False,
 ):
-    def save_partition_umap(adata, embeddings, savepath, embedding_name):
-        fig, ax = plt.subplots(1, figsize=(4, 4))
-        adata.obsm[embedding_name] = embeddings
+    def save_partition_umap(adata, embeddings, savepath):
+        fig, axes = plt.subplots(cr.num_subtasks, squeeze=False, figsize=(4 * cr.num_subtasks, 4))
 
-        sc.pp.neighbors(adata, use_rep=embedding_name)
-        sc.tl.leiden(adata)
-        sc.tl.umap(adata)
-        sc.pl.umap(adata, ax=ax, show=False)
+        for ax, (subtask_name, _) in zip(axes.flat, cr.tasklist):
+            embedding_name = f"{subtask_name}_latents"
+            neighbors_key = f"neighbors_{embedding_name}"
+            umap_key = f"X_umap_{embedding_name}"
+            leiden_key = f"leiden_{embedding_name}"
 
-        sc.pl.umap(adata, ax=ax, show=False)
+            adata.obsm[embedding_name] = embeddings[subtask_name]
+
+            sc.pp.neighbors(adata, use_rep=embedding_name, key_added=neighbors_key)
+            sc.tl.leiden(adata, key_added=leiden_key, neighbors_key=neighbors_key)
+            sc.tl.umap(adata, key_added=umap_key, neighbors_key=neighbors_key)
+            sc.pl.embedding(adata, basis=umap_key, color=leiden_key, ax=ax, show=False)
+
         ad.io.write_h5ad(savepath, adata)
 
         return fig
@@ -612,16 +619,21 @@ def save_umap(
             cumulative_sizes = np.concatenate([[0], cumulative_sizes])
             for partition in range(full_dataset.num_partitions):
                 start, end = cumulative_sizes[partition : partition + 2]
+
+                partition_embeddings = {
+                    subtask_name: subtask_embeddings[start:end]
+                    for subtask_name, subtask_embeddings in embeddings.items()
+                }
+
                 full_dataset.partition = partition
                 partition_savepath = Path(savepath)
-                partition_savepath = partition_savepath.parent / f"partition_{partition}_{partition_savepath.name}"
+                partition_savepath = partition_savepath / f"partition_{partition}_{split}_umap.h5ad"
 
                 adata = cr.adata[cr.splits[split]].copy(partition_savepath)
                 fig = save_partition_umap(
                     adata=adata,
-                    embeddings=embeddings[start:end],
+                    embeddings=partition_embeddings,
                     savepath=partition_savepath,
-                    embedding_name=embedding_name,
                 )
                 if log_umap:
                     wandb.log({f"{partition=}_{split}_umap": wandb.Image(fig)})
@@ -630,8 +642,7 @@ def save_umap(
             fig = save_partition_umap(
                 adata=adata,
                 embeddings=embeddings,
-                savepath=savepath,
-                embedding_name=embedding_name,
+                savepath=savepath / f"{split}_umap.h5ad",
             )
             if log_umap:
                 wandb.log({f"{split}_umap": wandb.Image(fig)})
@@ -687,3 +698,16 @@ def project2simplex_(y, dim: int = 0, zero_threshold: float = 1e-10) -> Tensor:
     y.sub_(mu).clip_(min=zero_threshold)
     assert y.sum(dim=dim).sub_(1).abs_().max() < 1e-4, y.sum(dim=dim).sub_(1).abs_().max()
     return y
+
+
+def convert_numpy_to_pytorch_sparse_coo(numpy_coo, **context_kwargs):
+    indices = np.array(numpy_coo.nonzero())
+    values = numpy_coo.data[numpy_coo.data.nonzero()]
+
+    i = LongTensor(indices)
+    v = FloatTensor(values)
+    size = numpy_coo.shape
+
+    torch_coo = sparse_coo_tensor(i, v, size=size, **context_kwargs)
+
+    return torch_coo
