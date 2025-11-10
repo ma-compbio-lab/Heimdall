@@ -3,7 +3,7 @@
 # Heimdall
 
 # Demo notebooks coming soon
-Demo notebooks for novel Fg, Fe, Fc construction and experiment pipeline will be posted in the coming days
+Demo notebooks for novel Fg, Fe, Fc construction, experiment pipeline, as well as data files will be posted in the coming days
 
 # Installation
 
