@@ -2,6 +2,8 @@
 
 # Heimdall
 
+# Demo notebooks coming soon
+
 # Installation
 
 ```bash
