@@ -627,7 +627,11 @@ def save_umap(
                 partition_savepath = Path(savepath)
                 partition_savepath = partition_savepath / f"partition_{partition}_{split}_umap.h5ad"
 
-                adata = cr.adata[cr.splits[split]].copy(partition_savepath)
+                split_indices = cr.splits[split]
+                if len(split_indices) == 0:
+                    continue
+
+                adata = cr.adata[split_indices].copy(partition_savepath)
                 fig = save_partition_umap(
                     adata=adata,
                     embeddings=partition_embeddings,

@@ -96,8 +96,8 @@ class HeimdallTrainer:
         self.print_r0(f"> Using Device: {self.accelerator.device}")
         self.print_r0(f"> Number of Devices: {self.accelerator.num_processes}")
 
-        self.best_val_embed = {}
-        self.best_test_embed = {}
+        self.best_val_outputs = defaultdict(dict)
+        self.best_test_outputs = defaultdict(dict)
         self.best_epoch = defaultdict(int)
 
         self._initialize_wandb()
@@ -320,8 +320,6 @@ class HeimdallTrainer:
             # Run one eval pass on the loaded weights to get embeddings
             _, val_outputs = self.validate_model(self.dataloader_val, "valid")
             _, test_outputs = self.validate_model(self.dataloader_test, "test")
-            val_embed = val_outputs["embeddings"]
-            test_embed = test_outputs["embeddings"]
             if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
                 # self.save_adata_umap(test_embed, val_embed)
                 # self.print_r0(f"> Saved UMAP from checkpoint epoch {last_epoch}")
@@ -348,8 +346,6 @@ class HeimdallTrainer:
             # Validation and test evaluation
             valid_log, val_outputs = self.validate_model(self.dataloader_val, dataset_type="valid")
             test_log, test_outputs = self.validate_model(self.dataloader_test, dataset_type="test")
-            val_embed = val_outputs["embeddings"]
-            test_embed = test_outputs["embeddings"]
 
             # Track the best metric if specified
             reset_patience_counter = False
@@ -359,8 +355,10 @@ class HeimdallTrainer:
                     if (
                         val_metric > best_metric[subtask_name][f"best_val_{subtask_name}_{subtask.track_metric}"]
                     ):  # Change to >= if you want to debug UMAP
-                        self.best_val_embed[subtask_name] = val_embed[subtask_name]
-                        self.best_test_embed[subtask_name] = test_embed[subtask_name]
+                        for key in val_outputs:
+                            self.best_val_outputs[key][subtask_name] = val_outputs[key][subtask_name]
+                            self.best_test_outputs[key][subtask_name] = test_outputs[key][subtask_name]
+
                         self.best_epoch[subtask_name] = epoch
 
                         best_metric[subtask_name][f"best_val_{subtask_name}_{subtask.track_metric}"] = val_metric
@@ -379,8 +377,9 @@ class HeimdallTrainer:
                         self.print_r0(f"> Saved best model checkpoint at epoch {epoch}")
 
                 else:
-                    self.best_val_embed[subtask_name] = val_embed[subtask_name]
-                    self.best_test_embed[subtask_name] = test_embed[subtask_name]
+                    for key in val_outputs:
+                        self.best_val_outputs[key][subtask_name] = val_outputs[key][subtask_name]
+                        self.best_test_outputs[key][subtask_name] = test_outputs[key][subtask_name]
                     self.best_epoch[subtask_name] = epoch
 
                 if reset_patience_counter:
@@ -424,7 +423,12 @@ class HeimdallTrainer:
             and self.has_embeddings
             and not isinstance(self.data.datasets["full"], Heimdall.datasets.PairedInstanceDataset)
         ):
-            if self.best_test_embed and self.best_val_embed and hasattr(self, "results_folder") and not self.skip_umaps:
+            if (
+                self.best_test_outputs
+                and self.best_val_outputs
+                and hasattr(self, "results_folder")
+                and not self.skip_umaps
+            ):
                 self.save_umaps()
 
                 self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
@@ -435,16 +439,19 @@ class HeimdallTrainer:
             self.print_r0("> Model has finished Training")
 
     def save_umaps(self):
+        best_test_embed = self.best_test_outputs["embeddings"]
         save_umap(
             self.data,
-            self.best_test_embed,
+            best_test_embed,
             split="test",
             savepath=self.results_folder,
             log_umap=self.run_wandb,
         )
+
+        best_val_embed = self.best_val_outputs["embeddings"]
         save_umap(
             self.data,
-            self.best_val_embed,
+            best_val_embed,
             split="val",
             savepath=self.results_folder,
             log_umap=self.run_wandb,
