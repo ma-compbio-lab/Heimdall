@@ -249,7 +249,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         self.num_subtasks = self.tasklist.num_subtasks
 
-    def load_anndata(self):
+    def load_anndata(self, filename: str = "data.h5ad"):
         """Load AnnData into memory (and preprocess, if necessary)."""
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
@@ -261,7 +261,7 @@ class CellRepresentation(SpecialTokenMixin):
             preprocessed_data_path, preprocessed_cfg_path, cfg = get_fully_qualified_cache_paths(
                 self._cfg,
                 cache_dir / "processed_anndata",
-                "data.h5ad",
+                filename,
                 keys=keys,
             )
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
