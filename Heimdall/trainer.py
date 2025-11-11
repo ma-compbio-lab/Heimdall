@@ -5,6 +5,7 @@ from collections import OrderedDict, defaultdict
 from contextlib import nullcontext
 from pathlib import Path
 from pprint import pformat
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -28,7 +29,8 @@ from transformers import get_scheduler
 import Heimdall.datasets
 import Heimdall.losses
 import wandb
-from Heimdall.models import TransformerOutput, setup_experiment
+from Heimdall.cell_representations import setup_data
+from Heimdall.models import TransformerOutput, setup_model
 from Heimdall.utils import (  # get_cached_paths,
     INPUT_KEYS,
     get_dtype,
@@ -53,7 +55,7 @@ class HeimdallTrainer:
         random_seed: int = 0,
         accumulate_grad_batches: int = 1,
         grad_norm_clip: float = 1.0,
-        save_umaps: bool = False,
+        skip_umaps: bool = True,
         fastdev: bool = False,  # if set to true, then only train/evel/test on the first batch
         run_wandb=False,
         custom_loss_func=None,
@@ -78,7 +80,7 @@ class HeimdallTrainer:
         self.random_seed = random_seed
         self.accumulate_grad_batches = accumulate_grad_batches
         self.grad_norm_clip = grad_norm_clip
-        self.save_umaps = save_umaps
+        self.skip_umaps = skip_umaps
         self.fastdev = fastdev
         self.run_wandb = run_wandb
         self.process = psutil.Process()
@@ -422,7 +424,7 @@ class HeimdallTrainer:
             and self.has_embeddings
             and not isinstance(self.data.datasets["full"], Heimdall.datasets.PairedInstanceDataset)
         ):
-            if self.best_test_embed and self.best_val_embed and hasattr(self, "results_folder") and self.save_umaps:
+            if self.best_test_embed and self.best_val_embed and hasattr(self, "results_folder") and not self.skip_umaps:
                 self.save_umaps()
 
                 self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
@@ -1002,12 +1004,13 @@ class HeimdallTrainer:
             print(f">Finished loading pretrained params loaded from {load_path}")
 
 
-def setup_trainer(config, cpu=True):
-    experiment_primitives = setup_experiment(config, cpu=cpu)
-    if experiment_primitives is None:
+def setup_trainer_generic(config, setup_model: Callable, cpu=True):
+    accelerator, cr, run_wandb, only_preprocess_data = setup_data(config)
+
+    if only_preprocess_data:
         return
 
-    accelerator, cr, model, run_wandb = experiment_primitives
+    model = setup_model(config, cr, is_main_process=accelerator.is_main_process)
     trainer = instantiate_from_config(
         config.trainer,
         cfg=config,
@@ -1019,6 +1022,10 @@ def setup_trainer(config, cpu=True):
     trainer.load_pretrained()
 
     return trainer
+
+
+def setup_trainer(config, cpu=True):
+    return setup_trainer_generic(config, setup_model=setup_model, cpu=cpu)
 
 
 class PrecomputationContext:

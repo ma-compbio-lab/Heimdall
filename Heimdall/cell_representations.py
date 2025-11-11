@@ -11,8 +11,9 @@ from typing import Callable, Dict, Optional, Union
 import anndata as ad
 import numpy as np
 import scanpy as sc
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from numpy.typing import NDArray
+from omegaconf import OmegaConf, open_dict
 from scipy import sparse
 from scipy.sparse import csc_array
 from torch.utils.data import DataLoader, Subset
@@ -647,3 +648,43 @@ class PartitionedCellRepresentation(CellRepresentation):
             f"> Finished setting up datasets (and loaders):\n\t{dataset_str}",
             is_printable_process=True,
         )
+
+
+def setup_accelerator(config, cpu=False, run_wandb=False):
+    # get accelerate context
+    accelerator_log_kwargs = {}
+    if run_wandb:
+        accelerator_log_kwargs["log_with"] = "wandb"
+        accelerator_log_kwargs["project_dir"] = config.work_dir
+
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+
+    accelerator = Accelerator(
+        gradient_accumulation_steps=config.trainer.args.accumulate_grad_batches,
+        step_scheduler_with_optimizer=False,
+        cpu=cpu,
+        mixed_precision="bf16",
+        kwargs_handlers=[ddp_kwargs],
+        **accelerator_log_kwargs,
+    )
+
+    return accelerator
+
+
+def setup_data(config, cpu=False, accelerator=None):
+    """Set up Heimdall data based on config, including cr and accelerator."""
+
+    run_wandb = getattr(config, "run_wandb", False)
+    if accelerator is None:
+        accelerator = setup_accelerator(config, cpu=cpu, run_wandb=run_wandb)
+
+    if accelerator.is_main_process:
+        print(OmegaConf.to_yaml(config, resolve=True))
+
+    with open_dict(config):
+        only_preprocess_data = config.pop("only_preprocess_data", None)
+        # pop so hash of cfg is not changed depending on value
+
+    cr = instantiate_from_config(config.tasks.cell_rep_config, config, accelerator)
+
+    return accelerator, cr, run_wandb, only_preprocess_data
