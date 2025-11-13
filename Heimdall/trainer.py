@@ -307,7 +307,7 @@ class HeimdallTrainer:
 
         return metrics
 
-    def fit(self, resume_from_checkpoint=True, checkpoint_every_n_epochs=1):
+    def fit(self, resume_from_checkpoint=True, checkpoint_every_n_epochs=1, do_cleanup=True):
         """Train the model with automatic checkpointing and resumption."""
 
         # Try to resume from checkpoint if requested
@@ -412,31 +412,32 @@ class HeimdallTrainer:
                 self.save_checkpoint(epoch)
                 self.print_r0(f"> Saved regular checkpoint at epoch {epoch}")
 
-        if self.run_wandb and self.accelerator.is_main_process:
-            for subtask_name, subtask in self.data.tasklist:
-                if subtask.track_metric is not None:  # logging the best val score and the tracked test scores
-                    self.accelerator.log(best_metric[subtask_name], step=self.step)
-            self.accelerator.end_training()
+        if do_cleanup:
+            if self.run_wandb and self.accelerator.is_main_process:
+                for subtask_name, subtask in self.data.tasklist:
+                    if subtask.track_metric is not None:  # logging the best val score and the tracked test scores
+                        self.accelerator.log(best_metric[subtask_name], step=self.step)
+                self.accelerator.end_training()
 
-        if (
-            self.accelerator.is_main_process
-            and self.has_embeddings
-            and not isinstance(self.data.datasets["full"], Heimdall.datasets.PairedInstanceDataset)
-        ):
             if (
-                self.best_test_outputs
-                and self.best_val_outputs
-                and hasattr(self, "results_folder")
-                and not self.skip_umaps
+                self.accelerator.is_main_process
+                and self.has_embeddings
+                and not isinstance(self.data.datasets["full"], Heimdall.datasets.PairedInstanceDataset)
             ):
-                self.save_umaps()
+                if (
+                    self.best_test_outputs
+                    and self.best_val_outputs
+                    and hasattr(self, "results_folder")
+                    and not self.skip_umaps
+                ):
+                    self.save_umaps()
 
-                self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
-            else:
-                self.print_r0("> Skipped saving UMAP")
+                    self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
+                else:
+                    self.print_r0("> Skipped saving UMAP")
 
-        if self.accelerator.is_main_process:
-            self.print_r0("> Model has finished Training")
+            if self.accelerator.is_main_process:
+                self.print_r0("> Model has finished Training")
 
     def save_umaps(self):
         best_test_embed = self.best_test_outputs["embeddings"]
@@ -521,7 +522,6 @@ class HeimdallTrainer:
         if self.save_precomputed:
             self.save_precomputed_outputs(inputs, outputs)
 
-        batch_loss = {subtask_name: 0 for subtask_name, _ in self.data.tasklist}
         labels = batch["labels"]
         batch_outputs = {subtask_name: {} for subtask_name, _ in self.data.tasklist}
 
@@ -531,6 +531,7 @@ class HeimdallTrainer:
 
             batch_outputs[subtask_name]["labels"] = labels[subtask_name]
 
+        batch_loss = {}
         if self.get_precomputed:
             for subtask_name, _ in self.data.tasklist:
                 batch_outputs[subtask_name]["preds"] = torch.zeros_like(labels[subtask_name])
@@ -839,7 +840,7 @@ class HeimdallTrainer:
             return
 
         # Ensure results folder exists
-        if not hasattr(self, "results_folder"):
+        if not hasattr(self, "results_folder") or not self.results_folder.exists():
             self.initialize_checkpointing()
 
         # Calculate current step based on epoch
@@ -879,7 +880,7 @@ class HeimdallTrainer:
         """Load a checkpoint based on milestone.txt or a specific milestone
         number."""
         # Ensure results folder is initialized
-        if not hasattr(self, "results_folder"):
+        if not hasattr(self, "results_folder") or not self.results_folder.exists():
             self.initialize_checkpointing()
 
         if not self.results_folder.exists():

@@ -66,12 +66,28 @@ def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str) -> Tuple[
     return cached_file_path, cached_cfg_path
 
 
+def filter_config(config, keys_to_keep):
+    filtered = OmegaConf.create({})
+    for key in keys_to_keep:
+        # Use OmegaConf.select() to safely access nested keys using dot notation
+        # and set them in the new config
+        try:
+            value = OmegaConf.select(config, key)
+            # Create the nested structure in the filtered config
+            OmegaConf.update(filtered, key, value)
+        except Exception:
+            # Handle cases where the key might be missing if necessary
+            pass
+    return filtered
+
+
 def generate_minimal_config(cfg, keys=(), hash_vars=()):
     if len(keys) == 0:
         raise ValueError("Config `keys` used for caching cannot be an empty.")
-    cfg = DictConfig(
-        {key: OmegaConf.to_container(getattr(cfg, key), resolve=True) for key in keys},
-    )
+    # cfg = DictConfig(
+    #     {key: OmegaConf.to_container(recursive_getattr(cfg, key), resolve=True) for key in keys},
+    # )
+    cfg = filter_config(cfg, keys_to_keep=keys)
     if len(hash_vars) > 0:
         cfg = {**cfg, "hash_vars": hash_vars}
 
@@ -92,7 +108,7 @@ def get_fully_qualified_cache_paths(
     if verbose:
         print(f"Hashing with {keys=}")
 
-    cfg = generate_minimal_config(cfg, keys)
+    cfg = generate_minimal_config(cfg, keys=keys, hash_vars=hash_vars)
 
     fully_qualified_file_path, fully_qualified_cfg_path = get_cached_paths(
         cfg,

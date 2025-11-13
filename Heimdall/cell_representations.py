@@ -80,7 +80,7 @@ class SpecialTokenMixin:
 
 class CellRepresentation(SpecialTokenMixin):
     TOKENIZER_KEYS = ("fg", "fe", "fc")
-    DATASET_KEYS = ("dataset",)
+    DATASET_KEYS = ("dataset.preprocess_args.data_path",)
 
     def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True):
         """Initialize the Cell Rep object with configuration and AnnData object.
@@ -438,7 +438,7 @@ class CellRepresentation(SpecialTokenMixin):
                     expression_embeddings,
                 )
                 pkl.dump(cache_representation, rep_file)
-                print(f"> Finished writing cell representations at {processed_data_path}")
+                self.print_during_setup(f"> Finished writing cell representations at {processed_data_path}")
 
     def instantiate_representation_functions(self):
         """Instantiate `f_g`, `fe` and `f_c` according to config."""
@@ -520,6 +520,7 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.partition_file_paths = sorted(
             Path(self.dataset_preproc_cfg.data_path).glob("*.h5ad"),
         )
+        self.partition_folder = str(self.dataset_preproc_cfg.data_path)
         self.num_partitions = len(self.partition_file_paths)
 
         if self.num_partitions == 0:
@@ -534,6 +535,8 @@ class PartitionedCellRepresentation(CellRepresentation):
         if auto_setup:
             self.create_tasklist()
 
+            self.print_during_setup("> Setting up partition_sizes...")
+            self.indent = 1
             if accelerator.is_main_process:  # One time through for main process
                 self.setup(setup_labels=False)
 
@@ -541,9 +544,13 @@ class PartitionedCellRepresentation(CellRepresentation):
             if not accelerator.is_main_process:  # Let others catch up (just for `set_partition_size`)
                 self.setup_finished = True
                 self.setup(setup_labels=False)
+            self.indent = 0
 
             self.prepare_full_dataset()  # Setup dataset before preparing labels
+            self.print_during_setup("> Setting up labels...")
+            self.indent = 1
             self.setup(setup_labels=True)
+            self.indent = 0
             self.setup_finished = True
 
             self.prepare_dataset_loaders()
@@ -560,17 +567,29 @@ class PartitionedCellRepresentation(CellRepresentation):
         for partition in range(self.num_partitions):  # Setting up AnnData and sizes
             self.prepare_partition(partition)
 
-            self.indent = 1
+            self.indent = 2
             super().setup(hash_vars=(int(self.partition),), setup_labels=setup_labels)
-            self.indent = 0
+            self.indent = 1
 
             self.set_partition_size()
+
+    def preprocess_anndata(self):
+        self.dataset_preproc_cfg.data_path = self.partition_file_paths[self.partition]
+        super().preprocess_anndata()
+        self.dataset_preproc_cfg.data_path = self.partition_folder
+
+    def load_anndata(self, filename="data.h5ad"):
+        partition_filename = f"partition_{self.partition}_{filename}"
+        super().load_anndata(partition_filename)
 
     def close_partition(self):
         """Close current partition."""
         if self.adata is not None:
             self.adata.file.close()
 
+            self.print_during_setup(
+                f"> Closing partition {self.partition + 1} of {self.num_partitions}",
+            )
             if self.save_precomputed:
                 self.adata.write_h5ad(self.adata.filename)
 
@@ -585,10 +604,8 @@ class PartitionedCellRepresentation(CellRepresentation):
         self.close_partition()
         self._partition = partition
         if partition is not None:
-            self.dataset_preproc_cfg.data_path = self.partition_file_paths[partition]
             self.print_during_setup(
                 f"> Opening partition {partition + 1} of {self.num_partitions}",
-                is_printable_process=True,
             )
             return True
 
