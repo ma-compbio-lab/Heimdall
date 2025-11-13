@@ -1,7 +1,5 @@
-from omegaconf import OmegaConf, open_dict
-
 from Heimdall.models import HeimdallModel
-from Heimdall.utils import count_parameters, instantiate_from_config
+from Heimdall.utils import count_parameters
 
 # from Heimdall.utils import get_dtype
 

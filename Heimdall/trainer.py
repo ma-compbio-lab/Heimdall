@@ -33,7 +33,6 @@ from Heimdall.cell_representations import setup_data
 from Heimdall.models import TransformerOutput, setup_model
 from Heimdall.utils import (  # get_cached_paths,
     INPUT_KEYS,
-    get_dtype,
     get_fully_qualified_cache_paths,
     instantiate_from_config,
     project2simplex_,
