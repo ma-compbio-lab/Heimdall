@@ -321,12 +321,13 @@ def symbol_to_ensembl(
     verbose: int | bool = False,
 ) -> GeneMappingOutput:
     # Query from MyGene.Info server
-    print(f"Querying {len(genes):,} genes")
+    conditional_print(f"Querying {len(genes):,} genes", condition=verbose)
     query_results = MG.querymany(
         genes,
         species=species,
         scopes="symbol",
         fields="ensembl.gene",
+        verbose=verbose,
         **(extra_query_kwargs or {}),
     )
 
@@ -625,6 +626,10 @@ def save_umap(
 
     if hasattr(cr, "splits"):
         full_dataset = cr.datasets["full"]
+        if cr.adata.isbacked:
+            adata = cr.adata.to_memory()
+        else:
+            adata = cr.adata
         if hasattr(full_dataset, "partition_splits"):
             cumulative_sizes = np.cumsum(
                 [
@@ -649,7 +654,7 @@ def save_umap(
                 if len(split_indices) == 0:
                     continue
 
-                adata = cr.adata[split_indices].copy(partition_savepath)
+                adata = adata[split_indices].copy()
                 fig = save_partition_umap(
                     adata=adata,
                     embeddings=partition_embeddings,
@@ -658,7 +663,7 @@ def save_umap(
                 if log_umap:
                     wandb.log({f"{partition=}_{split}_umap": wandb.Image(fig)})
         else:
-            adata = cr.adata[cr.splits[split]].copy()
+            adata = adata[cr.splits[split]].copy()
             fig = save_partition_umap(
                 adata=adata,
                 embeddings=embeddings,
