@@ -3,6 +3,7 @@
 import pickle as pkl
 import textwrap
 from collections import defaultdict
+from datetime import timedelta
 from functools import partial, wraps
 from pathlib import Path
 from pprint import pformat
@@ -11,7 +12,7 @@ from typing import Callable, Dict, Optional, Union
 import anndata as ad
 import numpy as np
 import scanpy as sc
-from accelerate import Accelerator, DistributedDataParallelKwargs
+from accelerate import Accelerator, DistributedDataParallelKwargs, InitProcessGroupKwargs
 from numpy.typing import NDArray
 from omegaconf import OmegaConf, open_dict
 from scipy import sparse
@@ -92,14 +93,12 @@ class CellRepresentation(SpecialTokenMixin):
         self.rank = accelerator.process_index
         self.num_replicas = accelerator.num_processes
         self.accelerator = accelerator
-        self._indent = ""
+        self._indent = 0
         self._save_precomputed = False
         self._get_precomputed = False
 
         self.setup_finished = False
         self._cfg = config
-
-        self.dataset_preproc_cfg = config.dataset.preprocess_args
 
         self.fg_cfg = config.fg
         self.fc_cfg = config.fc
@@ -127,7 +126,11 @@ class CellRepresentation(SpecialTokenMixin):
 
     @indent.setter
     def indent(self, val: int):
-        self._indent = " " * (val * 4)
+        self._indent = val
+
+    @property
+    def prefix(self):
+        return " " * (self.indent * 4)
 
     @property
     def save_precomputed(self):
@@ -212,7 +215,12 @@ class CellRepresentation(SpecialTokenMixin):
 
         """
 
-        _, gene_mapping = convert_to_ensembl_ids(self.adata, data_dir, species=species, verbose=not self.setup_finished)
+        _, gene_mapping = convert_to_ensembl_ids(
+            self.adata,
+            data_dir,
+            species=species,
+            verbose=self.verbose and not self.setup_finished,
+        )
         return self.adata, gene_mapping
 
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
@@ -237,7 +245,10 @@ class CellRepresentation(SpecialTokenMixin):
         if preprocessed_data_path is not None:
             self.print_during_setup("> Writing preprocessed Anndata Object", is_printable_process=True)
             self.adata.write(preprocessed_data_path)
-            self.print_during_setup("> Finished writing preprocessed Anndata Object", is_printable_process=True)
+            self.print_during_setup(
+                f"> Finished writing preprocessed Anndata Object at {preprocessed_data_path}",
+                is_printable_process=True,
+            )
 
     def create_tasklist(self):
         if hasattr(self._cfg.tasks.args, "subtask_configs"):
@@ -277,16 +288,24 @@ class CellRepresentation(SpecialTokenMixin):
         self.print_during_setup(f"> Finished loading AnnData with shape: {self.adata.shape}")
 
     def preprocess_anndata(self):
-        self.adata = ad.read_h5ad(self.dataset_preproc_cfg.data_path)
-        self.print_during_setup(f"> Finished Loading in {self.dataset_preproc_cfg.data_path}")
+        self.adata = ad.read_h5ad(self._cfg.dataset.preprocess_args.data_path)
+        self.print_during_setup(f"> Finished Loading in {self._cfg.dataset.preprocess_args.data_path}")
         # convert gene names to ensembl ids
         self.print_during_setup("> Converting gene names to Ensembl IDs...")
         self.adata, _ = self.convert_to_ensembl_ids(
             data_dir=self._cfg.ensembl_dir,
-            species=self.dataset_preproc_cfg.species,
+            species=self._cfg.dataset.preprocess_args.species,
         )
 
-        if get_value(self.dataset_preproc_cfg, "normalize"):
+        # for key in ('gene_ensembl',):
+        #     if key in self.adata.var:
+        #         del self.adata.var[key]
+
+        for key in ("gene_mapping:ensembl_to_symbol", "gene_mapping:symbol_to_ensembl"):
+            if key in self.adata.uns:
+                del self.adata.uns[key]
+
+        if get_value(self._cfg.dataset.preprocess_args, "normalize"):
             self.print_during_setup("> Normalizing AnnData...")
 
             if sparse.issparse(self.adata.X):
@@ -304,29 +323,32 @@ class CellRepresentation(SpecialTokenMixin):
                 data[nan_mask] = np.nan  # NOTE: must not be integer-valued
 
             assert (
-                self.dataset_preproc_cfg.normalize and self.dataset_preproc_cfg.log_1p
+                self._cfg.dataset.preprocess_args.normalize and self._cfg.dataset.preprocess_args.log_1p
             ), "Normalize and Log1P both need to be TRUE"
         else:
             self.print_during_setup("> Skipping Normalizing anndata...")
 
-        if get_value(self.dataset_preproc_cfg, "log_1p"):
+        if get_value(self._cfg.dataset.preprocess_args, "log_1p"):
             self.print_during_setup("> Log Transforming anndata...")
 
             sc.pp.log1p(self.adata)
         else:
             self.print_during_setup("> Skipping Log Transforming anndata..")
 
-        if get_value(self.dataset_preproc_cfg, "top_n_genes") and self.dataset_preproc_cfg["top_n_genes"] != "false":
+        if (
+            get_value(self._cfg.dataset.preprocess_args, "top_n_genes")
+            and self._cfg.dataset.preprocess_args["top_n_genes"] != "false"
+        ):
             # Identify highly variable genes
             self.print_during_setup(
-                f"> Using highly variable subset... top {self.dataset_preproc_cfg.top_n_genes} genes",
+                f"> Using highly variable subset... top {self._cfg.dataset.preprocess_args.top_n_genes} genes",
             )
-            sc.pp.highly_variable_genes(self.adata, n_top_genes=self.dataset_preproc_cfg.top_n_genes)
+            sc.pp.highly_variable_genes(self.adata, n_top_genes=self._cfg.dataset.preprocess_args.top_n_genes)
             self.adata = self.adata[:, self.adata.var["highly_variable"]].copy()
         else:
             self.print_during_setup("> No highly variable subset... using entire dataset")
 
-        if get_value(self.dataset_preproc_cfg, "scale_data"):
+        if get_value(self._cfg.dataset.preprocess_args, "scale_data"):
             # Scale the data
             raise NotImplementedError("Scaling the data is NOT RECOMMENDED, please set it to false")
             self.print_during_setup("> Scaling the data...")
@@ -334,7 +356,7 @@ class CellRepresentation(SpecialTokenMixin):
         else:
             self.print_during_setup("> Not scaling the data...")
 
-        if get_value(self.dataset_preproc_cfg, "get_medians"):
+        if get_value(self._cfg.dataset.preprocess_args, "get_medians"):
             # Get medians
             self.print_during_setup("> Getting nonzero medians...")
             csc_expression = csc_array(self.adata.X)
@@ -502,7 +524,7 @@ class CellRepresentation(SpecialTokenMixin):
         conditional_print(f"{message}", self.accelerator.is_main_process)
 
     def print_during_setup(self, message, is_printable_process=False):
-        message = textwrap.indent(message, self.indent)
+        message = textwrap.indent(message, self.prefix)
         # message = self.indent + message
         if not self.setup_finished:
             if is_printable_process:
@@ -515,19 +537,19 @@ class PartitionedCellRepresentation(CellRepresentation):
     def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True):
         super().__init__(config, accelerator, auto_setup=False)
 
-        self.dataset_directory = str(self.dataset_preproc_cfg.data_path)
+        self.dataset_directory = str(self._cfg.dataset.preprocess_args.data_path)
 
         # Expect `data_path` to hold parent directory, not filepath
         self.partition_file_paths = sorted(
-            Path(self.dataset_preproc_cfg.data_path).glob("*.h5ad"),
+            Path(self._cfg.dataset.preprocess_args.data_path).glob("*.h5ad"),
         )
-        self.partition_folder = str(self.dataset_preproc_cfg.data_path)
+        self.partition_folder = str(self._cfg.dataset.preprocess_args.data_path)
         self.num_partitions = len(self.partition_file_paths)
 
         if self.num_partitions == 0:
             raise ValueError(
                 "No partitions were found under the directory at "
-                f"'{self.dataset_preproc_cfg.data_path}'. The dataset path "
+                f"'{self._cfg.dataset.preprocess_args.data_path}'. The dataset path "
                 "(`config.dataset.preprocess_args.data_path`) is probably set incorrectly.",
             )
 
@@ -537,7 +559,7 @@ class PartitionedCellRepresentation(CellRepresentation):
             self.create_tasklist()
 
             self.print_during_setup("> Setting up partition_sizes...")
-            self.indent = 1
+            self.indent += 1
             if accelerator.is_main_process:  # One time through for main process
                 self.setup(setup_labels=False)
 
@@ -545,13 +567,13 @@ class PartitionedCellRepresentation(CellRepresentation):
             if not accelerator.is_main_process:  # Let others catch up (just for `set_partition_size`)
                 self.setup_finished = True
                 self.setup(setup_labels=False)
-            self.indent = 0
+            self.indent -= 1
 
             self.prepare_full_dataset()  # Setup dataset before preparing labels
             self.print_during_setup("> Setting up labels...")
-            self.indent = 1
+            self.indent += 1
             self.setup(setup_labels=True)
-            self.indent = 0
+            self.indent -= 1
             self.setup_finished = True
 
             self.prepare_dataset_loaders()
@@ -566,24 +588,30 @@ class PartitionedCellRepresentation(CellRepresentation):
 
     def setup(self, setup_labels=False):
         for partition in range(self.num_partitions):  # Setting up AnnData and sizes
-            self.prepare_partition(partition)
-
-            self.indent = 2
+            if self.accelerator.is_main_process:
+                self.prepare_partition(partition)
+            self.indent += 1
             super().setup(hash_vars=(int(self.partition),), setup_labels=setup_labels)
-            self.indent = 1
+            self.indent -= 1
+
+            self.accelerator.wait_for_everyone()
+            if not self.accelerator.is_main_process:
+                self.prepare_partition(partition)
 
             self.set_partition_size()
 
     def preprocess_anndata(self):
-        self.dataset_preproc_cfg.data_path = self.partition_file_paths[self.partition]
+        self._cfg.dataset.preprocess_args.data_path = str(self.partition_file_paths[self.partition])
         super().preprocess_anndata()
-        self.dataset_preproc_cfg.data_path = self.partition_folder
+        self._cfg.dataset.preprocess_args.data_path = str(self.partition_folder)
 
     def load_anndata(self, filename="data.h5ad"):
-        partition_filename = f"partition_{self.partition}_{filename}"
+        partition_source_path = self.partition_file_paths[self.partition]
+        partition_filename = Path(partition_source_path).name
+        # partition_filename = f"partition_{self.partition}_{filename}"
         super().load_anndata(partition_filename)
 
-    def close_partition(self):
+    def close_partition(self, is_original_replica: bool = True):
         """Close current partition."""
         if self.adata is not None:
             self.adata.file.close()
@@ -591,8 +619,10 @@ class PartitionedCellRepresentation(CellRepresentation):
             self.print_during_setup(
                 f"> Closing partition {self.partition + 1} of {self.num_partitions}",
             )
-            if self.save_precomputed:
-                self.adata.write_h5ad(self.adata.filename)
+            if self.save_precomputed and is_original_replica:
+                print(f"Writing for {self.partition=} for {self.adata.filename=} for {self.accelerator.process_index=}")
+                savable_adata = self.adata.to_memory()
+                savable_adata.write_h5ad(self.adata.filename)
 
             del self.adata
             self.adata = None
@@ -676,13 +706,14 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
         accelerator_log_kwargs["project_dir"] = config.work_dir
 
     ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=3600))
 
     accelerator = Accelerator(
         gradient_accumulation_steps=config.trainer.args.accumulate_grad_batches,
         step_scheduler_with_optimizer=False,
         cpu=cpu,
         mixed_precision="bf16",
-        kwargs_handlers=[ddp_kwargs],
+        kwargs_handlers=[ddp_kwargs, init_process_group_kwargs],
         **accelerator_log_kwargs,
     )
 

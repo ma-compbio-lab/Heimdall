@@ -437,12 +437,6 @@ class HeimdallTrainer:
                     break
 
         if do_cleanup:
-            if self.run_wandb and self.accelerator.is_main_process:
-                for subtask_name, subtask in self.data.tasklist:
-                    if subtask.track_metric is not None:  # logging the best val score and the tracked test scores
-                        self.accelerator.log(best_metric[subtask_name], step=self.step)
-                self.accelerator.end_training()
-
             if (
                 self.accelerator.is_main_process
                 and self.has_embeddings
@@ -459,6 +453,12 @@ class HeimdallTrainer:
                     self.print_r0(f"> Saved best UMAP checkpoint at epoch {self.best_epoch}")
                 else:
                     self.print_r0("> Skipped saving UMAP")
+
+            if self.run_wandb and self.accelerator.is_main_process:
+                for subtask_name, subtask in self.data.tasklist:
+                    if subtask.track_metric is not None:  # logging the best val score and the tracked test scores
+                        self.accelerator.log(best_metric[subtask_name])
+                self.accelerator.end_training()
 
             if self.accelerator.is_main_process:
                 self.print_r0("> Model has finished Training")
@@ -587,6 +587,7 @@ class HeimdallTrainer:
             # perform a .clone() so that the subtask_labels are not updated in-place
             # TODO: weight task-specific loss_functions somehow
             loss_function = self.loss_functions[subtask_name]
+
             batch_loss[subtask_name] = loss_function(logits, subtask_labels.clone())
 
         if cumulative_loss is None:
@@ -661,7 +662,7 @@ class HeimdallTrainer:
                                     "grad_norm": grad_norm,
                                 }
                                 if self.run_wandb and self.accelerator.is_main_process:
-                                    self.accelerator.log(log, step=self.step)
+                                    self.accelerator.log(log)
 
                             with torch.no_grad():
                                 for param in constrained_params:
@@ -774,7 +775,7 @@ class HeimdallTrainer:
                         "topk_acc",
                         title=f"{dataset_type}_{subtask_name}: Top-k Accuracy",
                     )
-                    self.accelerator.log({f"{dataset_type}_{subtask_name}_topk_acc_curve": chart}, step=self.step)
+                    self.accelerator.log({f"{dataset_type}_{subtask_name}_topk_acc_curve": chart})
 
             if "ConfusionMatrix" in metrics[subtask_name]:
                 # 1. Gather counts from all processes and sum
@@ -816,14 +817,13 @@ class HeimdallTrainer:
                     )
                     self.accelerator.log(
                         {f"{dataset_type}_{subtask_name}_confusion_matrix": wandb_cm},
-                        step=self.step,
                     )
 
         rss = self.process.memory_info().rss / (1024**3)
         log["Process_mem_rss"] = rss
 
         if self.run_wandb and self.accelerator.is_main_process:
-            self.accelerator.log(log, step=self.step)
+            self.accelerator.log(log)
 
         if not self.run_wandb and self.accelerator.is_main_process:
             print(f"{dataset_type}_log = {pformat(log)}")
@@ -954,7 +954,10 @@ class HeimdallTrainer:
 
     def load_trainer_state(self, data):
         # Restore optimizer and scheduler states
-        self.optimizer.load_state_dict(data["optimizer"])
+
+        clean_opt_sd = clean_optimizer_state_for_current_model(data["optimizer"], self.optimizer, verbose=True)
+
+        self.optimizer.load_state_dict(clean_opt_sd)
         if (data["scaler"] is not None) and (self.accelerator.scaler is not None):
             self.accelerator.scaler.load_state_dict(data["scaler"])
         self.lr_scheduler.load_state_dict(data["lr_scheduler"])
@@ -1092,3 +1095,101 @@ class PrecomputationContext:
         self.swap()
 
         return False
+
+
+from copy import deepcopy
+
+import torch
+
+
+def clean_optimizer_state_for_current_model(saved_opt_sd: dict, optimizer: torch.optim.Optimizer, verbose: bool = True):
+    """Return a cleaned optimizer state_dict compatible with the given
+    `optimizer`.
+
+    - saved_opt_sd: the checkpoint["optimizer"] you loaded from disk
+    - optimizer: the optimizer instance that was created for the current model (and whose .param_groups define grouping)
+
+    """
+
+    saved_state = deepcopy(saved_opt_sd.get("state", {}))
+    saved_param_group_list = saved_opt_sd.get("param_groups", [])
+    if verbose:
+        print(
+            f"[clean_optimizer] saved state entries: {len(saved_state)}, saved param_groups: {len(saved_param_group_list)}",
+        )
+
+    # Build a list of the current parameters in the order of optimizer.param_groups
+    current_param_groups = optimizer.param_groups  # these have 'params' as param objects
+    current_params_flat = []
+    for g in current_param_groups:
+        for p in g["params"]:
+            current_params_flat.append(p)
+
+    # Prepare containers for new state and param_groups
+    new_state = {}
+    new_param_groups = []
+
+    # We'll mark which saved pids have been used (so we don't reuse them)
+    available_saved_pids = set(saved_state.keys())
+
+    # Helper to get a representative tensor from saved-state entry for shape check
+    def representative_tensor_from_state_entry(state_entry):
+        # typical keys: 'exp_avg', 'exp_avg_sq' (or for some optimizers 'momentum_buffer')
+        for v in state_entry.values():
+            if isinstance(v, torch.Tensor):
+                return v
+        return None
+
+    matched = 0
+    dropped = 0
+
+    # For each current param group, create a new group copying hyperparams but setting 'params' to ids
+    for group in current_param_groups:
+        # copy group hyperparams except params
+        new_group = {k: deepcopy(v) for k, v in group.items() if k != "params"}
+        new_group_param_ids = []
+
+        for param in group["params"]:
+            p_shape = param.shape
+            match_pid = None
+            match_state = None
+
+            # Find a saved PID with a representative tensor that matches the shape
+            for saved_pid in list(available_saved_pids):
+                state_entry = saved_state[saved_pid]
+                rep = representative_tensor_from_state_entry(state_entry)
+                if rep is None:
+                    # if no tensor in state entry, we can't compare shapes; skip
+                    continue
+                if tuple(rep.shape) == tuple(p_shape):
+                    match_pid = saved_pid
+                    match_state = state_entry
+                    break
+
+            if match_pid is not None:
+                # Assign saved state to this current parameter id
+                new_pid = id(param)
+                new_state[new_pid] = match_state
+                available_saved_pids.remove(match_pid)
+                new_group_param_ids.append(new_pid)
+                matched += 1
+            else:
+                # No matching saved state for this param (likely a newly initialized param)
+                new_group_param_ids.append(id(param))
+                dropped += 1
+
+        new_group["params"] = new_group_param_ids
+        new_param_groups.append(new_group)
+
+    if verbose:
+        print(f"[clean_optimizer] matched saved states -> {matched}")
+        print(f"[clean_optimizer] params without saved state (new) -> {dropped}")
+        print(f"[clean_optimizer] leftover saved states not matched -> {len(available_saved_pids)}")
+
+    cleaned_sd = {"state": new_state, "param_groups": new_param_groups}
+    # Copy over (safe) additional keys if present (like 'defaults') from the saved dict,
+    # but param_groups is the critical part that must match the current optimizer.
+    if "defaults" in saved_opt_sd:
+        cleaned_sd["defaults"] = deepcopy(saved_opt_sd["defaults"])
+
+    return cleaned_sd
