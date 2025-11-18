@@ -590,13 +590,13 @@ class PartitionedCellRepresentation(CellRepresentation):
         for partition in range(self.num_partitions):  # Setting up AnnData and sizes
             if self.accelerator.is_main_process:
                 self.prepare_partition(partition)
-            self.indent += 1
-            super().setup(hash_vars=(int(self.partition),), setup_labels=setup_labels)
-            self.indent -= 1
-
             self.accelerator.wait_for_everyone()
             if not self.accelerator.is_main_process:
                 self.prepare_partition(partition)
+
+            self.indent += 1
+            super().setup(hash_vars=(int(self.partition),), setup_labels=setup_labels)
+            self.indent -= 1
 
             self.set_partition_size()
 
@@ -620,7 +620,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                 f"> Closing partition {self.partition + 1} of {self.num_partitions}",
             )
             if self.save_precomputed and is_original_replica:
-                print(f"Writing for {self.partition=} for {self.adata.filename=} for {self.accelerator.process_index=}")
+                # print(f"Writing for {self.partition=} for {self.adata.filename=} for {self.accelerator.process_index=}")
                 savable_adata = self.adata.to_memory()
                 savable_adata.write_h5ad(self.adata.filename)
 
