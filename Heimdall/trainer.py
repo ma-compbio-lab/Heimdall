@@ -183,7 +183,7 @@ class HeimdallTrainer:
         optimizer_class = getattr(torch.optim, self.cfg.optimizer.name)
         return optimizer_class(self.model.parameters(), **OmegaConf.to_container(self.cfg.optimizer.args))
 
-    def _initialize_wandb(self):
+    def _initialize_wandb(self, **wandb_kwargs):
         if self.run_wandb and self.accelerator.is_main_process:
             print("==> Starting a new WANDB run")
             new_tags = (self.cfg.dataset.dataset_name, self.cfg.fg.type, self.cfg.fe.type, self.cfg.fc.type)
@@ -192,6 +192,7 @@ class HeimdallTrainer:
                     "tags": new_tags,
                     "name": self.cfg.run_name,
                     "entity": self.cfg.entity,
+                    **wandb_kwargs,
                 },
             }
             self.accelerator.init_trackers(
@@ -325,18 +326,19 @@ class HeimdallTrainer:
         checkpoint_every_n_epochs=1,
         precompute_last_epoch=False,
         do_cleanup=True,
+        start_epoch=0,
     ):
         """Train the model with automatic checkpointing and resumption."""
         # Try to resume from checkpoint if requested
-        start_epoch = 0
+        print(f"{self.results_folder=}")
         if resume_from_checkpoint:
             start_epoch = self.load_checkpoint()
 
         if start_epoch >= self.data.tasklist.epochs:
             # last_epoch = max(0, start_epoch - 1)
             # Run one eval pass on the loaded weights to get embeddings
-            _, val_outputs = self.validate_model(self.dataloader_val, "valid")
-            _, test_outputs = self.validate_model(self.dataloader_test, "test")
+            # _, val_outputs = self.validate_model(self.dataloader_val, "valid")
+            # _, test_outputs = self.validate_model(self.dataloader_test, "test")
             if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
                 # self.save_adata_umap(test_embed, val_embed)
                 # self.print_r0(f"> Saved UMAP from checkpoint epoch {last_epoch}")
@@ -425,7 +427,7 @@ class HeimdallTrainer:
 
             return False
 
-        for epoch in range(start_epoch, self.data.tasklist.epochs):
+        for epoch in range(start_epoch, start_epoch + self.data.tasklist.epochs):
             precomputation_condition = precompute_last_epoch and epoch + 1 == self.data.tasklist.epochs
             context = nullcontext()
             if precomputation_condition:
@@ -656,6 +658,10 @@ class HeimdallTrainer:
                             if is_logging:
                                 log = {
                                     "train_loss": total_loss.item(),
+                                    **{
+                                        f"train_{subtask_name}_loss": subtask_loss.item()
+                                        for subtask_name, subtask_loss in loss.items()
+                                    },
                                     "global_step": self.step,
                                     "learning_rate": lr,
                                     "epoch": epoch,
