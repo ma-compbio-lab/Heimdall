@@ -30,7 +30,7 @@ Entry points for implementations of scFMs via Heimdall.
     trainer.HeimdallTrainer
 ```
 
-## $F\_\\textbf{G}$
+## $F_\textbf{G}$
 
 Implementations of gene identity encodings.
 
@@ -49,7 +49,7 @@ Implementations of gene identity encodings.
     fg.CSVFg
 ```
 
-## $F\_\\textbf{E}$
+## $F_\textbf{E}$
 
 Implementations of gene expression encodings.
 
@@ -68,7 +68,7 @@ Implementations of gene expression encodings.
     fe.ScBERTBinningFe
 ```
 
-## $F\_\\textbf{C}$
+## $F_\textbf{C}$
 
 Implementations of single-cell representations.
 
@@ -85,7 +85,7 @@ Implementations of single-cell representations.
     fc.ChromosomeAwareFc
 ```
 
-## $\\rm{O\\small{RDER}}$
+## $\rm{O\small{RDER}}$
 
 Implementations of ordering function for producing an order for gene tokens.
 
@@ -103,7 +103,7 @@ Implementations of ordering function for producing an order for gene tokens.
     order.ChromosomeOrder
 ```
 
-## $\\rm{S\\small{EQUENCE}}$
+## $\rm{S\small{EQUENCE}}$
 
 Implementations of sequence function for producing sequence of gene + cell metadata tokens.
 
@@ -122,7 +122,7 @@ Implementations of sequence function for producing sequence of gene + cell metad
     tailor.ChromosomeBlockTailor
 ```
 
-## $\\rm{R\\small{EDUCE}}$
+## $\rm{R\small{EDUCE}}$
 
 Implementations of reduction operations for combining gene identity and expression encodings.
 
