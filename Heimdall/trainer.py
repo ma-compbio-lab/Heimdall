@@ -3,6 +3,7 @@
 import random
 from collections import OrderedDict, defaultdict
 from contextlib import nullcontext
+from copy import deepcopy
 from pathlib import Path
 from pprint import pformat
 from typing import Callable
@@ -1103,11 +1104,6 @@ class PrecomputationContext:
         return False
 
 
-from copy import deepcopy
-
-import torch
-
-
 def clean_optimizer_state_for_current_model(saved_opt_sd: dict, optimizer: torch.optim.Optimizer, verbose: bool = True):
     """Return a cleaned optimizer state_dict compatible with the given
     `optimizer`.
@@ -1121,7 +1117,7 @@ def clean_optimizer_state_for_current_model(saved_opt_sd: dict, optimizer: torch
     saved_param_group_list = saved_opt_sd.get("param_groups", [])
     if verbose:
         print(
-            f"[clean_optimizer] saved state entries: {len(saved_state)}, saved param_groups: {len(saved_param_group_list)}",
+            f"[opt_reload] saved state entries: {len(saved_state)}, saved param_groups: {len(saved_param_group_list)}",
         )
 
     # Build a list of the current parameters in the order of optimizer.param_groups
@@ -1188,9 +1184,9 @@ def clean_optimizer_state_for_current_model(saved_opt_sd: dict, optimizer: torch
         new_param_groups.append(new_group)
 
     if verbose:
-        print(f"[clean_optimizer] matched saved states -> {matched}")
-        print(f"[clean_optimizer] params without saved state (new) -> {dropped}")
-        print(f"[clean_optimizer] leftover saved states not matched -> {len(available_saved_pids)}")
+        print(f"[opt_reload] matched saved states -> {matched}")
+        print(f"[opt_reload] params without saved state (new) -> {dropped}")
+        print(f"[opt_reload] leftover saved states not matched -> {len(available_saved_pids)}")
 
     cleaned_sd = {"state": new_state, "param_groups": new_param_groups}
     # Copy over (safe) additional keys if present (like 'defaults') from the saved dict,

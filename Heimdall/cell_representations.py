@@ -620,7 +620,6 @@ class PartitionedCellRepresentation(CellRepresentation):
                 f"> Closing partition {self.partition + 1} of {self.num_partitions}",
             )
             if self.save_precomputed and is_original_replica:
-                # print(f"Writing for {self.partition=} for {self.adata.filename=} for {self.accelerator.process_index=}")
                 savable_adata = self.adata.to_memory()
                 savable_adata.write_h5ad(self.adata.filename)
 

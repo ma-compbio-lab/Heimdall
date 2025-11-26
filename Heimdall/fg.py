@@ -202,7 +202,7 @@ class PretrainedFg(Fg, ABC):
                 if self.embedding_filepath.is_file():
                     embedding_map = self.load_embeddings()
                     conditional_print(
-                        f"> Loaded PCA-reduced `Fg` embeddings from cache.",
+                        "> Loaded PCA-reduced `Fg` embeddings from cache.",
                         condition=self.data.verbose,
                     )
                 else:
@@ -212,7 +212,7 @@ class PretrainedFg(Fg, ABC):
                         self.embedding_filepath,
                     )
                     conditional_print(
-                        f"> Used PCA to reduce `Fg` embeddings and cached for future use.",
+                        "> Used PCA to reduce `Fg` embeddings and cached for future use.",
                         condition=self.data.verbose,
                     )
 
