@@ -1,4 +1,4 @@
-# <img src="https://github.com/ma-compbio/Heimdall/Heimdall_logo.png"  width=25%/>
+# <img src="Heimdall_logo.png"  width=25%/>
 
 [![Lint](https://github.com/gkrieg/Heimdall/actions/workflows/lint.yml/badge.svg)](https://github.com/gkrieg/Heimdall/actions/workflows/lint.yml)
 
