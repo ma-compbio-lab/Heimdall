@@ -626,10 +626,6 @@ def save_umap(
 
     if hasattr(cr, "splits"):
         full_dataset = cr.datasets["full"]
-        if cr.adata.isbacked:
-            adata = cr.adata.to_memory()
-        else:
-            adata = cr.adata
         if hasattr(full_dataset, "partition_splits"):
             cumulative_sizes = np.cumsum(
                 [
@@ -654,7 +650,7 @@ def save_umap(
                 if len(split_indices) == 0:
                     continue
 
-                adata = adata[split_indices].copy()
+                adata = cr.adata[split_indices].to_memory().copy()
                 fig = save_partition_umap(
                     adata=adata,
                     embeddings=partition_embeddings,
@@ -663,6 +659,11 @@ def save_umap(
                 if log_umap:
                     wandb.log({f"{partition=}_{split}_umap": wandb.Image(fig)})
         else:
+            if cr.adata.isbacked:
+                adata = cr.adata.to_memory()
+            else:
+                adata = cr.adata
+
             adata = adata[cr.splits[split]].copy()
             fig = save_partition_umap(
                 adata=adata,
