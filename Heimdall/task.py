@@ -127,7 +127,6 @@ class Task(ABC):
         if processed_data_path.is_file():
             self.data.print_during_setup(
                 f"> Found already processed labels for task {task_name}: {processed_data_path}",
-                is_printable_process=True,
             )
             with open(processed_data_path, "rb") as label_file:
                 self.labels = pkl.load(label_file)
