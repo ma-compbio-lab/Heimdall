@@ -625,6 +625,7 @@ class HeimdallTrainer:
             outputs = defaultdict(lambda: defaultdict(list))  # Dict of dicts
 
         with tqdm(dataloader, disable=not self.accelerator.is_main_process) as pbar:
+            total_loss = 0
             for batch in pbar:
                 step += 1
 
@@ -633,6 +634,7 @@ class HeimdallTrainer:
 
                 with self.accelerator.accumulate(self.model) if training else nullcontext():
                     batch_outputs, loss = self.get_outputs_and_loss(batch, loss)
+                    prev_total_loss = total_loss
                     total_loss = sum(loss.values())
 
                     if training:
@@ -680,8 +682,9 @@ class HeimdallTrainer:
 
                         loss = None
                     else:
+                        batch_loss = total_loss - prev_total_loss
                         pbar.set_description(
-                            f"Loss: {total_loss:.4f} ",
+                            f"Loss: {batch_loss:.4f} ",
                         )
 
                         for subtask_name, _ in self.data.tasklist:
