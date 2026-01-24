@@ -667,7 +667,7 @@ class PartitionedCellRepresentation(CellRepresentation):
         if partition_prepared:
             super().setup(hash_vars=(int(self.partition),), ops=("preprocess", "labels"))
 
-    @check_states(adata=True, processed_fcfg=True)
+    @check_states(processed_fcfg=True)
     def prepare_dataset_loaders(self):
 
         # Set up dataset splits given the data splits

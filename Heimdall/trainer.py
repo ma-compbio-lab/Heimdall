@@ -637,6 +637,9 @@ class HeimdallTrainer:
 
                     if training:
                         self.accelerator.backward(total_loss)
+                        if not isinstance(total_loss, int):
+                            total_loss = total_loss.item()
+
                         if self.accelerator.sync_gradients:
                             grad_norm = self.accelerator.clip_grad_norm_(
                                 self.model.parameters(),
@@ -650,14 +653,14 @@ class HeimdallTrainer:
                             pbar.set_description(
                                 f"Epoch: {epoch} "
                                 f"Step {self.step} "
-                                f"Loss: {total_loss.item():.4f} "
+                                f"Loss: {total_loss:.4f} "
                                 f"LR: {lr:.1e} "
                                 f"grad_norm: {grad_norm:.4f} ",
                             )
 
                             if is_logging:
                                 log = {
-                                    "train_loss": total_loss.item(),
+                                    "train_loss": total_loss,
                                     **{
                                         f"train_{subtask_name}_loss": subtask_loss.item()
                                         for subtask_name, subtask_loss in loss.items()
@@ -678,7 +681,7 @@ class HeimdallTrainer:
                         loss = None
                     else:
                         pbar.set_description(
-                            f"Loss: {total_loss.item():.4f} ",
+                            f"Loss: {total_loss:.4f} ",
                         )
 
                         for subtask_name, _ in self.data.tasklist:
