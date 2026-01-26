@@ -40,7 +40,7 @@ class Dataset(PyTorchDataset, ABC):
             self._setup_random_splits()
 
         split_size_str = "\n  ".join(f"{i}: {len(j):,}" for i, j in self.splits.items())
-        print(f"> Dataset splits sizes ({split_type}):\n  {split_size_str}")
+        data.print_during_setup(f"> Dataset splits sizes ({split_type}):\n  {split_size_str}")
 
     @property
     def idx(self) -> NDArray[np.int_]:
@@ -233,6 +233,9 @@ class PartitionedDataset(SingleInstanceDataset):
     def idx(self):
         return np.arange(self.data.adata.n_obs)
 
+    def _setup_idx(self):
+        self._idx = None  # TODO: can't fill this out because partition is None; fix later
+
     @property
     def partition(self):
         return self._data.partition
@@ -244,7 +247,7 @@ class PartitionedDataset(SingleInstanceDataset):
     @partition.setter
     def partition(self, partition):
         self._data.partition = partition
-        self.splits = self.partition_splits.get(partition, None)
+        self.splits = self.partition_splits.get(partition, {})
 
     @property
     def partition_sizes(self):
@@ -255,6 +258,9 @@ class PartitionedDataset(SingleInstanceDataset):
         return self._data.num_cells
 
     def __len__(self):
+        if self.partition is None:
+            return 0
+
         return self.partition_sizes[self.partition]
 
     def _setup_predefined_splits(self):
@@ -268,8 +274,6 @@ class PartitionedDataset(SingleInstanceDataset):
             self.partition = partition
             self.partition_splits[partition] = self._get_partition_splits(partition)
 
-        self.partition = 0
-
     def _setup_random_splits(self):
         print("> Did not find splits in config, generating random splits.")
         for partition in range(self.num_partitions):
@@ -277,8 +281,6 @@ class PartitionedDataset(SingleInstanceDataset):
             self.partition_splits[partition] = self._get_random_splits_partition(
                 partition,  # TODO: pass train_split correctly via self.data.tasklist.splits
             )
-
-        self.partition = 0
 
     def _get_partition_splits(self, part_id):
         adata = self.data.adata

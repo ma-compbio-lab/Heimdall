@@ -140,6 +140,8 @@ class PartitionedBatchSampler(BatchSampler):
     """
 
     def __iter__(self):
+        if self.sampler.num_partitions == 0:
+            return
         while True:
             try:
                 batch = []

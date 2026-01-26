@@ -331,7 +331,6 @@ class HeimdallTrainer:
     ):
         """Train the model with automatic checkpointing and resumption."""
         # Try to resume from checkpoint if requested
-        print(f"{self.results_folder=}")
         if resume_from_checkpoint:
             start_epoch = self.load_checkpoint()
 
@@ -626,6 +625,7 @@ class HeimdallTrainer:
             outputs = defaultdict(lambda: defaultdict(list))  # Dict of dicts
 
         with tqdm(dataloader, disable=not self.accelerator.is_main_process) as pbar:
+            total_loss = 0
             for batch in pbar:
                 step += 1
 
@@ -634,10 +634,14 @@ class HeimdallTrainer:
 
                 with self.accelerator.accumulate(self.model) if training else nullcontext():
                     batch_outputs, loss = self.get_outputs_and_loss(batch, loss)
+                    prev_total_loss = total_loss
                     total_loss = sum(loss.values())
 
                     if training:
                         self.accelerator.backward(total_loss)
+                        if not isinstance(total_loss, int):
+                            total_loss = total_loss.item()
+
                         if self.accelerator.sync_gradients:
                             grad_norm = self.accelerator.clip_grad_norm_(
                                 self.model.parameters(),
@@ -651,14 +655,14 @@ class HeimdallTrainer:
                             pbar.set_description(
                                 f"Epoch: {epoch} "
                                 f"Step {self.step} "
-                                f"Loss: {total_loss.item():.4f} "
+                                f"Loss: {total_loss:.4f} "
                                 f"LR: {lr:.1e} "
                                 f"grad_norm: {grad_norm:.4f} ",
                             )
 
                             if is_logging:
                                 log = {
-                                    "train_loss": total_loss.item(),
+                                    "train_loss": total_loss,
                                     **{
                                         f"train_{subtask_name}_loss": subtask_loss.item()
                                         for subtask_name, subtask_loss in loss.items()
@@ -678,6 +682,11 @@ class HeimdallTrainer:
 
                         loss = None
                     else:
+                        batch_loss = total_loss - prev_total_loss
+                        pbar.set_description(
+                            f"Loss: {batch_loss:.4f} ",
+                        )
+
                         for subtask_name, _ in self.data.tasklist:
                             for key, value in batch_outputs[subtask_name].items():
                                 outputs[key][subtask_name].extend(value.detach().cpu().numpy())
@@ -740,7 +749,13 @@ class HeimdallTrainer:
                 metrics=metrics,
             )
 
-        loss = {subtask_name: subtask_loss / len(dataloader) for subtask_name, subtask_loss in dataloader_loss.items()}
+        if dataloader_loss is None:
+            loss = {subtask_name: 0.0 for subtask_name, _ in self.data.tasklist}  # 0. is a sentinel value
+        else:
+            loss = {
+                subtask_name: subtask_loss / len(dataloader) for subtask_name, subtask_loss in dataloader_loss.items()
+            }
+
         total_loss = sum(loss.values())
 
         if self.accelerator.num_processes > 1:
@@ -751,7 +766,10 @@ class HeimdallTrainer:
             # loss is a python floating point value, for gather
             # operation across multiple processes needs to be
             # cuda tensor
-            total_loss = self.accelerator.gather(loss_tensor).mean().item()
+            total_loss = self.accelerator.gather(loss_tensor)
+            valid_processes = torch.nonzero(total_loss)
+            num_valid = torch.count_nonzero(total_loss).item()
+            total_loss = total_loss[valid_processes].sum().item() / num_valid
 
         log = {f"{dataset_type}_{subtask_name}_loss": subtask_loss for subtask_name, subtask_loss in loss.items()}
         log[f"{dataset_type}_loss"] = total_loss
@@ -850,11 +868,11 @@ class HeimdallTrainer:
         if getattr(self.cfg, "work_dir", None) is not None:
             self.results_folder = Path(self.cfg.work_dir)
         else:
-            cache_dir = self.cfg.cache_preprocessed_dataset_dir
+            cache_dir = Path(self.cfg.cache_preprocessed_dataset_dir)
             keys = self.CHECKPOINT_KEYS + additional_keys
             self.results_folder, _, _ = get_fully_qualified_cache_paths(
                 self.cfg,
-                cache_dir,
+                cache_dir / "checkpoints",
                 keys=keys,
                 hash_vars=hash_vars,
             )
