@@ -21,7 +21,6 @@ class Fc:
     Args:
         fg: `Fg` used for this `Fc` implementation.
         fe: `Fe` used for this `Fc` implementation.
-        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         max_input_length: maximum number of identity/expression tokens to consider for each cell.
             Extra tokens are limited.
 

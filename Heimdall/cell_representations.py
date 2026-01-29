@@ -16,7 +16,7 @@ from accelerate import Accelerator, DistributedDataParallelKwargs, InitProcessGr
 from numpy.typing import NDArray
 from omegaconf import OmegaConf, open_dict
 from scipy import sparse
-from scipy.sparse import csc_array
+from scipy.sparse import csc_array, csr_array
 from torch.utils.data import DataLoader, Subset
 
 from Heimdall.datasets import Dataset, PartitionedSubset
@@ -28,47 +28,15 @@ from Heimdall.task import Tasklist
 
 # from Heimdall.samplers import PartitionedDistributedSampler
 from Heimdall.utils import (
+    check_states,
     conditional_print,
     convert_to_ensembl_ids,
     get_collation_closure,
     get_fully_qualified_cache_paths,
     get_value,
     instantiate_from_config,
+    issparse,
 )
-
-
-def check_states(
-    meth: Optional[Callable] = None,
-    *,
-    adata: bool = False,
-    processed_fcfg: bool = False,
-    labels: bool = False,
-    splits: bool = False,
-):
-    if meth is None:
-        return partial(check_states, adata=adata, processed_fcfg=processed_fcfg)
-
-    @wraps(meth)
-    def bounded(self, *args, **kwargs):
-        if adata:
-            assert self.adata is not None, "no adata found, Make sure to run load_anndata() first"
-
-        if processed_fcfg:
-            assert (
-                self.processed_fcfg is not False
-            ), "Please make sure to preprocess the cell representation at least once first"
-
-        if labels:
-            assert getattr(self, "_labels", None) is not None, "labels not setup yet, create `Dataset` object first"
-
-        if splits:
-            assert (
-                getattr(self, "_splits", None) is not None
-            ), "splits not setup yet, run prepare_dataset_loaders() first"
-
-        return meth(self, *args, **kwargs)
-
-    return bounded
 
 
 class SpecialTokenMixin:
@@ -186,17 +154,20 @@ class CellRepresentation(SpecialTokenMixin):
         return self._splits
 
     @property
+    def raw_gene_names(self):
+        return self._raw_gene_names
+
+    @raw_gene_names.setter
+    def raw_gene_names(self, val):
+        if hasattr(self, "_raw_gene_names") and (val != self._raw_gene_names).any():
+            raise ValueError("Raw gene names must match for all partitions.")
+
+        self._raw_gene_names = val
+
+    @property
     def gene_names(self, mask_key: str = "identity_valid_mask"):
-        if hasattr(self, "_gene_names"):
-            return self._gene_names
-
-        if mask_key in self.adata.var:
-            valid_mask = self.adata.var[mask_key]
-            self._gene_names = self.adata.var_names[valid_mask]
-
-            return self._gene_names
-
-        return self.adata.var_names
+        valid_mask = self.adata.var[mask_key]
+        return self.raw_gene_names[valid_mask]
 
     @property
     def num_genes(self):
@@ -238,6 +209,7 @@ class CellRepresentation(SpecialTokenMixin):
                 backed="r",
             )  # add backed argument to prevent entire dataset from being read into mem
             # print(f'[Rank {self.accelerator.process_index}] Read {self.adata.obsm.keys()=}')
+            self.raw_gene_names = self.adata.var_names.copy()
             return True
 
         # OmegaConf.save(cfg, preprocessed_cfg_path)
@@ -281,6 +253,7 @@ class CellRepresentation(SpecialTokenMixin):
                 keys=keys,
             )
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
+
             if is_cached:
                 self.print_during_setup(f"> Finished loading AnnData with shape: {self.adata.shape}")
                 return
@@ -292,6 +265,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     def preprocess_anndata(self):
         self.adata = ad.read_h5ad(self.data_path)
+
         self.print_during_setup(f"> Finished Loading in {self._cfg.dataset.preprocess_args.data_path}")
         # convert gene names to ensembl ids
         self.print_during_setup("> Converting gene names to Ensembl IDs...")
@@ -367,6 +341,16 @@ class CellRepresentation(SpecialTokenMixin):
             gene_medians = np.array([np.median(gene_nonzeros) for gene_nonzeros in genewise_nonzero_expression])
             self.adata.var["medians"] = gene_medians
 
+        if not issparse(self.adata.X):
+            if getattr(self.adata, "isbacked", False):
+                # TODO: add back with verbose
+                pass
+                # print("> Data is dense and backed, skipping conversion to CSR to keep memory mapping.")
+            else:
+                # print("> Data was provided in dense format, converting to CSR. Consider precomputing.")
+                self.adata.X = csr_array(self.adata.X)
+
+        self.raw_gene_names = self.adata.var_names.copy()
         self.print_during_setup(f"> Finished processing AnnData object:\n{self.adata}")
 
     @check_states(processed_fcfg=True)
@@ -473,14 +457,15 @@ class CellRepresentation(SpecialTokenMixin):
         self.fg, fg_name = instantiate_from_config(
             self.fg_cfg,
             self,
-            vocab_size=self.adata.n_vars + 2,
+            vocab_size=len(self.raw_gene_names) + 2,
             rng=self.rng,
             return_name=True,
         )
         self.fe, fe_name = instantiate_from_config(
             self.fe_cfg,
             self,
-            vocab_size=self.adata.n_vars + 2,  # TODO: figure out a way to fix the number of expr tokens
+            vocab_size=len(self.raw_gene_names) + 2,
+            # TODO: figure out a way to fix the number of expr tokens... probably specify in config?
             rng=self.rng,
             return_name=True,
         )
@@ -494,7 +479,7 @@ class CellRepresentation(SpecialTokenMixin):
             return_name=True,
         )
 
-    @check_states(adata=True)
+    # @check_states(adata=True)
     def setup_tokenizer(self, hash_vars=()):
         """Processes the `f_g`, `fe` and `f_c` from the config.
 
@@ -558,25 +543,68 @@ class PartitionedCellRepresentation(CellRepresentation):
         if auto_setup:
             self.create_tasklist()
 
-            self.print_during_setup("> Setting up partition_sizes...")
-            self.indent += 1
-            self.setup(ops=("preprocess",))  # One time through for main process
-            self.indent -= 1
+            if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+                cache_dir = Path(cache_dir)
+                metadata_path, _, _ = get_fully_qualified_cache_paths(
+                    self._cfg,
+                    cache_dir / "processed_anndata",
+                    "metadata.pkl",
+                    keys=self.DATASET_KEYS,
+                )
 
-            self.print_during_setup("> Finished setting up partition_sizes")
+            if cache_dir is not None and metadata_path.is_file():
+                self.print_during_setup(f"> Found partition metadata at {metadata_path}")
 
-            self.prepare_full_dataset()  # Setup dataset before preparing labels
-            self.partition = None
-            self.print_during_setup("> Setting up labels...")
-            self.indent += 1
-            self.setup()
-            # for rank in range(self.num_replicas):
-            #     if self.rank == rank:
-            #         self.setup_labels()
-            #     accelerator.wait_for_everyone()
-            self.indent -= 1
+                with open(metadata_path, "rb") as metadata_file:
+                    (
+                        self.partition_sizes,
+                        self.num_cells,
+                        self._raw_gene_names,
+                    ) = pkl.load(metadata_file)
+
+                # Using zeroth partition as dummy
+                for rank in range(self.num_replicas):
+                    if rank == self.rank:
+                        self.print_during_setup("> Dummy partition loading...")
+                        self.indent += 1
+                        dummy_partition = 0
+                        self.prepare_partition(dummy_partition)
+                        super().setup(hash_vars=(dummy_partition,), ops=("preprocess",))
+
+                        self.prepare_full_dataset()
+                        SpecialTokenMixin.__init__(self)
+                        self.partition = None
+                        self.indent -= 1
+                    self.accelerator.wait_for_everyone()
+
+            else:
+                self.print_during_setup("> Setting up partition_sizes...")
+                self.indent += 1
+                self.setup(ops=("preprocess",))  # One time through for main process
+                self.indent -= 1
+                self.print_during_setup("> Finished setting up partition_sizes")
+
+                self.prepare_full_dataset()  # Setup dataset before preparing labels
+
+                self.partition = None
+
+                self.print_during_setup("> Setting up labels...")
+                self.indent += 1
+                self.setup()
+                self.indent -= 1
+                self.print_during_setup("> Finished setting up labels")
+
+                if cache_dir is not None:
+                    with open(metadata_path, "wb") as metadata_file:
+                        metadata = (
+                            self.partition_sizes,
+                            self.num_cells,
+                            self._raw_gene_names,
+                        )
+                        pkl.dump(metadata, metadata_file)
+                    self.print_during_setup(f"> Saved partition metadata at {metadata_path}")
+
             self.setup_finished = True
-            self.print_during_setup("> Finished setting up labels")
 
             self.prepare_dataset_loaders()
             self._initialize_partition()
@@ -720,7 +748,7 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
         accelerator_log_kwargs["project_dir"] = config.work_dir
 
     ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=3600))
+    init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=5400))
 
     accelerator = Accelerator(
         gradient_accumulation_steps=config.trainer.args.accumulate_grad_batches,

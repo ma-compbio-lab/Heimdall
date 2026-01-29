@@ -48,6 +48,40 @@ MAIN_KEYS = {
 }
 
 
+def check_states(
+    meth: Optional[Callable] = None,
+    *,
+    adata: bool = False,
+    processed_fcfg: bool = False,
+    labels: bool = False,
+    splits: bool = False,
+):
+    if meth is None:
+        return partial(check_states, adata=adata, processed_fcfg=processed_fcfg)
+
+    @wraps(meth)
+    def bounded(self, *args, **kwargs):
+        if adata:
+            assert self.adata is not None, "no adata found, Make sure to run load_anndata() first"
+
+        if processed_fcfg:
+            assert (
+                self.processed_fcfg is not False
+            ), "Please make sure to preprocess the cell representation at least once first"
+
+        if labels:
+            assert getattr(self, "_labels", None) is not None, "labels not setup yet, create `Dataset` object first"
+
+        if splits:
+            assert (
+                getattr(self, "_splits", None) is not None
+            ), "splits not setup yet, run prepare_dataset_loaders() first"
+
+        return meth(self, *args, **kwargs)
+
+    return bounded
+
+
 def hash_config(cfg: DictConfig) -> str:
     """Generate hash for a given config."""
     cfg_str = OmegaConf.to_yaml(cfg, sort_keys=True)

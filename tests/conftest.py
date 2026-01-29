@@ -27,6 +27,9 @@ class MockCellRepresentation(CellRepresentation):
     _cfg: OmegaConf
     verbose: bool = True
 
+    def __post_init__(self):
+        self._raw_gene_names = self.adata.var_names
+
     def set_representation_functions(
         self,
         fg: Fg | None = None,
