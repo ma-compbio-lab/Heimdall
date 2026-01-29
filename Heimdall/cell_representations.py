@@ -4,10 +4,9 @@ import pickle as pkl
 import textwrap
 from collections import defaultdict
 from datetime import timedelta
-from functools import partial, wraps
 from pathlib import Path
 from pprint import pformat
-from typing import Callable, Dict, Optional, Union
+from typing import Dict, Union
 
 import anndata as ad
 import numpy as np
