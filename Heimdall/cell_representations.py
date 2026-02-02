@@ -370,7 +370,7 @@ class CellRepresentation(SpecialTokenMixin):
         # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
         heimdall_collate_fn = get_collation_closure()
         dataloader_kwargs = {"num_workers": 4}  # TODO: we can parse additional data loader kwargs from config
-        per_device_batch_size = self.tasklist.batchsize // self.accelerator.num_processes
+        per_device_batch_size = self._cfg.trainer.args.batchsize // self.accelerator.num_processes
         self.dataloaders = {
             split: DataLoader(
                 dataset,
@@ -710,7 +710,7 @@ class PartitionedCellRepresentation(CellRepresentation):
 
         self.dataloaders = {}
         heimdall_collate_fn = get_collation_closure()
-        per_device_batch_size = self.tasklist.batchsize // self.accelerator.num_processes
+        per_device_batch_size = self._cfg.trainer.args.batchsize // self.accelerator.num_processes
         self.dataloaders = {
             split: DataLoader(
                 dataset,

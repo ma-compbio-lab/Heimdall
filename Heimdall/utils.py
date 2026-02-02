@@ -89,12 +89,13 @@ def hash_config(cfg: DictConfig) -> str:
     return str(uuid.UUID(hex_str))
 
 
-def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str) -> Tuple[Path, Path]:
+def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str, mkdir: bool) -> Tuple[Path, Path]:
     """Get cached data and config path given config."""
     hash_str = hash_config(cfg)
 
     cache_dir = cache_dir / hash_str
-    cache_dir.mkdir(exist_ok=True, parents=True)
+    if mkdir:
+        cache_dir.mkdir(exist_ok=True, parents=True)
 
     cached_file_path = cache_dir / file_name
     cached_cfg_path = cache_dir / "config.yaml"
@@ -137,6 +138,7 @@ def get_fully_qualified_cache_paths(
     keys: set | tuple = (),
     hash_vars=(),
     verbose: int = 0,
+    mkdir: bool = True,
 ):
     """Get fully-resolved path to unique cache directory, given the config keys
     that distinguish the object being cached."""
@@ -150,6 +152,7 @@ def get_fully_qualified_cache_paths(
         cfg,
         Path(cache_dir).resolve(),
         filename,
+        mkdir=mkdir,
     )
 
     return fully_qualified_file_path, fully_qualified_cfg_path, cfg

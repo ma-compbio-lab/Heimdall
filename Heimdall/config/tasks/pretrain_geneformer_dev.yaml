@@ -6,8 +6,8 @@ args:
   metrics: []
   train_split: 0.95
   shuffle: true
-  batchsize: 512
-  epochs: 10
+  # batchsize: 512
+  # epochs: 10
   dataset_config:
     type: Heimdall.datasets.PartitionedDataset
     # args:

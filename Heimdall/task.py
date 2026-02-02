@@ -29,8 +29,8 @@ class Task(ABC):
     task_type: str
     metrics: list[str]
     shuffle: bool
-    batchsize: int
-    epochs: int
+    # batchsize: int
+    # epochs: int
     dataset_config: DictConfig
     head_config: DictConfig
     loss_config: DictConfig
@@ -42,8 +42,8 @@ class Task(ABC):
     splits: DictConfig | None = None
     train_split: float | None = (None,)
     track_metric: str | None = None
-    early_stopping: bool = False
-    early_stopping_patience: int = 5
+    # early_stopping: bool = False
+    # early_stopping_patience: int = 5
 
     @property
     def labels(self) -> Union[NDArray[np.int_], NDArray[np.float32]]:
@@ -287,12 +287,12 @@ class Tasklist:
 
     PROPERTIES = (
         "splits",
-        "shuffle",
-        "batchsize",
-        "epochs",
         "interaction_type",
-        "early_stopping",
-        "early_stopping_patience",
+        "shuffle",
+        # "batchsize",
+        # "epochs",
+        # "early_stopping",
+        # "early_stopping_patience",
     )
 
     def __init__(

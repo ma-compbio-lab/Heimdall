@@ -44,7 +44,7 @@ from Heimdall.utils import (  # get_cached_paths,
 
 
 class HeimdallTrainer:
-    CHECKPOINT_KEYS = ("fg", "fe", "fc", "model")
+    CHECKPOINT_KEYS = ("tasks", "fg", "fe", "fc", "model", "dataset.preprocess_args.data_path")
 
     def __init__(
         self,
@@ -52,7 +52,11 @@ class HeimdallTrainer:
         model,
         data,
         accelerator: Accelerator,
+        batchsize: int,
+        epochs: int,
         random_seed: int = 0,
+        early_stopping: bool = False,
+        early_stopping_patience: int = 5,
         accumulate_grad_batches: int = 1,
         grad_norm_clip: float = 1.0,
         skip_umaps: bool = True,
@@ -77,7 +81,11 @@ class HeimdallTrainer:
 
         self.setup_class_names_and_num_labels(data)
 
+        self.batchsize = batchsize
+        self.epochs = epochs
         self.random_seed = random_seed
+        self.early_stopping = early_stopping
+        self.early_stopping_patience = early_stopping_patience
         self.accumulate_grad_batches = accumulate_grad_batches
         self.grad_norm_clip = grad_norm_clip
         self.skip_umaps = skip_umaps
@@ -204,9 +212,8 @@ class HeimdallTrainer:
             print("==> Initialized Run")
 
     def _initialize_lr_scheduler(self):
-        tasklist = self.data.tasklist
-        global_batch_size = tasklist.batchsize
-        total_steps = len(self.dataloader_train.dataset) // global_batch_size * tasklist.epochs
+        global_batch_size = self.batchsize
+        total_steps = len(self.dataloader_train.dataset) // global_batch_size * self.epochs
         warmup_ratio = self.cfg.scheduler.warmup_ratio
         warmup_step = int(warmup_ratio * total_steps)
 
@@ -334,7 +341,7 @@ class HeimdallTrainer:
         if resume_from_checkpoint:
             start_epoch = self.load_checkpoint()
 
-        if start_epoch >= self.data.tasklist.epochs:
+        if start_epoch >= self.epochs:
             # last_epoch = max(0, start_epoch - 1)
             # Run one eval pass on the loaded weights to get embeddings
             # _, val_outputs = self.validate_model(self.dataloader_val, "valid")
@@ -355,8 +362,8 @@ class HeimdallTrainer:
                 ), "The tracking metric is not in the list of metrics, please check your configuration task file"
 
         # Initialize early stopping parameters
-        early_stopping = self.data.tasklist.early_stopping
-        early_stopping_patience = self.data.tasklist.early_stopping_patience
+        early_stopping = self.early_stopping
+        early_stopping_patience = self.early_stopping_patience
         patience_counter = defaultdict(int)
 
         def fit_epoch(epoch: int):
@@ -427,8 +434,8 @@ class HeimdallTrainer:
 
             return False
 
-        for epoch in range(start_epoch, start_epoch + self.data.tasklist.epochs):
-            precomputation_condition = precompute_last_epoch and epoch + 1 == self.data.tasklist.epochs
+        for epoch in range(start_epoch, self.epochs):
+            precomputation_condition = precompute_last_epoch and epoch + 1 == self.epochs
             context = nullcontext()
             if precomputation_condition:
                 context = PrecomputationContext(self, save_precomputed=True, get_precomputed=True, run_wandb=True)
@@ -863,24 +870,32 @@ class HeimdallTrainer:
             epoch=epoch,
         )
 
+    def get_checkpoint_directory(self, additional_keys: tuple = (), hash_vars: tuple = ()):
+        cache_dir = Path(self.cfg.cache_preprocessed_dataset_dir)
+        keys = self.CHECKPOINT_KEYS + additional_keys
+        checkpoint_directory, _, minimal_cfg = get_fully_qualified_cache_paths(
+            self.cfg,
+            cache_dir / "checkpoints",
+            keys=keys,
+            hash_vars=hash_vars,
+            mkdir=False,
+        )
+
+        return checkpoint_directory
+
     def initialize_checkpointing(self, additional_keys: tuple = (), hash_vars: tuple = ()):
         """Initialize checkpoint directory."""
         if getattr(self.cfg, "work_dir", None) is not None:
             self.results_folder = Path(self.cfg.work_dir)
         else:
-            cache_dir = Path(self.cfg.cache_preprocessed_dataset_dir)
-            keys = self.CHECKPOINT_KEYS + additional_keys
-            self.results_folder, _, _ = get_fully_qualified_cache_paths(
-                self.cfg,
-                cache_dir / "checkpoints",
-                keys=keys,
-                hash_vars=hash_vars,
-            )
+            self.results_folder = self.get_checkpoint_directory(additional_keys=additional_keys, hash_vars=hash_vars)
 
-        # Create directory if it doesn't exist
         if self.accelerator.is_main_process:
-            self.results_folder.mkdir(parents=True, exist_ok=True)
-            self.print_r0(f"> Checkpoint directory initialized at {self.results_folder}")
+            try:
+                self.results_folder.mkdir(parents=True, exist_ok=False)
+                self.print_r0(f"> Checkpoint directory initialized at {self.results_folder}")
+            except FileExistsError:
+                self.print_r0(f"> Checkpoint directory already exists at {self.results_folder}")
 
     def save_checkpoint(self, epoch):
         """Save model checkpoint at the given epoch."""
@@ -888,9 +903,7 @@ class HeimdallTrainer:
         if not self.accelerator.is_main_process:
             return
 
-        # Ensure results folder exists
-        if not hasattr(self, "results_folder") or not self.results_folder.exists():
-            self.initialize_checkpointing()
+        self.initialize_checkpointing()
 
         # Calculate current step based on epoch
         # step = len(self.dataloader_train) * epoch
@@ -929,12 +942,7 @@ class HeimdallTrainer:
         """Load a checkpoint based on milestone.txt or a specific milestone
         number."""
         # Ensure results folder is initialized
-        if not hasattr(self, "results_folder") or not self.results_folder.exists():
-            self.initialize_checkpointing()
-
-        if not self.results_folder.exists():
-            self.print_r0(f"> Results folder {self.results_folder} does not exist. Starting from scratch.")
-            return 0
+        self.initialize_checkpointing()
 
         # Determine which milestone to load
         if specific_milestone is not None:
@@ -973,7 +981,7 @@ class HeimdallTrainer:
 
         if "version" in data:
             self.print_r0(f"> Checkpoint version: {data['version']}")
-        self.print_r0(f"> Resumed from epoch {epoch}, step {self.step}")
+        self.print_r0(f"> Resumed from epoch {epoch + 1}, step {self.step}")
 
         return epoch + 1
 
@@ -1018,18 +1026,17 @@ class HeimdallTrainer:
 
         return epoch
 
-    def load_pretrained(self):
-        self.initialize_checkpointing()
-
-        # Load the checkpoint
+    def get_pretrained_load_path(self):
         config = self.cfg
+        load_path = None
         if "pretrained_milestone" in config:
+            self.initialize_checkpointing()
+
             load_path = self.results_folder / f"model-{config.pretrained_milestone}.pt"
             if not load_path.exists():
                 self.print_r0(
                     f"> Checkpoint file {load_path} does not exist. `{config.pretrained_milestone=}` is invalid.",
                 )
-                return
         elif "pretrained_ckpt_path" in config:
             load_path = Path(config.pretrained_ckpt_path)
             if not load_path.exists():
@@ -1037,8 +1044,12 @@ class HeimdallTrainer:
                     f"> Checkpoint file {load_path} does not exist. Check the value of "
                     f"`{config.pretrained_ckpt_path=}` for correctness.",
                 )
-                return
-        else:
+
+        return load_path
+
+    def load_pretrained(self):
+        load_path = self.get_pretrained_load_path()
+        if load_path is None:
             return
 
         self.print_r0(f"> Loading pretrained model state from {load_path}")

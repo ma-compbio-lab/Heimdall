@@ -12,8 +12,8 @@ args:
       test: test
   metrics: [Accuracy]
   shuffle: true
-  batchsize: 32
-  epochs: 10
+  # batchsize: 32
+  # epochs: 10
   reducer_config:
     type:
   dataset_config:

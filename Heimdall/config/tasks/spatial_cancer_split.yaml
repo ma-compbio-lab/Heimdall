@@ -12,11 +12,11 @@ args:
       train: train
       val: val
       test: test
-  early_stopping_patience: 5
-  early_stopping: true
+  # early_stopping_patience: 5
+  # early_stopping: true
   shuffle: true
-  batchsize: 32
-  epochs: 50
+  # batchsize: 32
+  # epochs: 50
   dataset_config:
     type: Heimdall.datasets.SingleInstanceDataset
   head_config:
