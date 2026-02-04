@@ -550,7 +550,7 @@ class HeimdallTrainer:
         if self.get_precomputed:
             try:
                 outputs = self.get_precomputed_outputs(inputs)
-            except:
+            except KeyError:
                 outputs = self.model(inputs=inputs)
         else:
             outputs = self.model(inputs=inputs)
