@@ -548,7 +548,10 @@ class HeimdallTrainer:
         # inputs = (batch["identity_inputs"], batch["expression_inputs"])
 
         if self.get_precomputed:
-            outputs = self.get_precomputed_outputs(inputs)
+            try:
+                outputs = self.get_precomputed_outputs(inputs)
+            except:
+                outputs = self.model(inputs=inputs)
         else:
             outputs = self.model(inputs=inputs)
 
