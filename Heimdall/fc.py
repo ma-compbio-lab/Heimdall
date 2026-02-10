@@ -52,21 +52,21 @@ class Fc:
         self.reduce = instantiate_from_config(reduce_config, fc=self)
 
     def __getitem__(self, cell_index: int) -> tuple[NDArray, NDArray, NDArray]:
-        """Retrieve `identity_inputs`, `expression_inputs` and `padding_mask`.
+        """Retrieve `identity_inputs`, `expression_inputs` and
+        `expression_padding`.
 
         Returns:
             A tuple of gene identity embedding indices and gene expression embedding indices for all cells.
 
         """
 
-        gene_names = self.data.gene_names
+        gene_names = self.gene_names
         if cell_index == -1:  # Dummy `cell_index`
             identity_inputs = pd.array(np.full(self.max_input_length, self.fg.pad_value), dtype="Int64")
             expression_inputs = np.full(self.max_input_length, self.fe.pad_value)
         else:
             identity_indices, expression_inputs = self.fe[cell_index]
 
-            gene_names = self.data.gene_names
             gene_list = gene_names[identity_indices]  # convert to ENSEMBL Gene Names
             identity_inputs = self.fg[gene_list]  # convert the genes into fg
 
@@ -94,13 +94,30 @@ class Fc:
                 gene_order,
             )
 
-        padding_mask = expression_inputs == self.fe.pad_value
+        expression_padding = expression_inputs == self.fe.pad_value
 
-        return identity_inputs, expression_inputs, padding_mask
+        outputs = {
+            "identity_inputs": identity_inputs,
+            "expression_inputs": expression_inputs,
+            "expression_padding": expression_padding,
+        }
+
+        return outputs
 
     @property
     def adata(self):
         return self.data.adata
+
+    @property
+    def gene_names(self):
+        if not hasattr(self, "_gene_names"):
+            self._gene_names = self.data.gene_names
+
+        return self._gene_names
+
+    @gene_names.setter
+    def gene_names(self, val):
+        self._gene_names = val
 
 
 class ChromosomeAwareFc(Fc):
@@ -199,6 +216,12 @@ class DummyFc(Fc):
 
         """
         identity_indices, expression_inputs = self.fe[cell_index]
-        padding_mask = np.zeros(self.max_input_length)
+        expression_padding = np.zeros(self.max_input_length)
 
-        return identity_indices, expression_inputs, padding_mask
+        outputs = {
+            "identity_indices": identity_indices,
+            "expression_inputs": expression_inputs,
+            "expression_padding": expression_padding,
+        }
+
+        return outputs

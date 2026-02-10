@@ -34,11 +34,14 @@ import wandb
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
 
-INPUT_KEYS = {
+FC_KEYS = {
     "identity_inputs",
     "expression_inputs",
-    "masks",
     "expression_padding",
+}
+INPUT_KEYS = {
+    *FC_KEYS,
+    "masks",
     "idx",
 }
 
@@ -265,7 +268,9 @@ def get_collation_closure(keys=MAIN_KEYS):
                 elif any(is_invalid):
                     raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
                 else:
-                    inner_dict[subtask_name] = default_collate(values)
+                    collated_values = default_collate(values)
+                    # TODO: possibly handle multiple views differently here...?
+                    inner_dict[subtask_name] = collated_values
             collated[key] = inner_dict
         return dict(collated)
 

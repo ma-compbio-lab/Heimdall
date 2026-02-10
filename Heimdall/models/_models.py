@@ -78,7 +78,6 @@ class HeimdallModel(nn.Module):
             for index in range(2):  # Two cells (can be generalized to more)
                 cell_inputs = defaultdict(dict)
                 for key, value in inputs.items():
-
                     for subtask_name, _ in self.reducers.items():
                         cell_value = value[subtask_name]
                         if cell_value is not None:

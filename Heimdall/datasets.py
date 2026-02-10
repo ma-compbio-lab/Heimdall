@@ -11,7 +11,7 @@ from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
 
 from Heimdall.task import CellFeatType, LabelType, Task
-from Heimdall.utils import MAIN_KEYS
+from Heimdall.utils import FC_KEYS, MAIN_KEYS
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
@@ -134,14 +134,10 @@ class SingleInstanceDataset(Dataset):
             raise ValueError(f"Unknown split type {split_type!r}")
 
     def get_shared_inputs(self, idx):
-        identity_inputs, expression_inputs, expression_padding = self.data.fc[idx]
+        outputs = self.data.fc[idx]
+        outputs["idx"] = self.idx[idx]
 
-        return {
-            "identity_inputs": identity_inputs,
-            "expression_inputs": expression_inputs,
-            "expression_padding": expression_padding,
-            "idx": self.idx[idx],
-        }
+        return outputs
 
 
 class PairedInstanceDataset(Dataset):
@@ -212,16 +208,11 @@ class PairedInstanceDataset(Dataset):
         adata.obsp["full_mask"] = full_mask
 
     def get_shared_inputs(self, idx):
-        identity_inputs, expression_inputs, expression_padding = zip(
-            *[self.data.fc[cell_idx] for cell_idx in self.idx[idx]],
-        )
+        pair_inputs = [self.data.fc[cell_idx] for cell_idx in self.idx[idx]]
+        inputs = {key: [pair_input[key] for pair_input in pair_inputs] for key in FC_KEYS}
+        inputs["idx"] = tuple(self.idx[idx])
 
-        return {
-            "identity_inputs": identity_inputs,
-            "expression_inputs": expression_inputs,
-            "expression_padding": expression_padding,
-            "idx": tuple(self.idx[idx]),
-        }
+        return inputs
 
 
 class PartitionedDataset(SingleInstanceDataset):
