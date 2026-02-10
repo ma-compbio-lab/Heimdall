@@ -21,7 +21,8 @@ LabelType = NDArray[np.int_] | NDArray[np.float32]
 class Task(ABC):
     """Heimdall task key-value store.
 
-    Contains information about an scFM task and training details.
+    Contains information about an scFM task and training details. (Pre)computes
+    labels for each task.
 
     """
 
