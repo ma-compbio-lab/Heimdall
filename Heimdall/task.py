@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Union
 import numpy as np
 from numpy.typing import NDArray
 from omegaconf import DictConfig
+from torch import Tensor
+from torch.utils.data import default_collate
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
@@ -139,6 +141,22 @@ class Task(ABC):
         return {
             "labels": self.labels[idx],
         }
+
+    def on_batch(self):
+        """Callback to reset task state on start of sampling batch."""
+        pass
+
+    def collate(self, values: list[Tensor | None]):
+        # Drop Nones, or replace with zeros
+        is_invalid = [v is None for v in values]
+        if all(is_invalid):
+            return None
+        elif any(is_invalid):
+            raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
+        else:
+            collated_values = default_collate(values)
+
+        return collated_values
 
 
 class SingleInstanceTask(Task):

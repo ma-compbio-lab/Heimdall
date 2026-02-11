@@ -111,7 +111,7 @@ def toy_partitioned_data_path(pytestconfig, plain_toy_data):
     return partition_directory
 
 
-@fixture
+@fixture(scope="module")
 def mock_dataset(gene_names):
 
     mock_expression = csr_array(
@@ -143,7 +143,7 @@ def mock_dataset(gene_names):
 #     )
 
 
-@fixture
+@fixture(scope="module")
 def mock_dataset_all_valid_genes(valid_gene_names):
     mock_expression = csr_array(
         np.array(
@@ -166,7 +166,7 @@ def mock_dataset_all_valid_genes(valid_gene_names):
     )
 
 
-@fixture
+@fixture(scope="module")
 def zero_expression_mock_dataset(gene_names):
 
     mock_expression = csr_array(

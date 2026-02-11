@@ -60,7 +60,16 @@ class Fe(ABC):
             cell_index: cell for which to process expression values and get indices, as stored in `self.adata`.
 
         """
-        return _get_inputs_from_csr(self.data, cell_index=cell_index, drop_zeros=self.drop_zeros)
+        identity_inputs, expression_inputs = _get_inputs_from_csr(
+            self.data,
+            cell_index=cell_index,
+            drop_zeros=self.drop_zeros,
+        )
+        is_in_panel = np.isin(identity_inputs, self.gene_panel_idx)
+        identity_inputs = identity_inputs[is_in_panel]
+        expression_inputs = expression_inputs[is_in_panel]
+
+        return identity_inputs, expression_inputs
 
     @check_states(adata=True)
     def preprocess_embeddings(self, float_dtype: str = "float32"):
@@ -115,6 +124,17 @@ class Fe(ABC):
     @property
     def adata(self):
         return self.data.adata
+
+    @property
+    def gene_panel_idx(self):
+        if not hasattr(self, "_gene_panel_idx"):
+            self._gene_panel_idx = np.arange(self.data.num_genes)
+
+        return self._gene_panel_idx
+
+    @gene_panel_idx.setter
+    def gene_panel_idx(self, val):
+        self._gene_panel_idx = val
 
 
 class ScBERTBinningFe(Fe):

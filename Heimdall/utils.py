@@ -33,6 +33,7 @@ import wandb
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
+    from Heimdall.task import Tasklist
 
 FC_KEYS = {
     "identity_inputs",
@@ -251,7 +252,7 @@ def count_parameters(model):
 
 
 # Dataset Preparation collation tool
-def get_collation_closure(keys=MAIN_KEYS):
+def get_collation_closure(tasklist: "Tasklist", keys=MAIN_KEYS):
     """Heimdall data collate function."""
 
     def collate_fn(batch):
@@ -259,18 +260,12 @@ def get_collation_closure(keys=MAIN_KEYS):
         first_sample = batch[0]
         for key in keys:
             inner_dict = {}
-            for subtask_name in first_sample[key]:
-                values = [b[key][subtask_name] for b in batch]
-                # Drop Nones, or replace with zeros
-                is_invalid = [v is None for v in values]
-                if all(is_invalid):
-                    inner_dict[subtask_name] = None
-                elif any(is_invalid):
-                    raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
-                else:
-                    collated_values = default_collate(values)
-                    # TODO: possibly handle multiple views differently here...?
-                    inner_dict[subtask_name] = collated_values
+            for subtask_name, subtask in tasklist:
+                if subtask_name not in first_sample[key]:
+                    continue
+                values = [sample[key][subtask_name] for sample in batch]
+                inner_dict[subtask_name] = subtask.collate(values)
+
             collated[key] = inner_dict
         return dict(collated)
 

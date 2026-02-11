@@ -60,14 +60,13 @@ class Fc:
 
         """
 
-        gene_names = self.gene_names
         if cell_index == -1:  # Dummy `cell_index`
             identity_inputs = pd.array(np.full(self.max_input_length, self.fg.pad_value), dtype="Int64")
             expression_inputs = np.full(self.max_input_length, self.fe.pad_value)
         else:
             identity_indices, expression_inputs = self.fe[cell_index]
 
-            gene_list = gene_names[identity_indices]  # convert to ENSEMBL Gene Names
+            gene_list = self.data.gene_names[identity_indices]  # convert to ENSEMBL Gene Names
             identity_inputs = self.fg[gene_list]  # convert the genes into fg
 
             if len(identity_inputs) != len(expression_inputs):
@@ -107,17 +106,6 @@ class Fc:
     @property
     def adata(self):
         return self.data.adata
-
-    @property
-    def gene_names(self):
-        if not hasattr(self, "_gene_names"):
-            self._gene_names = self.data.gene_names
-
-        return self._gene_names
-
-    @gene_names.setter
-    def gene_names(self, val):
-        self._gene_names = val
 
 
 class ChromosomeAwareFc(Fc):

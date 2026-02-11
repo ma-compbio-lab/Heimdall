@@ -130,7 +130,6 @@ def expression_only_config(request, toy_single_data_path):
 @fixture(scope="module")
 def partition_config(request, toy_partitioned_data_path):
     model_config, fc_config = request.param
-    model_config, fc_config = request.param
     with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",

@@ -16,13 +16,13 @@ from numpy.typing import NDArray
 from omegaconf import OmegaConf, open_dict
 from scipy import sparse
 from scipy.sparse import csc_array, csr_array
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Subset
 
 from Heimdall.datasets import Dataset, PartitionedSubset
 from Heimdall.fc import Fc
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
-from Heimdall.samplers import PartitionedBatchSampler, PartitionedDistributedSampler
+from Heimdall.samplers import DefaultBatchSampler, PartitionedBatchSampler, PartitionedDistributedSampler
 from Heimdall.task import Tasklist
 
 # from Heimdall.samplers import PartitionedDistributedSampler
@@ -368,14 +368,22 @@ class CellRepresentation(SpecialTokenMixin):
 
         # Set up data loaders
         # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
-        heimdall_collate_fn = get_collation_closure()
+        heimdall_collate_fn = get_collation_closure(self.tasklist)
         dataloader_kwargs = {"num_workers": 4}  # TODO: we can parse additional data loader kwargs from config
         per_device_batch_size = self._cfg.trainer.args.batchsize // self.accelerator.num_processes
         self.dataloaders = {
             split: DataLoader(
                 dataset,
-                batch_size=per_device_batch_size,
-                shuffle=self.tasklist.shuffle if split == "train" else False,
+                batch_sampler=DefaultBatchSampler(
+                    sampler=(
+                        RandomSampler(dataset)
+                        if split == "train" and self.tasklist.shuffle
+                        else SequentialSampler(dataset)
+                    ),
+                    batch_size=per_device_batch_size,
+                    drop_last=False,
+                    tasklist=self.tasklist,
+                ),
                 collate_fn=heimdall_collate_fn,
                 **dataloader_kwargs,
             )
@@ -709,7 +717,7 @@ class PartitionedCellRepresentation(CellRepresentation):
             self.datasets[split] = PartitionedSubset(full_dataset, partition_splits)
 
         self.dataloaders = {}
-        heimdall_collate_fn = get_collation_closure()
+        heimdall_collate_fn = get_collation_closure(self.tasklist)
         per_device_batch_size = self._cfg.trainer.args.batchsize // self.accelerator.num_processes
         self.dataloaders = {
             split: DataLoader(
@@ -723,6 +731,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                     ),
                     batch_size=per_device_batch_size,
                     drop_last=False,
+                    tasklist=self.tasklist,
                 ),
                 collate_fn=heimdall_collate_fn,
                 # num_workers=4,  # TODO: currently doesn't work. To fix, will need to create
