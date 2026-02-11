@@ -144,7 +144,7 @@ class Task(ABC):
 
     def on_batch(self):
         """Callback to reset task state on start of sampling batch."""
-        pass
+        return None
 
     def collate(self, values: list[Tensor | None]):
         # Drop Nones, or replace with zeros

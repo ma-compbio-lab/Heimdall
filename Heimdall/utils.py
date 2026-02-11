@@ -26,7 +26,6 @@ from scipy import sparse as sp
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from torch import FloatTensor, LongTensor, Tensor, sparse_coo_tensor
-from torch.utils.data import default_collate
 from tqdm.auto import tqdm
 
 import wandb
