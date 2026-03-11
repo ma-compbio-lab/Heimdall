@@ -1,6 +1,9 @@
+import contextlib
 import hashlib
 import importlib
 import json
+import os
+import shutil
 import uuid
 import warnings
 from collections import defaultdict
@@ -106,7 +109,16 @@ def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str, mkdir: bo
     return cached_file_path, cached_cfg_path
 
 
-def filter_config(config, keys_to_keep):
+def clear_cached_paths(cfg: DictConfig, cache_dir: Path) -> Tuple[Path, Path]:
+    """Clear cached paths under hash directory.."""
+    hash_str = hash_config(cfg)
+
+    cache_dir = cache_dir / hash_str
+    with contextlib.suppress(FileNotFoundError):
+        shutil.rmtree(cache_dir)
+
+
+def filter_config(config, keys_to_keep, keys_to_exclude):
     filtered = OmegaConf.create({})
     for key in keys_to_keep:
         # Use OmegaConf.select() to safely access nested keys using dot notation
@@ -118,16 +130,23 @@ def filter_config(config, keys_to_keep):
         except Exception:
             # Handle cases where the key might be missing if necessary
             pass
+
+    for key in keys_to_exclude:
+        try:
+            del filtered[key]
+        except Exception:
+            pass
+
     return filtered
 
 
-def generate_minimal_config(cfg, keys=(), hash_vars=()):
+def generate_minimal_config(cfg, keys=(), excluded_keys=(), hash_vars=()):
     if len(keys) == 0:
         raise ValueError("Config `keys` used for caching cannot be an empty.")
     # cfg = DictConfig(
     #     {key: OmegaConf.to_container(recursive_getattr(cfg, key), resolve=True) for key in keys},
     # )
-    cfg = filter_config(cfg, keys_to_keep=keys)
+    cfg = filter_config(cfg, keys_to_keep=keys, keys_to_exclude=excluded_keys)
     if len(hash_vars) > 0:
         cfg = {**cfg, "hash_vars": hash_vars}
 
@@ -139,6 +158,7 @@ def get_fully_qualified_cache_paths(
     cache_dir,
     filename="",
     keys: set | tuple = (),
+    excluded_keys: set | tuple = (),
     hash_vars=(),
     verbose: int = 0,
     mkdir: bool = True,
@@ -149,7 +169,7 @@ def get_fully_qualified_cache_paths(
     if verbose:
         print(f"Hashing with {keys=}")
 
-    cfg = generate_minimal_config(cfg, keys=keys, hash_vars=hash_vars)
+    cfg = generate_minimal_config(cfg, keys=keys, excluded_keys=excluded_keys, hash_vars=hash_vars)
 
     fully_qualified_file_path, fully_qualified_cfg_path = get_cached_paths(
         cfg,
@@ -159,6 +179,25 @@ def get_fully_qualified_cache_paths(
     )
 
     return fully_qualified_file_path, fully_qualified_cfg_path, cfg
+
+
+def clear_fully_qualified_cache_paths(
+    cfg,
+    cache_dir,
+    keys: set | tuple = (),
+    excluded_keys: set | tuple = (),
+    hash_vars=(),
+    verbose: int = 0,
+):
+    """Clear fully-resolved path to unique cache directory, given the config
+    keys that distinguish the object being cached."""
+    keys = set(keys)  # Make unique
+    if verbose:
+        print(f"Hashing with {keys=}")
+
+    cfg = generate_minimal_config(cfg, keys=keys, excluded_keys=excluded_keys, hash_vars=hash_vars)
+
+    clear_cached_paths(cfg, Path(cache_dir).resolve())
 
 
 def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
@@ -649,7 +688,7 @@ def save_umap(
             umap_key = f"X_umap_{embedding_name}"
             leiden_key = f"leiden_{embedding_name}"
 
-            adata.obsm[embedding_name] = embeddings[subtask_name]
+            adata.obsm[embedding_name] = np.array(embeddings[subtask_name])
 
             sc.pp.neighbors(adata, use_rep=embedding_name, key_added=neighbors_key)
             sc.tl.leiden(adata, key_added=leiden_key, neighbors_key=neighbors_key)

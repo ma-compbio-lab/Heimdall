@@ -28,6 +28,7 @@ from Heimdall.task import Tasklist
 # from Heimdall.samplers import PartitionedDistributedSampler
 from Heimdall.utils import (
     check_states,
+    clear_fully_qualified_cache_paths,
     conditional_print,
     convert_to_ensembl_ids,
     get_collation_closure,
@@ -47,8 +48,8 @@ class SpecialTokenMixin:
 
 
 class CellRepresentation(SpecialTokenMixin):
-    TOKENIZER_KEYS = ("fg", "fe", "fc")
-    DATASET_KEYS = ("dataset.preprocess_args.data_path",)
+    DATASET_KEYS = ("dataset.preprocess_args.data_path", "tasks")
+    TOKENIZER_KEYS = ("dataset.preprocess_args.data_path", "fg", "fe", "fc")
 
     def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True, indent: int = 0):
         """Initialize the Cell Rep object with configuration and AnnData object.
@@ -80,6 +81,10 @@ class CellRepresentation(SpecialTokenMixin):
         self.rng = np.random.default_rng(seed)
 
         if auto_setup:
+            if config.overwrite:
+                if self.accelerator.is_main_process:
+                    self.clear_cache()
+                self.accelerator.wait_for_everyone()
             self.create_tasklist()
             self.setup(ops=("preprocess",))
             SpecialTokenMixin.__init__(self)
@@ -118,12 +123,17 @@ class CellRepresentation(SpecialTokenMixin):
         for subtask_name, subtask in self.tasklist:
             if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
                 cache_dir = Path(cache_dir)
-                is_cached = subtask.from_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
+                is_cached = subtask.from_cache(
+                    cache_dir / "processed_data",
+                    hash_vars=hash_vars,
+                    task_name=subtask_name,
+                )
                 if is_cached:
                     continue
+
             subtask.setup_labels()
             if cache_dir is not None:
-                subtask.to_cache(cache_dir, hash_vars=hash_vars, task_name=subtask_name)
+                subtask.to_cache(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
 
         self.print_during_setup("> Finished setting up labels")
 
@@ -195,19 +205,42 @@ class CellRepresentation(SpecialTokenMixin):
         )
         return self.adata, gene_mapping
 
+    def clear_cache(self, hash_vars=()):
+        """Empty cache."""
+        cache_dir = self._cfg.cache_preprocessed_dataset_dir
+        if cache_dir is None:
+            return
+
+        cache_dir = Path(cache_dir)
+
+        # Clear preprocessed dataset
+        clear_fully_qualified_cache_paths(self._cfg, cache_dir / "processed_anndata", keys=self.DATASET_KEYS)
+        self.print_during_setup("> Cleared `processed_anndata` cache.")
+
+        # Clear tokenizer
+        clear_fully_qualified_cache_paths(
+            self._cfg,
+            cache_dir / "processed_data",
+            keys=self.TOKENIZER_KEYS,
+            hash_vars=hash_vars,
+        )
+        self.print_during_setup("> Cleared tokenizer cache.")
+
+        # Clear labels
+        for subtask_name, subtask in self.tasklist:
+            subtask.clear_cache_path(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
+
+        self.print_during_setup("> Cleared label cache.")
+
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():
             self.print_during_setup(
                 f"> Found already preprocessed anndata: {preprocessed_data_path}",
             )
-            # loaded_cfg_str = OmegaConf.to_yaml(OmegaConf.load(preprocessed_cfg_path)).replace("\n", "\n    ")
-            # print(f"  Preprocessing config:\n    {loaded_cfg_str}") # TODO: add verbosity level
-            # print(f'[Rank {self.accelerator.process_index}] Reading {preprocessed_data_path=}')
             self.adata = ad.read_h5ad(
                 preprocessed_data_path,
                 backed="r",
             )  # add backed argument to prevent entire dataset from being read into mem
-            # print(f'[Rank {self.accelerator.process_index}] Read {self.adata.obsm.keys()=}')
             self.raw_gene_names = self.adata.var_names.copy()
             return True
 
@@ -217,7 +250,10 @@ class CellRepresentation(SpecialTokenMixin):
 
     def anndata_to_cache(self, preprocessed_data_path):
         if preprocessed_data_path is not None:
-            self.print_during_setup("> Writing preprocessed Anndata Object", is_printable_process=True)
+            self.print_during_setup(
+                f"> Writing preprocessed Anndata Object at {preprocessed_data_path}",
+                is_printable_process=True,
+            )
             self.adata.write(preprocessed_data_path)
             self.print_during_setup(
                 f"> Finished writing preprocessed Anndata Object at {preprocessed_data_path}",
@@ -241,7 +277,6 @@ class CellRepresentation(SpecialTokenMixin):
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
 
-        keys = self.DATASET_KEYS
         preprocessed_data_path = preprocessed_cfg_path = cfg = None
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             cache_dir = Path(cache_dir)
@@ -249,7 +284,7 @@ class CellRepresentation(SpecialTokenMixin):
                 self._cfg,
                 cache_dir / "processed_anndata",
                 filename,
-                keys=keys,
+                keys=self.DATASET_KEYS,
             )
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
 
@@ -397,13 +432,11 @@ class CellRepresentation(SpecialTokenMixin):
         )
 
     def get_tokenizer_cache_path(self, cache_dir, hash_vars, filename: str = "data.pkl"):
-        keys = set(self.DATASET_KEYS).union(set(self.TOKENIZER_KEYS))
-
         processed_data_path, _, _ = get_fully_qualified_cache_paths(
             self._cfg,
             cache_dir / "processed_data",
             filename,
-            keys=keys,
+            keys=self.TOKENIZER_KEYS,
             hash_vars=hash_vars,
         )
 
@@ -559,6 +592,11 @@ class PartitionedCellRepresentation(CellRepresentation):
                     keys=self.DATASET_KEYS,
                 )
 
+            if self._cfg.overwrite:
+                if self.accelerator.is_main_process:
+                    self.clear_cache()
+                self.accelerator.wait_for_everyone()
+
             if cache_dir is not None and metadata_path.is_file():
                 self.print_during_setup(f"> Found partition metadata at {metadata_path}")
 
@@ -623,6 +661,31 @@ class PartitionedCellRepresentation(CellRepresentation):
         """Get the size of the current partition."""
         self.partition_sizes[self.partition] = self.adata.n_obs
         self.num_cells[self.partition] = self.adata.n_obs
+
+    def clear_cache(self):
+        """Empty cache."""
+        for partition in range(self.num_partitions):  # Setting up AnnData and sizes
+            super().clear_cache(hash_vars=(int(partition),))
+
+    # def setup_labels(self, hash_vars=()):
+    #     """Can only be called after `self.adata` and `self.datasets` is
+    #     populated."""
+
+    #     if not hasattr(self, "datasets"):
+    #         return
+
+    #     cache_dir = self._cfg.cache_preprocessed_dataset_dir
+    #     for subtask_name, subtask in self.tasklist:
+    #         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
+    #             cache_dir = Path(cache_dir)
+    #             is_cached = subtask.from_cache(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
+    #             if is_cached:
+    #                 continue
+    #         subtask.setup_labels()
+    #         if cache_dir is not None:
+    #             subtask.to_cache(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
+
+    #     self.print_during_setup("> Finished setting up labels")
 
     def setup(self, ops=("preprocess", "labels")):
         for rank in range(self.num_replicas):
@@ -756,7 +819,7 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
         accelerator_log_kwargs["project_dir"] = config.work_dir
 
     ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=5400))
+    init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=14400))
 
     accelerator = Accelerator(
         gradient_accumulation_steps=config.trainer.args.accumulate_grad_batches,

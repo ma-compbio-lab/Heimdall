@@ -438,6 +438,7 @@ class HeimdallTrainer:
             precomputation_condition = precompute_last_epoch and epoch + 1 == self.epochs
             context = nullcontext()
             if precomputation_condition:
+                self.print_r0(f"> Precomputation condition is met.")
                 context = PrecomputationContext(self, save_precomputed=True, get_precomputed=True, run_wandb=True)
 
             with context:
@@ -739,10 +740,14 @@ class HeimdallTrainer:
                 if self.fastdev:
                     break
 
-            if not training:
-                for key in outputs:
-                    for subtask_name, _ in self.data.tasklist:
-                        outputs[key][subtask_name] = np.array(outputs[key][subtask_name])
+            # if not training:
+            #     for subtask_name, _ in self.data.tasklist:
+            #         for key in outputs:
+            #             # print(f'{key=}')
+            #             # print(f'{subtask_name=}')
+            #             # print(f'{outputs[key][subtask_name][0].shape=}')
+            #             # print(f'{np.unique([out.shape for out in outputs[key][subtask_name]])=}')
+            #             outputs[key][subtask_name] = np.array(outputs[key][subtask_name])
 
         return outputs, loss
 
@@ -991,9 +996,9 @@ class HeimdallTrainer:
     def load_trainer_state(self, data):
         # Restore optimizer and scheduler states
 
-        clean_opt_sd = clean_optimizer_state_for_current_model(data["optimizer"], self.optimizer, verbose=True)
+        # clean_opt_sd = clean_optimizer_state_for_current_model(data["optimizer"], self.optimizer, verbose=True)
 
-        self.optimizer.load_state_dict(clean_opt_sd)
+        # self.optimizer.load_state_dict(clean_opt_sd)
         if (data["scaler"] is not None) and (self.accelerator.scaler is not None):
             self.accelerator.scaler.load_state_dict(data["scaler"])
         self.lr_scheduler.load_state_dict(data["lr_scheduler"])
@@ -1075,7 +1080,7 @@ class HeimdallTrainer:
         self.load_trainer_state(data)
 
         if self.accelerator.is_main_process:
-            print(f">Finished loading pretrained params loaded from {load_path}")
+            print(f"> Finished loading pretrained params loaded from {load_path}")
 
 
 def setup_trainer_generic(config, setup_model: Callable, cpu=True):

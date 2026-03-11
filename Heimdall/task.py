@@ -12,7 +12,7 @@ from torch.utils.data import default_collate
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
 
-from Heimdall.utils import get_fully_qualified_cache_paths, instantiate_from_config
+from Heimdall.utils import clear_fully_qualified_cache_paths, get_fully_qualified_cache_paths, instantiate_from_config
 
 CellFeatType = NDArray[np.int_] | NDArray[np.float32]
 FeatType = CellFeatType | tuple[CellFeatType, CellFeatType]
@@ -107,16 +107,17 @@ class Task(ABC):
     def setup_labels(self): ...
 
     def get_cache_path(self, cache_dir, hash_vars, task_name):
-        keys = set(self.data.DATASET_KEYS).union(set(self.data.TOKENIZER_KEYS))
-        keys.add("tasks")
         processed_data_path, _, _ = get_fully_qualified_cache_paths(
             self.data._cfg,
-            cache_dir / "processed_data",
+            cache_dir,
             filename=f"{task_name}_labels.pkl",
-            keys=keys,
+            keys=self.data.TOKENIZER_KEYS,
             hash_vars=hash_vars,
         )
         return processed_data_path
+
+    def clear_cache_path(self, cache_dir, hash_vars, task_name):
+        clear_fully_qualified_cache_paths(self.data._cfg, cache_dir, keys=self.data.TOKENIZER_KEYS, hash_vars=hash_vars)
 
     def to_cache(self, cache_dir, hash_vars, task_name):
         processed_data_path = self.get_cache_path(cache_dir, hash_vars, task_name)
