@@ -438,7 +438,7 @@ class HeimdallTrainer:
             precomputation_condition = precompute_last_epoch and epoch + 1 == self.epochs
             context = nullcontext()
             if precomputation_condition:
-                self.print_r0(f"> Precomputation condition is met.")
+                self.print_r0("> Precomputation condition is met.")
                 context = PrecomputationContext(self, save_precomputed=True, get_precomputed=True, run_wandb=True)
 
             with context:

@@ -667,26 +667,6 @@ class PartitionedCellRepresentation(CellRepresentation):
         for partition in range(self.num_partitions):  # Setting up AnnData and sizes
             super().clear_cache(hash_vars=(int(partition),))
 
-    # def setup_labels(self, hash_vars=()):
-    #     """Can only be called after `self.adata` and `self.datasets` is
-    #     populated."""
-
-    #     if not hasattr(self, "datasets"):
-    #         return
-
-    #     cache_dir = self._cfg.cache_preprocessed_dataset_dir
-    #     for subtask_name, subtask in self.tasklist:
-    #         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
-    #             cache_dir = Path(cache_dir)
-    #             is_cached = subtask.from_cache(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
-    #             if is_cached:
-    #                 continue
-    #         subtask.setup_labels()
-    #         if cache_dir is not None:
-    #             subtask.to_cache(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
-
-    #     self.print_during_setup("> Finished setting up labels")
-
     def setup(self, ops=("preprocess", "labels")):
         for rank in range(self.num_replicas):
             if rank == self.rank:
