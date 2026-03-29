@@ -280,10 +280,6 @@ def instantiate_from_config(
         ) from e
 
 
-def get_value(dictionary, key, default=False):
-    return dictionary.get(key, default)
-
-
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
