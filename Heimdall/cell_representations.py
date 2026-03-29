@@ -33,7 +33,6 @@ from Heimdall.utils import (
     convert_to_ensembl_ids,
     get_collation_closure,
     get_fully_qualified_cache_paths,
-    get_value,
     instantiate_from_config,
     issparse,
 )
@@ -261,8 +260,12 @@ class CellRepresentation(SpecialTokenMixin):
             )
 
     def create_tasklist(self):
-        if hasattr(self._cfg.tasks.args, "subtask_configs"):
-            self.tasklist = instantiate_from_config(self._cfg.tasks, self)
+        if self._cfg.get("subtask_configs", False):
+            self.tasklist = Tasklist(
+                self,
+                subtask_configs=self._cfg.subtask_configs,
+                dataset_config=self._cfg.tasks.args.dataset_config,
+            )
         else:
             self.tasklist = Tasklist(
                 self,
@@ -316,7 +319,7 @@ class CellRepresentation(SpecialTokenMixin):
             if key in self.adata.uns:
                 del self.adata.uns[key]
 
-        if get_value(self._cfg.dataset.preprocess_args, "normalize"):
+        if self._cfg.dataset.preprocess_args.get("normalize", False):
             self.print_during_setup("> Normalizing AnnData...")
 
             if sparse.issparse(self.adata.X):
@@ -339,7 +342,7 @@ class CellRepresentation(SpecialTokenMixin):
         else:
             self.print_during_setup("> Skipping Normalizing anndata...")
 
-        if get_value(self._cfg.dataset.preprocess_args, "log_1p"):
+        if self._cfg.dataset.preprocess_args.get("log_1p", False):
             self.print_during_setup("> Log Transforming anndata...")
 
             sc.pp.log1p(self.adata)
@@ -347,7 +350,7 @@ class CellRepresentation(SpecialTokenMixin):
             self.print_during_setup("> Skipping Log Transforming anndata..")
 
         if (
-            get_value(self._cfg.dataset.preprocess_args, "top_n_genes")
+            self._cfg.dataset.preprocess_args.get("top_n_genes", False)
             and self._cfg.dataset.preprocess_args["top_n_genes"] != "false"
         ):
             # Identify highly variable genes
@@ -359,7 +362,7 @@ class CellRepresentation(SpecialTokenMixin):
         else:
             self.print_during_setup("> No highly variable subset... using entire dataset")
 
-        if get_value(self._cfg.dataset.preprocess_args, "scale_data"):
+        if self._cfg.dataset.preprocess_args.get("scale_data", False):
             # Scale the data
             raise NotImplementedError("Scaling the data is NOT RECOMMENDED, please set it to false")
             self.print_during_setup("> Scaling the data...")
@@ -367,7 +370,7 @@ class CellRepresentation(SpecialTokenMixin):
         else:
             self.print_during_setup("> Not scaling the data...")
 
-        if get_value(self._cfg.dataset.preprocess_args, "get_medians"):
+        if self._cfg.dataset.preprocess_args.get("get_medians", False):
             # Get medians
             self.print_during_setup("> Getting nonzero medians...")
             csc_expression = csc_array(self.adata.X)
