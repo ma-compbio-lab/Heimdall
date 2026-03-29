@@ -1,0 +1,28 @@
+# @package _global_
+
+###
+# Set the experiment parts you would like to import
+####
+defaults:
+  - override /model: transformer_flash  # the chosen model
+  - override /dataset: spatial_pretraining_test
+  - override /tasks: pretrain_geneformer_dev  # dataset for the relevant task
+  - override /scheduler: cosine  # contains scheduler
+  - override /optimizer: AdamW
+  - override /fc: geneformer
+  - override /fe: zero
+  - override /fg: pca_esm2  # gene2vec
+
+####
+# Set the specific parameters you would like to change from the defaults
+####
+seed: 55
+
+# run_name: ${fg.type}_${fe.type}_${fc.name}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
+run_name: ${fg.type}_${fe.type}_${fc.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}
+work_dir: spatial_pretraining_test
+project_name: spatial_pretraining_test  # project name for WandB
+
+optimizer:
+  args:
+    lr: 2e-3

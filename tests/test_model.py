@@ -25,7 +25,7 @@ fc_configs = ["geneformer", "geneformer", "geneformer"]
 
 @fixture(scope="module")
 def paired_task_config(request, toy_paired_data_path):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
@@ -52,7 +52,7 @@ def paired_task_config(request, toy_paired_data_path):
 @fixture(scope="module")
 def single_task_config(request, toy_single_data_path):
     model_config, fc_config = request.param
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
@@ -78,7 +78,7 @@ def single_task_config(request, toy_single_data_path):
 @fixture(scope="module")
 def multitask_config(request, toy_single_data_path):
     model_config, fc_config = request.param
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
@@ -105,7 +105,7 @@ def multitask_config(request, toy_single_data_path):
 
 @fixture(scope="module")
 def expression_only_config(request, toy_single_data_path):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
@@ -130,7 +130,7 @@ def expression_only_config(request, toy_single_data_path):
 @fixture(scope="module")
 def partition_config(request, toy_partitioned_data_path):
     model_config, fc_config = request.param
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[

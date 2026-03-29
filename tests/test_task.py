@@ -6,7 +6,7 @@ from Heimdall.task import PairedInstanceTask, SingleInstanceTask, Tasklist
 
 
 def test_single_instance_task(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config/tasks"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/scfm_config/tasks"):
         conf = hydra.compose(
             config_name="spatial_cancer_split",
         )
@@ -16,7 +16,7 @@ def test_single_instance_task(mock_dataset):
 
 
 def test_paired_instance_task(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config/tasks"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/scfm_config/tasks"):
         conf = hydra.compose(
             config_name="reverse_perturbation",
         )
@@ -26,7 +26,7 @@ def test_paired_instance_task(mock_dataset):
 
 
 def test_tasklist(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
@@ -42,7 +42,7 @@ def test_tasklist(mock_dataset):
 
 
 def test_multitask_tasklist(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
@@ -59,7 +59,7 @@ def test_multitask_tasklist(mock_dataset):
 
 
 def test_invalid_tasklist(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[

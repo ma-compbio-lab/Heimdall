@@ -16,7 +16,7 @@ if "HYDRA_USER" not in os.environ:
 
 @pytest.mark.integration
 def test_default_hydra_train(session_cache_dir):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         config = hydra.compose(
             config_name="config",
             overrides=[
@@ -50,7 +50,7 @@ def test_default_hydra_train(session_cache_dir):
 
 @pytest.mark.integration
 def test_partitioned_hydra_train(session_cache_dir):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         config = hydra.compose(
             config_name="config",
             overrides=[
@@ -82,7 +82,7 @@ def test_partitioned_hydra_train(session_cache_dir):
 
 @pytest.mark.integration
 def test_partitioned_precomputation(session_cache_dir):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         config = hydra.compose(
             config_name="config",
             overrides=[

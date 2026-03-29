@@ -1,0 +1,9 @@
+dataset_name: spatial_pretraining_test
+
+preprocess_args:
+  data_path: /work/magroup/shared/tissueFM/data/Adult_MouseBrain_Zhuang/pretrain_dataset
+  top_n_genes: false
+  normalize: true
+  log_1p: true
+  scale_data: false
+  species: mouse

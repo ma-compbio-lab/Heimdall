@@ -1,0 +1,25 @@
+# @package scfm_config
+defaults:
+  - _self_
+  - /scfm_config/model@model: transformer
+  - /scfm_config/dataset@dataset: spatial_cancer_split1
+  - /scfm_config/tasks@tasks: spatial_cancer_split
+  - /scfm_config/scheduler@scheduler: cosine
+  - /scfm_config/trainer@trainer: default
+  - /scfm_config/optimizer@optimizer: AdamW
+  - /scfm_config/fc@fc: geneformer
+  - /scfm_config/fe@fe: dummy
+  - /scfm_config/fg@fg: identity
+  - /scfm_config/loss@loss: CrossEntropyLoss
+  - /scfm_config/user@user: none
+
+enabled: false
+project_name: ${project_name}
+run_name: ${run_name}
+work_dir: ${work_dir}
+run_wandb: ${run_wandb}
+float_dtype: ${float_dtype}
+seed: ${seed}
+cache_preprocessed_dataset_dir: ${cache_preprocessed_dataset_dir}
+pretrained_ckpt_path:
+pretrained_milestone:

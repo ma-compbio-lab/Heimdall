@@ -27,7 +27,7 @@ except ImportError:
 
 @fixture(scope="module")
 def flash_attn_config(toy_single_data_path):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
