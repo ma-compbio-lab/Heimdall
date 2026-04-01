@@ -659,6 +659,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                     self.print_during_setup(f"> Saved partition metadata at {metadata_path}")
 
             self.setup_finished = True
+            self.print_during_setup("> Finished setting up labels")
 
             self.prepare_dataset_loaders()
             self._initialize_partition()
