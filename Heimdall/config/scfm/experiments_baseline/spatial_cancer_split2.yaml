@@ -1,0 +1,37 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: spatial_cancer_split
+  - override /scfm/model@scfm.model: expression_only
+  - override /scfm/dataset@scfm.dataset: spatial_cancer_split2
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/trainer@scfm.trainer: default
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: dummy
+  - override /scfm/fe@scfm.fe: dummy
+  - override /scfm/fg@scfm.fg: dummy
+
+project_name: spatial_cancer_split2
+run_name: ${scfm.fg.type}_${scfm.fe.type}_${scfm.fc.type}_${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}
+
+scfm:
+  dataset:
+    preprocess_args:
+      data_path: ${data_path}/ovarian_cancer/pairs_1_3_FilledZeros.h5ad
+      log_1p: true
+      normalize: true
+  optimizer:
+    args:
+      lr: 2e-3
+  tasks:
+    default:
+      args:
+        dataset_config:
+          type: Heimdall.datasets.SingleInstanceDataset
+        head_config:
+          args:
+          type: Heimdall.models.ExpressionOnlyCellPredHead
+        splits:
+          col: split
+
+seed: 55
+work_dir: work_dir

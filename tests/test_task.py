@@ -6,7 +6,7 @@ from Heimdall.task import PairedInstanceTask, SingleInstanceTask, Tasklist
 
 
 def test_single_instance_task(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/scfm_config/tasks"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
         conf = hydra.compose(
             config_name="spatial_cancer_split",
         )
@@ -16,7 +16,7 @@ def test_single_instance_task(mock_dataset):
 
 
 def test_paired_instance_task(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall/scfm_config/tasks"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
         conf = hydra.compose(
             config_name="reverse_perturbation",
         )
@@ -26,49 +26,49 @@ def test_paired_instance_task(mock_dataset):
 
 
 def test_tasklist(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                "+scfm_config/tasks@scfm_config.tasks.1=spatial_cancer_split",
+                "+scfm/tasks@scfm.tasks.1=spatial_cancer_split",
             ],
         )
         OmegaConf.resolve(conf)
 
     tasklist = Tasklist(
         mock_dataset,
-        tasks=conf.scfm_config.tasks,
+        tasks=conf.scfm.tasks,
     )
     for _, subtask in tasklist:
         print(f"{subtask=}")
 
 
 def test_multitask_tasklist(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                "+scfm_config/tasks@scfm_config.tasks.1=spatial_cancer_split",
-                "+scfm_config/tasks@scfm_config.tasks.2=spatial_cancer_split",
+                "+scfm/tasks@scfm.tasks.1=spatial_cancer_split",
+                "+scfm/tasks@scfm.tasks.2=spatial_cancer_split",
             ],
         )
         OmegaConf.resolve(conf)
 
     tasklist = Tasklist(
         mock_dataset,
-        tasks=conf.scfm_config.tasks,
+        tasks=conf.scfm.tasks,
     )
     for _, subtask in tasklist:
         print(f"{subtask=}")
 
 
 def test_invalid_tasklist(mock_dataset):
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                "+scfm_config/tasks@scfm_config.tasks.1=spatial_cancer_split",
-                "+scfm_config/tasks@scfm_config.tasks.2=new_sctab_split",
+                "+scfm/tasks@scfm.tasks.1=spatial_cancer_split",
+                "+scfm/tasks@scfm.tasks.2=new_sctab_split",
             ],
         )
         OmegaConf.resolve(conf)
@@ -76,5 +76,5 @@ def test_invalid_tasklist(mock_dataset):
     with pytest.raises(ValueError):
         tasklist = Tasklist(
             mock_dataset,
-            tasks=conf.scfm_config.tasks,
+            tasks=conf.scfm.tasks,
         )

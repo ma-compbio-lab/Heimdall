@@ -1,0 +1,22 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: rp_mean
+  - override /scfm/model@scfm.model: transformer
+  - override /scfm/dataset@scfm.dataset: reverse_20gene
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/trainer@scfm.trainer: default
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: geneformer
+  - override /scfm/fg@scfm.fg: identity
+
+project_name: reverse_perturbation
+run_name: ${scfm.fg.type}_${scfm.fe.type}_${scfm.fc.type}_${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}
+
+scfm:
+  optimizer:
+    learning_rate: 2e-3
+  trainer:
+    accumulate_grad_batches: 1
+
+seed: 55
+work_dir: ${project_name}_results/${scfm.fg.type}_${scfm.fe.name}_${scfm.fc.type}_${scfm.dataset.dataset_name}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}_seed${seed}_ag${scfm.fe.args.drop_zeros}

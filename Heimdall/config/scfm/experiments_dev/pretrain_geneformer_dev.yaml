@@ -1,0 +1,22 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: pretrain_geneformer_dev
+  - override /scfm/model@scfm.model: transformer_lmhead
+  - override /scfm/dataset@scfm.dataset: pancreas
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/trainer@scfm.trainer: default
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: geneformer
+  - override /scfm/fg@scfm.fg: identity
+  - override /scfm/loss@scfm.loss: CrossEntropyLoss
+
+project_name: pancreas_pretrain_geneformer
+run_name: '${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize} '
+
+scfm:
+  optimizer:
+    args:
+      lr: 2e-3
+
+seed: 55
+work_dir: work_dir

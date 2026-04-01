@@ -1,0 +1,17 @@
+# @package scfm
+defaults:
+  - _self_
+  - model: transformer
+  - dataset: spatial_cancer_split1
+  - tasks: tasklist_placeholder
+  - scheduler: cosine
+  - trainer: default
+  - optimizer: AdamW
+  - fc: geneformer
+  - fe: dummy
+  - fg: identity
+  - loss: CrossEntropyLoss
+
+enabled: false
+pretrained_ckpt_path:
+pretrained_milestone:

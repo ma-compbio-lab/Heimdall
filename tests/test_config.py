@@ -3,10 +3,10 @@ from omegaconf import OmegaConf
 
 
 def test_config_with_overrides():
-    with initialize(version_base=None, config_path="../Heimdall", job_name="test"):
+    with initialize(version_base=None, config_path="../Heimdall/config", job_name="test"):
         cfg = compose(
             config_name="config",
-            overrides=["scfm_config/fg=identity", "scfm_config/fe=binning_scgpt"],
+            overrides=["scfm/fg=identity", "scfm/fe=binning_scgpt"],
         )
         resolved_config = OmegaConf.create(OmegaConf.to_yaml(cfg, resolve=True))
 

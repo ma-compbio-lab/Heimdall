@@ -52,19 +52,19 @@ class CellRepresentation(SpecialTokenMixin):
 
     @property
     def local_cfg(self):
-        return self._cfg.scfm_config
+        return self._cfg.scfm
 
     @property
     def fg_cfg(self):
-        return self._cfg.scfm_config.fg
+        return self._cfg.scfm.fg
 
     @property
     def fe_cfg(self):
-        return self._cfg.scfm_config.fe
+        return self._cfg.scfm.fe
 
     @property
     def fc_cfg(self):
-        return self._cfg.scfm_config.fc
+        return self._cfg.scfm.fc
 
     def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True, indent: int = 0):
         """Initialize the Cell Rep object with configuration and AnnData object.
@@ -810,7 +810,7 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
     init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=14400))
 
     accelerator = Accelerator(
-        gradient_accumulation_steps=config.scfm_config.trainer.args.accumulate_grad_batches,
+        gradient_accumulation_steps=config.scfm.trainer.args.accumulate_grad_batches,
         step_scheduler_with_optimizer=False,
         cpu=cpu,
         mixed_precision="bf16",
@@ -834,6 +834,6 @@ def setup_data(config, cpu=False, accelerator=None):
         only_preprocess_data = config.pop("only_preprocess_data", None)
         # pop so hash of cfg is not changed depending on value
 
-    cr = instantiate_from_config(config.scfm_config.trainer.cell_rep_config, config, accelerator)
+    cr = instantiate_from_config(config.scfm.trainer.cell_rep_config, config, accelerator)
 
     return accelerator, cr, run_wandb, only_preprocess_data

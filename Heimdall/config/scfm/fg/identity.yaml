@@ -1,0 +1,10 @@
+type: Heimdall.fg.IdentityFg
+
+args:
+  embedding_parameters:
+    type: Heimdall.embedding.FlexibleTypeEmbedding
+    args:
+      num_embeddings: vocab_size
+      embedding_dim: ${scfm.fg.args.d_embedding}
+  d_embedding: ${scfm.model.args.d_model}
+  frozen: false

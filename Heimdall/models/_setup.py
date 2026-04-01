@@ -13,7 +13,7 @@ def setup_model(config, cr, is_main_process=True):
     # or `predefined`, which expects the dataset to prepare batchsize x length x hidden_dim
     # float_dtype = get_dtype(config.float_dtype)
 
-    model = HeimdallModel(data=cr, model_config=config.scfm_config.model)
+    model = HeimdallModel(data=cr, model_config=config.scfm.model)
     # .to(float_dtype)
 
     if is_main_process:

@@ -131,7 +131,7 @@ class HeimdallTrainer:
 
     @property
     def model_cfg(self):
-        return self.cfg.scfm_config.model
+        return self.cfg.scfm.model
 
     @property
     def dataset_cfg(self):
@@ -1152,7 +1152,7 @@ def setup_trainer_generic(config, setup_model: Callable, cpu=True):
 
     model = setup_model(config, cr, is_main_process=accelerator.is_main_process)
     trainer = instantiate_from_config(
-        config.scfm_config.trainer,
+        config.scfm.trainer,
         cfg=config,
         model=model,
         data=cr,

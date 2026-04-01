@@ -25,24 +25,24 @@ fc_configs = ["geneformer", "geneformer", "geneformer"]
 
 @fixture(scope="module")
 def paired_task_config(request, toy_paired_data_path):
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                "scfm_config/model=transformer",
-                "scfm_config.model.args.d_model=128",
+                "scfm/model=transformer",
+                "scfm.model.args.d_model=128",
                 f"data_path={os.environ['DATA_PATH']}",
                 f"ensembl_dir={os.environ['DATA_PATH']}",
-                "scfm_config/dataset=test",
-                "scfm_config/trainer=paired",
-                "+scfm_config/tasks@scfm_config.tasks.default=paired_test",
-                f"scfm_config.tasks.default.args.reducer_config.type={request.param}",
-                f"scfm_config.dataset.preprocess_args.data_path={toy_paired_data_path}",
+                "scfm/dataset=test",
+                "scfm/trainer=paired",
+                "+scfm/tasks@scfm.tasks.default=paired_test",
+                f"scfm.tasks.default.args.reducer_config.type={request.param}",
+                f"scfm.dataset.preprocess_args.data_path={toy_paired_data_path}",
                 f"cache_preprocessed_dataset_dir=null",
                 f"work_dir=work_dir",
-                "scfm_config/fg=identity",
-                "scfm_config/fe=2nn",
-                "scfm_config/fc=test",
+                "scfm/fg=identity",
+                "scfm/fe=2nn",
+                "scfm/fc=test",
             ],
         )
         OmegaConf.resolve(conf)
@@ -53,22 +53,22 @@ def paired_task_config(request, toy_paired_data_path):
 @fixture(scope="module")
 def single_task_config(request, toy_single_data_path):
     model_config, fc_config = request.param
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                f"scfm_config/model={model_config}",
-                "scfm_config.model.args.d_model=128",
+                f"scfm/model={model_config}",
+                "scfm.model.args.d_model=128",
                 f"data_path={os.environ['DATA_PATH']}",
                 f"ensembl_dir={os.environ['DATA_PATH']}",
-                "scfm_config/dataset=test",
-                "+scfm_config/tasks@scfm_config.tasks.default=test",
-                f"scfm_config.dataset.preprocess_args.data_path={toy_single_data_path}",
+                "scfm/dataset=test",
+                "+scfm/tasks@scfm.tasks.default=test",
+                f"scfm.dataset.preprocess_args.data_path={toy_single_data_path}",
                 f"cache_preprocessed_dataset_dir=null",
                 f"work_dir=work_dir",
-                "scfm_config/fg=identity",
-                "scfm_config/fe=zero",
-                f"scfm_config/fc={fc_config}",
+                "scfm/fg=identity",
+                "scfm/fe=zero",
+                f"scfm/fc={fc_config}",
             ],
         )
         OmegaConf.resolve(conf)
@@ -79,23 +79,23 @@ def single_task_config(request, toy_single_data_path):
 @fixture(scope="module")
 def multitask_config(request, toy_single_data_path):
     model_config, fc_config = request.param
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                f"scfm_config/model={model_config}",
-                "scfm_config.model.args.d_model=128",
+                f"scfm/model={model_config}",
+                "scfm.model.args.d_model=128",
                 f"data_path={os.environ['DATA_PATH']}",
                 f"ensembl_dir={os.environ['DATA_PATH']}",
-                "scfm_config/dataset=test",
-                "+scfm_config/tasks@scfm_config.tasks.1=test",
-                "+scfm_config/tasks@scfm_config.tasks.2=test",
-                f"scfm_config.dataset.preprocess_args.data_path={toy_single_data_path}",
+                "scfm/dataset=test",
+                "+scfm/tasks@scfm.tasks.1=test",
+                "+scfm/tasks@scfm.tasks.2=test",
+                f"scfm.dataset.preprocess_args.data_path={toy_single_data_path}",
                 f"cache_preprocessed_dataset_dir=null",
                 f"work_dir=work_dir",
-                "scfm_config/fg=identity",
-                "scfm_config/fe=zero",
-                f"scfm_config/fc={fc_config}",
+                "scfm/fg=identity",
+                "scfm/fe=zero",
+                f"scfm/fc={fc_config}",
             ],
         )
         OmegaConf.resolve(conf)
@@ -105,21 +105,21 @@ def multitask_config(request, toy_single_data_path):
 
 @fixture(scope="module")
 def expression_only_config(request, toy_single_data_path):
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                "scfm_config/model=expression_only",
+                "scfm/model=expression_only",
                 f"data_path={os.environ['DATA_PATH']}",
                 f"ensembl_dir={os.environ['DATA_PATH']}",
-                "scfm_config/dataset=test",
-                "+scfm_config/tasks@scfm_config.tasks.default=test",
-                f"scfm_config.dataset.preprocess_args.data_path={toy_single_data_path}",
+                "scfm/dataset=test",
+                "+scfm/tasks@scfm.tasks.default=test",
+                f"scfm.dataset.preprocess_args.data_path={toy_single_data_path}",
                 f"cache_preprocessed_dataset_dir=null",
                 f"work_dir=work_dir",
-                "scfm_config/fg=dummy",
-                "scfm_config/fe=dummy",
-                "scfm_config/fc=dummy",
+                "scfm/fg=dummy",
+                "scfm/fe=dummy",
+                "scfm/fc=dummy",
             ],
         )
         OmegaConf.resolve(conf)
@@ -130,23 +130,23 @@ def expression_only_config(request, toy_single_data_path):
 @fixture(scope="module")
 def partition_config(request, toy_partitioned_data_path):
     model_config, fc_config = request.param
-    with hydra.initialize(version_base=None, config_path="../Heimdall"):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
         conf = hydra.compose(
             config_name="config",
             overrides=[
-                f"scfm_config/model={model_config}",
-                "scfm_config.model.args.d_model=128",
+                f"scfm/model={model_config}",
+                "scfm.model.args.d_model=128",
                 f"data_path={os.environ['DATA_PATH']}",
                 f"ensembl_dir={os.environ['DATA_PATH']}",
-                "scfm_config/dataset=test",
-                "+scfm_config/tasks@scfm_config.tasks.default=test",
-                f"scfm_config.dataset.preprocess_args.data_path={toy_partitioned_data_path}",
-                "scfm_config/trainer=partitioned",
+                "scfm/dataset=test",
+                "+scfm/tasks@scfm.tasks.default=test",
+                f"scfm.dataset.preprocess_args.data_path={toy_partitioned_data_path}",
+                "scfm/trainer=partitioned",
                 f"cache_preprocessed_dataset_dir=null",
                 f"work_dir=work_dir",
-                "scfm_config/fg=identity",
-                "scfm_config/fe=zero",
-                f"scfm_config/fc={fc_config}",
+                "scfm/fg=identity",
+                "scfm/fe=zero",
+                f"scfm/fc={fc_config}",
             ],
         )
         OmegaConf.resolve(conf)
