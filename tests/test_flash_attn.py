@@ -13,7 +13,7 @@ from omegaconf import OmegaConf
 from pytest import fixture
 from torch import nn
 
-from Heimdall.cell_representations import CellRepresentation
+from Heimdall.cell_representations import CellRepresentation, setup_data
 from Heimdall.models import HeimdallModel
 from Heimdall.utils import INPUT_KEYS, get_dtype, instantiate_from_config
 

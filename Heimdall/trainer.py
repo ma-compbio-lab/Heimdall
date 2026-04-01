@@ -44,7 +44,7 @@ from Heimdall.utils import (  # get_cached_paths,
 
 
 class HeimdallTrainer:
-    CHECKPOINT_KEYS = ("fg", "fe", "fc", "model")
+    CHECKPOINT_KEYS = ("tasks", "fg", "fe", "fc", "model", "dataset.preprocess_args.data_path")
 
     def __init__(
         self,
@@ -52,7 +52,11 @@ class HeimdallTrainer:
         model,
         data,
         accelerator: Accelerator,
+        batchsize: int,
+        epochs: int,
         random_seed: int = 0,
+        early_stopping: bool = False,
+        early_stopping_patience: int = 5,
         accumulate_grad_batches: int = 1,
         grad_norm_clip: float = 1.0,
         skip_umaps: bool = True,
@@ -66,7 +70,7 @@ class HeimdallTrainer:
 
         self.data = data
         self.accelerator = accelerator
-        self.has_embeddings = self.cfg.model.name != "logistic_regression"
+        self.has_embeddings = self.model_cfg.name != "logistic_regression"
 
         self.check_flash_attn()
 
@@ -77,7 +81,11 @@ class HeimdallTrainer:
 
         self.setup_class_names_and_num_labels(data)
 
+        self.batchsize = batchsize
+        self.epochs = epochs
         self.random_seed = random_seed
+        self.early_stopping = early_stopping
+        self.early_stopping_patience = early_stopping_patience
         self.accumulate_grad_batches = accumulate_grad_batches
         self.grad_norm_clip = grad_norm_clip
         self.skip_umaps = skip_umaps
@@ -116,6 +124,42 @@ class HeimdallTrainer:
 
         self.print_r0("> Finished Wrapping the model, optimizer, and dataloaders in accelerate")
         self.print_r0("> run HeimdallTrainer.train() to begin training")
+
+    @property
+    def local_cfg(self):
+        return self.data.local_cfg
+
+    @property
+    def model_cfg(self):
+        return self.cfg.scfm.model
+
+    @property
+    def dataset_cfg(self):
+        return self.local_cfg.dataset
+
+    @property
+    def trainer_cfg(self):
+        return self.local_cfg.trainer
+
+    @property
+    def optimizer_cfg(self):
+        return self.local_cfg.optimizer
+
+    @property
+    def scheduler_cfg(self):
+        return self.local_cfg.scheduler
+
+    @property
+    def fg_cfg(self):
+        return self.data.fg_cfg
+
+    @property
+    def fe_cfg(self):
+        return self.data.fe_cfg
+
+    @property
+    def fc_cfg(self):
+        return self.data.fc_cfg
 
     def check_flash_attn(self):
         if (
@@ -181,13 +225,21 @@ class HeimdallTrainer:
         self.data.print_r0(message)
 
     def _initialize_optimizer(self):
-        optimizer_class = getattr(torch.optim, self.cfg.optimizer.name)
-        return optimizer_class(self.model.parameters(), **OmegaConf.to_container(self.cfg.optimizer.args))
+        optimizer_class = getattr(torch.optim, self.optimizer_cfg.name)
+        return optimizer_class(
+            self.model.parameters(),
+            **OmegaConf.to_container(self.optimizer_cfg.args),
+        )
 
     def _initialize_wandb(self, **wandb_kwargs):
         if self.run_wandb and self.accelerator.is_main_process:
             print("==> Starting a new WANDB run")
-            new_tags = (self.cfg.dataset.dataset_name, self.cfg.fg.type, self.cfg.fe.type, self.cfg.fc.type)
+            new_tags = (
+                self.dataset_cfg.dataset_name,
+                self.fg_cfg.type,
+                self.fe_cfg.type,
+                self.fc_cfg.type,
+            )
             wandb_config = {
                 "wandb": {
                     "tags": new_tags,
@@ -204,14 +256,13 @@ class HeimdallTrainer:
             print("==> Initialized Run")
 
     def _initialize_lr_scheduler(self):
-        tasklist = self.data.tasklist
-        global_batch_size = tasklist.batchsize
-        total_steps = len(self.dataloader_train.dataset) // global_batch_size * tasklist.epochs
-        warmup_ratio = self.cfg.scheduler.warmup_ratio
+        global_batch_size = self.batchsize
+        total_steps = len(self.dataloader_train.dataset) // global_batch_size * self.epochs
+        warmup_ratio = self.scheduler_cfg.warmup_ratio
         warmup_step = int(warmup_ratio * total_steps)
 
         self.lr_scheduler = get_scheduler(
-            name=self.cfg.scheduler.name,
+            name=self.scheduler_cfg.name,
             optimizer=self.optimizer,
             num_warmup_steps=warmup_step,
             num_training_steps=total_steps,
@@ -334,12 +385,12 @@ class HeimdallTrainer:
         if resume_from_checkpoint:
             start_epoch = self.load_checkpoint()
 
-        if start_epoch >= self.data.tasklist.epochs:
+        if start_epoch >= self.epochs:
             # last_epoch = max(0, start_epoch - 1)
             # Run one eval pass on the loaded weights to get embeddings
             # _, val_outputs = self.validate_model(self.dataloader_val, "valid")
             # _, test_outputs = self.validate_model(self.dataloader_test, "test")
-            if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
+            if self.accelerator.is_main_process and self.model_cfg.name != "logistic_regression":
                 # self.save_adata_umap(test_embed, val_embed)
                 # self.print_r0(f"> Saved UMAP from checkpoint epoch {last_epoch}")
                 pass
@@ -355,8 +406,8 @@ class HeimdallTrainer:
                 ), "The tracking metric is not in the list of metrics, please check your configuration task file"
 
         # Initialize early stopping parameters
-        early_stopping = self.data.tasklist.early_stopping
-        early_stopping_patience = self.data.tasklist.early_stopping_patience
+        early_stopping = self.early_stopping
+        early_stopping_patience = self.early_stopping_patience
         patience_counter = defaultdict(int)
 
         def fit_epoch(epoch: int):
@@ -427,10 +478,11 @@ class HeimdallTrainer:
 
             return False
 
-        for epoch in range(start_epoch, start_epoch + self.data.tasklist.epochs):
-            precomputation_condition = precompute_last_epoch and epoch + 1 == self.data.tasklist.epochs
+        for epoch in range(start_epoch, self.epochs):
+            precomputation_condition = precompute_last_epoch and epoch + 1 == self.epochs
             context = nullcontext()
             if precomputation_condition:
+                self.print_r0("> Precomputation condition is met.")
                 context = PrecomputationContext(self, save_precomputed=True, get_precomputed=True, run_wandb=True)
 
             with context:
@@ -541,7 +593,10 @@ class HeimdallTrainer:
         # inputs = (batch["identity_inputs"], batch["expression_inputs"])
 
         if self.get_precomputed:
-            outputs = self.get_precomputed_outputs(inputs)
+            try:
+                outputs = self.get_precomputed_outputs(inputs)
+            except KeyError:
+                outputs = self.model(inputs=inputs)
         else:
             outputs = self.model(inputs=inputs)
 
@@ -729,10 +784,14 @@ class HeimdallTrainer:
                 if self.fastdev:
                     break
 
-            if not training:
-                for key in outputs:
-                    for subtask_name, _ in self.data.tasklist:
-                        outputs[key][subtask_name] = np.array(outputs[key][subtask_name])
+            # if not training:
+            #     for subtask_name, _ in self.data.tasklist:
+            #         for key in outputs:
+            #             # print(f'{key=}')
+            #             # print(f'{subtask_name=}')
+            #             # print(f'{outputs[key][subtask_name][0].shape=}')
+            #             # print(f'{np.unique([out.shape for out in outputs[key][subtask_name]])=}')
+            #             outputs[key][subtask_name] = np.array(outputs[key][subtask_name])
 
         return outputs, loss
 
@@ -863,24 +922,49 @@ class HeimdallTrainer:
             epoch=epoch,
         )
 
+    def get_checkpoint_directory(self, additional_keys: tuple = (), hash_vars: tuple = ()):
+        cache_dir = Path(self.cfg.cache_preprocessed_dataset_dir)
+        keys = self.CHECKPOINT_KEYS + additional_keys
+        checkpoint_directory, _, minimal_cfg = get_fully_qualified_cache_paths(
+            self.cfg,
+            cache_dir / "checkpoints",
+            keys=keys,
+            hash_vars=hash_vars,
+            mkdir=False,
+        )
+
+        return checkpoint_directory
+
     def initialize_checkpointing(self, additional_keys: tuple = (), hash_vars: tuple = ()):
         """Initialize checkpoint directory."""
         if getattr(self.cfg, "work_dir", None) is not None:
             self.results_folder = Path(self.cfg.work_dir)
         else:
-            cache_dir = Path(self.cfg.cache_preprocessed_dataset_dir)
-            keys = self.CHECKPOINT_KEYS + additional_keys
-            self.results_folder, _, _ = get_fully_qualified_cache_paths(
-                self.cfg,
-                cache_dir / "checkpoints",
-                keys=keys,
-                hash_vars=hash_vars,
-            )
+            self.results_folder = self.get_checkpoint_directory(additional_keys=additional_keys, hash_vars=hash_vars)
 
-        # Create directory if it doesn't exist
         if self.accelerator.is_main_process:
-            self.results_folder.mkdir(parents=True, exist_ok=True)
-            self.print_r0(f"> Checkpoint directory initialized at {self.results_folder}")
+            try:
+                self.results_folder.mkdir(parents=True, exist_ok=False)
+                self.print_r0(f"> Checkpoint directory initialized at {self.results_folder}")
+            except FileExistsError:
+                self.print_r0(f"> Checkpoint directory already exists at {self.results_folder}")
+
+    def get_latest_checkpoint_path(self):
+        self.initialize_checkpointing()
+
+        milestone_path = self.results_folder / "milestone.txt"
+        if not milestone_path.exists():
+            return None
+
+        milestone = milestone_path.read_text().strip()
+        if not milestone:
+            return None
+
+        checkpoint_path = self.results_folder / f"model-{milestone}.pt"
+        if checkpoint_path.exists():
+            return checkpoint_path
+
+        return None
 
     def save_checkpoint(self, epoch):
         """Save model checkpoint at the given epoch."""
@@ -888,9 +972,7 @@ class HeimdallTrainer:
         if not self.accelerator.is_main_process:
             return
 
-        # Ensure results folder exists
-        if not hasattr(self, "results_folder") or not self.results_folder.exists():
-            self.initialize_checkpointing()
+        self.initialize_checkpointing()
 
         # Calculate current step based on epoch
         # step = len(self.dataloader_train) * epoch
@@ -929,12 +1011,7 @@ class HeimdallTrainer:
         """Load a checkpoint based on milestone.txt or a specific milestone
         number."""
         # Ensure results folder is initialized
-        if not hasattr(self, "results_folder") or not self.results_folder.exists():
-            self.initialize_checkpointing()
-
-        if not self.results_folder.exists():
-            self.print_r0(f"> Results folder {self.results_folder} does not exist. Starting from scratch.")
-            return 0
+        self.initialize_checkpointing()
 
         # Determine which milestone to load
         if specific_milestone is not None:
@@ -973,16 +1050,16 @@ class HeimdallTrainer:
 
         if "version" in data:
             self.print_r0(f"> Checkpoint version: {data['version']}")
-        self.print_r0(f"> Resumed from epoch {epoch}, step {self.step}")
+        self.print_r0(f"> Resumed from epoch {epoch + 1}, step {self.step}")
 
         return epoch + 1
 
     def load_trainer_state(self, data):
         # Restore optimizer and scheduler states
 
-        clean_opt_sd = clean_optimizer_state_for_current_model(data["optimizer"], self.optimizer, verbose=True)
+        # clean_opt_sd = clean_optimizer_state_for_current_model(data["optimizer"], self.optimizer, verbose=True)
 
-        self.optimizer.load_state_dict(clean_opt_sd)
+        # self.optimizer.load_state_dict(clean_opt_sd)
         if (data["scaler"] is not None) and (self.accelerator.scaler is not None):
             self.accelerator.scaler.load_state_dict(data["scaler"])
         self.lr_scheduler.load_state_dict(data["lr_scheduler"])
@@ -1018,27 +1095,30 @@ class HeimdallTrainer:
 
         return epoch
 
-    def load_pretrained(self):
-        self.initialize_checkpointing()
+    def get_pretrained_load_path(self):
+        config = self.local_cfg
+        load_path = None
+        if "pretrained_milestone" in config and config.pretrained_milestone is not None:
+            self.initialize_checkpointing()
 
-        # Load the checkpoint
-        config = self.cfg
-        if "pretrained_milestone" in config:
             load_path = self.results_folder / f"model-{config.pretrained_milestone}.pt"
             if not load_path.exists():
                 self.print_r0(
                     f"> Checkpoint file {load_path} does not exist. `{config.pretrained_milestone=}` is invalid.",
                 )
-                return
-        elif "pretrained_ckpt_path" in config:
+        elif "pretrained_ckpt_path" in config and config.pretrained_ckpt_path is not None:
             load_path = Path(config.pretrained_ckpt_path)
             if not load_path.exists():
                 self.print_r0(
                     f"> Checkpoint file {load_path} does not exist. Check the value of "
                     f"`{config.pretrained_ckpt_path=}` for correctness.",
                 )
-                return
-        else:
+
+        return load_path
+
+    def load_pretrained(self):
+        load_path = self.get_pretrained_load_path()
+        if load_path is None:
             return
 
         self.print_r0(f"> Loading pretrained model state from {load_path}")
@@ -1061,18 +1141,18 @@ class HeimdallTrainer:
         self.load_trainer_state(data)
 
         if self.accelerator.is_main_process:
-            print(f">Finished loading pretrained params loaded from {load_path}")
+            print(f"> Finished loading pretrained params loaded from {load_path}")
 
 
 def setup_trainer_generic(config, setup_model: Callable, cpu=True):
-    accelerator, cr, run_wandb, only_preprocess_data = setup_data(config)
+    accelerator, cr, run_wandb, only_preprocess_data = setup_data(config, cpu=cpu)
 
     if only_preprocess_data:
         return
 
     model = setup_model(config, cr, is_main_process=accelerator.is_main_process)
     trainer = instantiate_from_config(
-        config.trainer,
+        config.scfm.trainer,
         cfg=config,
         model=model,
         data=cr,

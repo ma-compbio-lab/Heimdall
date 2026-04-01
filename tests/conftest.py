@@ -27,6 +27,9 @@ class MockCellRepresentation(CellRepresentation):
     _cfg: OmegaConf
     verbose: bool = True
 
+    def __post_init__(self):
+        self._raw_gene_names = self.adata.var_names
+
     def set_representation_functions(
         self,
         fg: Fg | None = None,
@@ -108,7 +111,7 @@ def toy_partitioned_data_path(pytestconfig, plain_toy_data):
     return partition_directory
 
 
-@fixture
+@fixture(scope="module")
 def mock_dataset(gene_names):
 
     mock_expression = csr_array(
@@ -140,7 +143,7 @@ def mock_dataset(gene_names):
 #     )
 
 
-@fixture
+@fixture(scope="module")
 def mock_dataset_all_valid_genes(valid_gene_names):
     mock_expression = csr_array(
         np.array(
@@ -163,7 +166,7 @@ def mock_dataset_all_valid_genes(valid_gene_names):
     )
 
 
-@fixture
+@fixture(scope="module")
 def zero_expression_mock_dataset(gene_names):
 
     mock_expression = csr_array(

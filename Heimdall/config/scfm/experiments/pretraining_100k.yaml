@@ -1,0 +1,21 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: pretrain_geneformer_dev
+  - override /scfm/model@scfm.model: transformer
+  - override /scfm/dataset@scfm.dataset: pretrain_100k
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: scbert_randsort
+  - override /scfm/fe@scfm.fe: binning_scbert
+  - override /scfm/fg@scfm.fg: esm2
+
+project_name: pretraining
+run_name: ${scfm.fg.type}_${scfm.fe.type}_${scfm.fc.type}_${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}
+
+scfm:
+  optimizer:
+    args:
+      lr: 2e-3
+
+seed: 55
+work_dir: ${project_name}_results/${scfm.fg.type}_${scfm.fe.name}_${scfm.fc.type}_${scfm.dataset.dataset_name}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}_seed${seed}_ag${scfm.fe.args.drop_zeros}

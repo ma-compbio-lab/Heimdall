@@ -1,0 +1,27 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: ../old_tasks/cell_cell_interaction
+  - override /scfm/model@scfm.model: transformer
+  - override /scfm/dataset@scfm.dataset: ../old_dataset/zeng_merfish_ccc_subset
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/trainer@scfm.trainer: default
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: geneformer
+  - override /scfm/fg@scfm.fg: identity
+  - override /scfm/loss@scfm.loss: BCEWithLogitsLoss
+
+project_name: cell_cell_interaction_dev
+run_name: test01
+
+scfm:
+  optimizer:
+    learning_rate: 2e-3
+  tasks:
+    default:
+      args:
+        epochs: 1
+  trainer:
+    accumulate_grad_batches: 1
+
+seed: 55
+work_dir: work_dir

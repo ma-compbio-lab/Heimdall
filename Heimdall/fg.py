@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from pandas.api.typing import NAType
 
-from Heimdall.utils import conditional_print, pca_reduction
+from Heimdall.utils import check_states, conditional_print, pca_reduction
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
@@ -21,7 +21,6 @@ class Fg(ABC):
     """Abstraction of the gene embedding mapping paradigm.
 
     Args:
-        adata: input AnnData-formatted dataset, with gene names in the `.var` dataframe.
         d_embedding: dimensionality of embedding for each gene entity
 
     """
@@ -49,6 +48,7 @@ class Fg(ABC):
         self.do_pca_reduction = do_pca_reduction
 
     @abstractmethod
+    @check_states(adata=True)
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         """Preprocess gene embeddings and store them for use during model
         inference.
@@ -175,6 +175,7 @@ class PretrainedFg(Fg, ABC):
 
         """
 
+    @check_states(adata=True)
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         embedding_map = self.load_embeddings()
 
@@ -262,6 +263,7 @@ class IdentityFg(Fg):
 
     """
 
+    @check_states(adata=True)
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         self.gene_embeddings = None
         self.adata.var["identity_embedding_index"] = np.arange(self.adata.n_vars)

@@ -6,9 +6,8 @@ import torch
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from scipy.sparse import csr_array
 
-from Heimdall.utils import _get_inputs_from_csr, issparse
+from Heimdall.utils import _get_inputs_from_csr, check_states
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
@@ -44,14 +43,14 @@ class Fe(ABC):
         self.drop_zeros = drop_zeros
         self.rng = np.random.default_rng(rng)
 
-        if not issparse(self.adata.X):
-            if getattr(self.adata, "isbacked", False):
-                # TODO: add back with verbose
-                pass
-                # print("> Data is dense and backed, skipping conversion to CSR to keep memory mapping.")
-            else:
-                # print("> Data was provided in dense format, converting to CSR. Consider precomputing.")
-                self.adata.X = csr_array(self.adata.X)
+        # if not issparse(self.adata.X):
+        #     if getattr(self.adata, "isbacked", False):
+        #         # TODO: add back with verbose
+        #         pass
+        #         # print("> Data is dense and backed, skipping conversion to CSR to keep memory mapping.")
+        #     else:
+        #         # print("> Data was provided in dense format, converting to CSR. Consider precomputing.")
+        #         self.adata.X = csr_array(self.adata.X)
 
     def _get_inputs_from_csr(self, cell_index: int):
         """Get expression values and gene indices from internal CSR
@@ -61,8 +60,18 @@ class Fe(ABC):
             cell_index: cell for which to process expression values and get indices, as stored in `self.adata`.
 
         """
-        return _get_inputs_from_csr(self.data, cell_index=cell_index, drop_zeros=self.drop_zeros)
+        identity_inputs, expression_inputs = _get_inputs_from_csr(
+            self.data,
+            cell_index=cell_index,
+            drop_zeros=self.drop_zeros,
+        )
+        is_in_panel = np.isin(identity_inputs, self.gene_panel_idx)
+        identity_inputs = identity_inputs[is_in_panel]
+        expression_inputs = expression_inputs[is_in_panel]
 
+        return identity_inputs, expression_inputs
+
+    @check_states(adata=True)
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         """Preprocess expression embeddings and store them for use during model
         inference.
@@ -115,6 +124,17 @@ class Fe(ABC):
     @property
     def adata(self):
         return self.data.adata
+
+    @property
+    def gene_panel_idx(self):
+        if not hasattr(self, "_gene_panel_idx"):
+            self._gene_panel_idx = np.arange(self.data.num_genes)
+
+        return self._gene_panel_idx
+
+    @gene_panel_idx.setter
+    def gene_panel_idx(self, val):
+        self._gene_panel_idx = val
 
 
 class ScBERTBinningFe(Fe):

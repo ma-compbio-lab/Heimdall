@@ -1,0 +1,23 @@
+type: Heimdall.task.PairedInstanceTask
+
+args:
+  task_type: binary
+  interaction_type: _all_
+  label_col_name: class
+  splits:
+    type: predefined
+    keys_:
+      train: train
+      val: val
+      test: test
+  metrics: [Accuracy]
+  shuffle: true
+  # batchsize: 32
+  # epochs: 10
+  reducer_config:
+    type:
+  head_config:
+    type: Heimdall.models.LinearCellPredHead
+    args:
+  loss_config:
+    name: CrossEntropyLoss

@@ -4,6 +4,7 @@ import numpy as np
 from torch.utils.data import BatchSampler, DistributedSampler, Subset
 
 from Heimdall.datasets import PartitionedDataset, PartitionedSubset
+from Heimdall.task import Tasklist
 from Heimdall.utils import AllPartitionsExhausted
 
 
@@ -130,7 +131,27 @@ class PartitionIndexIterator:
             raise e
 
 
-class PartitionedBatchSampler(BatchSampler):
+class DefaultBatchSampler(BatchSampler):
+    """Heimdall batch sampler.
+
+    Allows for task-specific behavior before sampling every batch. Useful for
+    e.g. contrastive learning.
+
+    """
+
+    def __init__(self, sampler, batch_size, drop_last, tasklist: Tasklist):
+        super().__init__(sampler, batch_size, drop_last)
+        self.tasklist = tasklist
+
+    def __iter__(self):
+        for batch_indices in super().__iter__():
+            for _, subtask in self.tasklist:
+                subtask.on_batch()
+
+            yield batch_indices
+
+
+class PartitionedBatchSampler(DefaultBatchSampler):
     """Virtualized batched sampling from multiple partitions.
 
     Iterates through the indices provided by the PartitionedDistributedSampler for a partition until
@@ -144,6 +165,9 @@ class PartitionedBatchSampler(BatchSampler):
             return
         while True:
             try:
+                for _, subtask in self.tasklist:
+                    subtask.on_batch()
+
                 batch = []
                 for idx in self.sampler:
                     batch.append(idx)

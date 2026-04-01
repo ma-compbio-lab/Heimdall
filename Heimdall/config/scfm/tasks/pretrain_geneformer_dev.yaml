@@ -1,0 +1,17 @@
+type: Heimdall.task.SeqMaskedMLMTask
+
+args:
+  task_type: mlm
+  label_obsm_name: mlm
+  metrics: []
+  train_split: 0.95
+  shuffle: true
+  # batchsize: 512
+  # epochs: 10
+    # args:
+    #   mask_ratio: 0.15
+  head_config:
+    type: Heimdall.models.LinearSeqPredHead
+    args:
+  loss_config:
+    type: Heimdall.losses.FlattenCrossEntropyLoss

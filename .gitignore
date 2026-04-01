@@ -3,7 +3,7 @@
 
 heimdall_preprocessed/*
 .local_nvim_session
-.swp
+*.swp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, Union
 import numpy as np
 from numpy.typing import NDArray
 from omegaconf import DictConfig
+from torch import Tensor
+from torch.utils.data import default_collate
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
 
-from Heimdall.utils import get_fully_qualified_cache_paths, instantiate_from_config
+from Heimdall.utils import clear_fully_qualified_cache_paths, get_fully_qualified_cache_paths, instantiate_from_config
 
 CellFeatType = NDArray[np.int_] | NDArray[np.float32]
 FeatType = CellFeatType | tuple[CellFeatType, CellFeatType]
@@ -21,7 +23,8 @@ LabelType = NDArray[np.int_] | NDArray[np.float32]
 class Task(ABC):
     """Heimdall task key-value store.
 
-    Contains information about an scFM task and training details.
+    Contains information about an scFM task and training details. (Pre)computes
+    labels for each task.
 
     """
 
@@ -29,9 +32,8 @@ class Task(ABC):
     task_type: str
     metrics: list[str]
     shuffle: bool
-    batchsize: int
-    epochs: int
-    dataset_config: DictConfig
+    # batchsize: int
+    # epochs: int
     head_config: DictConfig
     loss_config: DictConfig
     interaction_type: str | None = None
@@ -42,8 +44,8 @@ class Task(ABC):
     splits: DictConfig | None = None
     train_split: float | None = (None,)
     track_metric: str | None = None
-    early_stopping: bool = False
-    early_stopping_patience: int = 5
+    # early_stopping: bool = False
+    # early_stopping_patience: int = 5
 
     @property
     def labels(self) -> Union[NDArray[np.int_], NDArray[np.float32]]:
@@ -104,16 +106,22 @@ class Task(ABC):
     def setup_labels(self): ...
 
     def get_cache_path(self, cache_dir, hash_vars, task_name):
-        keys = set(self.data.DATASET_KEYS).union(set(self.data.TOKENIZER_KEYS))
-        keys.add("tasks")
         processed_data_path, _, _ = get_fully_qualified_cache_paths(
-            self.data._cfg,
-            cache_dir / "processed_data",
+            self.data.local_cfg,
+            cache_dir,
             filename=f"{task_name}_labels.pkl",
-            keys=keys,
+            keys=self.data.TOKENIZER_KEYS,
             hash_vars=hash_vars,
         )
         return processed_data_path
+
+    def clear_cache_path(self, cache_dir, hash_vars, task_name):
+        clear_fully_qualified_cache_paths(
+            self.data.local_cfg,
+            cache_dir,
+            keys=self.data.TOKENIZER_KEYS,
+            hash_vars=hash_vars,
+        )
 
     def to_cache(self, cache_dir, hash_vars, task_name):
         processed_data_path = self.get_cache_path(cache_dir, hash_vars, task_name)
@@ -138,6 +146,22 @@ class Task(ABC):
         return {
             "labels": self.labels[idx],
         }
+
+    def on_batch(self):
+        """Callback to reset task state on start of sampling batch."""
+        return None
+
+    def collate(self, values: list[Tensor | None]):
+        # Drop Nones, or replace with zeros
+        is_invalid = [v is None for v in values]
+        if all(is_invalid):
+            return None
+        elif any(is_invalid):
+            raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
+        else:
+            collated_values = default_collate(values)
+
+        return collated_values
 
 
 class SingleInstanceTask(Task):
@@ -287,29 +311,28 @@ class Tasklist:
 
     PROPERTIES = (
         "splits",
-        "shuffle",
-        "batchsize",
-        "epochs",
         "interaction_type",
-        "early_stopping",
-        "early_stopping_patience",
+        "shuffle",
+        # "batchsize",
+        # "epochs",
+        # "early_stopping",
+        # "early_stopping_patience",
     )
 
     def __init__(
         self,
         data: "CellRepresentation",
-        subtask_configs: DictConfig | dict,
-        dataset_config: DictConfig | dict,
+        tasks: DictConfig | dict,
     ):
-
+        if not tasks:
+            raise ValueError("Tasklist requires at least one task configuration.")
         self.data = data
         self._tasks = {
             subtask_name: instantiate_from_config(subtask_config, data)
-            for subtask_name, subtask_config in subtask_configs.items()
+            for subtask_name, subtask_config in tasks.items()
         }
 
         self.set_unique_properties()
-        self.dataset_config = dataset_config
         self.num_subtasks = len(self._tasks)
 
     def set_unique_properties(self):

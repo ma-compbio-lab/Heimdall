@@ -10,15 +10,15 @@ from scipy.sparse import csr_array
 def test_dummy_getitem(geneformer_fc, scgpt_fc):
     dummy_index = -1
 
-    identity_inputs, expression_inputs, padding_mask = geneformer_fc[dummy_index]
-    assert np.all(identity_inputs == geneformer_fc.fg.pad_value)
-    assert np.all(expression_inputs == geneformer_fc.fe.pad_value)
-    assert np.all(padding_mask)
+    outputs = geneformer_fc[dummy_index]
+    assert np.all(outputs["identity_inputs"] == geneformer_fc.fg.pad_value)
+    assert np.all(outputs["expression_inputs"] == geneformer_fc.fe.pad_value)
+    assert np.all(outputs["expression_padding"])
 
-    identity_inputs, expression_inputs, padding_mask = scgpt_fc[dummy_index]
-    assert np.all(identity_inputs == scgpt_fc.fg.pad_value)
-    assert np.all(expression_inputs == scgpt_fc.fe.pad_value)
-    assert np.all(padding_mask)
+    outputs = scgpt_fc[dummy_index]
+    assert np.all(outputs["identity_inputs"] == scgpt_fc.fg.pad_value)
+    assert np.all(outputs["expression_inputs"] == scgpt_fc.fe.pad_value)
+    assert np.all(outputs["expression_padding"])
 
 
 def test_geneformer_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, geneformer_fc):
@@ -42,12 +42,12 @@ def test_geneformer_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset
     _, raw_seq_length = identity_expected.shape
 
     for cell_index in range(len(zero_expression_mock_dataset.adata)):
-        identity_inputs, expression_inputs, padding_mask = geneformer_fc[cell_index]
-        assert np.allclose(identity_expected[[cell_index], :].toarray(), identity_inputs[:raw_seq_length])
-        assert len(identity_inputs) == geneformer_fc.max_input_length
+        outputs = geneformer_fc[cell_index]
+        assert np.allclose(identity_expected[[cell_index], :].toarray(), outputs["identity_inputs"][:raw_seq_length])
+        assert len(outputs["identity_inputs"]) == geneformer_fc.max_input_length
 
-        assert not np.any(padding_mask[:raw_seq_length])
-        assert np.all(padding_mask[raw_seq_length:])
+        assert not np.any(outputs["expression_padding"][:raw_seq_length])
+        assert np.all(outputs["expression_padding"][raw_seq_length:])
 
 
 def test_scgpt_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, scgpt_fc):
@@ -84,13 +84,13 @@ def test_scgpt_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, scg
     seed = 0
     rng = np.random.default_rng(seed)
     for cell_index in range(len(zero_expression_mock_dataset.adata)):
-        identity_inputs, expression_inputs, padding_mask = scgpt_fc[cell_index]
+        outputs = scgpt_fc[cell_index]
         sample_indices = rng.choice(raw_seq_length, raw_seq_length, replace=False)
-        assert np.allclose(identity_expected[[cell_index], sample_indices], identity_inputs)
-        assert np.allclose(expression_expected[[cell_index], sample_indices], expression_inputs)
-        assert len(identity_inputs) == scgpt_fc.max_input_length
+        assert np.allclose(identity_expected[[cell_index], sample_indices], outputs["identity_inputs"])
+        assert np.allclose(expression_expected[[cell_index], sample_indices], outputs["expression_inputs"])
+        assert len(outputs["identity_inputs"]) == scgpt_fc.max_input_length
 
-        assert not np.any(padding_mask[: scgpt_fc.max_input_length])
+        assert not np.any(outputs["expression_padding"][: scgpt_fc.max_input_length])
 
 
 def test_scBERT_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, scbert_fc):
@@ -126,13 +126,13 @@ def test_scBERT_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, sc
     seed = 0
     rng = np.random.default_rng(seed)
     for cell_index in range(len(zero_expression_mock_dataset.adata)):
-        identity_inputs, expression_inputs, padding_mask = scbert_fc[cell_index]
+        outputs = scbert_fc[cell_index]
         sample_indices = rng.choice(raw_seq_length, raw_seq_length, replace=False)
-        assert np.allclose(identity_expected[[cell_index], sample_indices], identity_inputs)
-        assert np.allclose(expression_expected[[cell_index], sample_indices], expression_inputs)
-        assert len(identity_inputs) == scbert_fc.max_input_length
+        assert np.allclose(identity_expected[[cell_index], sample_indices], outputs["identity_inputs"])
+        assert np.allclose(expression_expected[[cell_index], sample_indices], outputs["expression_inputs"])
+        assert len(outputs["identity_inputs"]) == scbert_fc.max_input_length
 
-        assert not np.any(padding_mask[: scbert_fc.max_input_length])
+        assert not np.any(outputs["expression_padding"][: scbert_fc.max_input_length])
 
 
 # def test_uce_fc_order(mock_dataset_all_valid_genes, uce_fc):
@@ -148,8 +148,8 @@ def test_scBERT_fc_preprocess_cells_and_getitem(zero_expression_mock_dataset, sc
 #     )
 #
 #     for cell_index in range(len(identity_fg.adata)):
-#         cell_identity_inputs, cell_expression_inputs = weighted_sampling_fe[cell_index]
-#         assert np.allclose(expected[cell_index], cell_identity_inputs)
+#         cell_outputs["identity_inputs"], cell_expression_inputs = weighted_sampling_fe[cell_index]
+#         assert np.allclose(expected[cell_index], cell_outputs["identity_inputs"])
 #
 #     assert weighted_sampling_fe.pad_value == 4
 #     assert weighted_sampling_fe.mask_value == 5
@@ -187,19 +187,22 @@ def test_uce_fc_preprocess_cells_and_getitem(mock_dataset_all_valid_genes, uce_f
     _, raw_seq_length = identity_expected.shape
 
     for cell_index in range(len(mock_dataset_all_valid_genes.adata)):
-        identity_inputs, expression_inputs, padding_mask = uce_fc[cell_index]
-        assert np.allclose(identity_expected[[cell_index], :].toarray(), identity_inputs[:raw_seq_length])
-        assert np.allclose(expression_expected[[cell_index], :].toarray(), expression_inputs[:raw_seq_length])
-        assert len(identity_inputs) == uce_fc.max_input_length
+        outputs = uce_fc[cell_index]
+        assert np.allclose(identity_expected[[cell_index], :].toarray(), outputs["identity_inputs"][:raw_seq_length])
+        assert np.allclose(
+            expression_expected[[cell_index], :].toarray(),
+            outputs["expression_inputs"][:raw_seq_length],
+        )
+        assert len(outputs["identity_inputs"]) == uce_fc.max_input_length
 
-        assert not np.any(padding_mask[:raw_seq_length])
+        assert not np.any(outputs["expression_padding"][:raw_seq_length])
 
 
 def test_geneformer_fc_reduce(geneformer_fc):
     ...
     # geneformer_fc.reduce() # TODO: fill out function call
 
-    # output = mock_dataset.obsm["cell_identity_inputs"]
+    # output = mock_dataset.obsm["cell_outputs["identity_inputs"]"]
 
     # expected = np.array(
     #     [

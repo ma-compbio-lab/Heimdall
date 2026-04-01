@@ -1,6 +1,8 @@
+import contextlib
 import hashlib
 import importlib
 import json
+import shutil
 import uuid
 import warnings
 from collections import defaultdict
@@ -26,19 +28,22 @@ from scipy import sparse as sp
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from torch import FloatTensor, LongTensor, Tensor, sparse_coo_tensor
-from torch.utils.data import default_collate
 from tqdm.auto import tqdm
 
 import wandb
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
+    from Heimdall.task import Tasklist
 
-INPUT_KEYS = {
+FC_KEYS = {
     "identity_inputs",
     "expression_inputs",
-    "masks",
     "expression_padding",
+}
+INPUT_KEYS = {
+    *FC_KEYS,
+    "masks",
     "idx",
 }
 
@@ -48,6 +53,40 @@ MAIN_KEYS = {
 }
 
 
+def check_states(
+    meth: Optional[Callable] = None,
+    *,
+    adata: bool = False,
+    processed_fcfg: bool = False,
+    labels: bool = False,
+    splits: bool = False,
+):
+    if meth is None:
+        return partial(check_states, adata=adata, processed_fcfg=processed_fcfg)
+
+    @wraps(meth)
+    def bounded(self, *args, **kwargs):
+        if adata:
+            assert self.adata is not None, "no adata found, Make sure to run load_anndata() first"
+
+        if processed_fcfg:
+            assert (
+                self.processed_fcfg is not False
+            ), "Please make sure to preprocess the cell representation at least once first"
+
+        if labels:
+            assert getattr(self, "_labels", None) is not None, "labels not setup yet, create `Dataset` object first"
+
+        if splits:
+            assert (
+                getattr(self, "_splits", None) is not None
+            ), "splits not setup yet, run prepare_dataset_loaders() first"
+
+        return meth(self, *args, **kwargs)
+
+    return bounded
+
+
 def hash_config(cfg: DictConfig) -> str:
     """Generate hash for a given config."""
     cfg_str = OmegaConf.to_yaml(cfg, sort_keys=True)
@@ -55,12 +94,13 @@ def hash_config(cfg: DictConfig) -> str:
     return str(uuid.UUID(hex_str))
 
 
-def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str) -> Tuple[Path, Path]:
+def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str, mkdir: bool) -> Tuple[Path, Path]:
     """Get cached data and config path given config."""
     hash_str = hash_config(cfg)
 
     cache_dir = cache_dir / hash_str
-    cache_dir.mkdir(exist_ok=True, parents=True)
+    if mkdir:
+        cache_dir.mkdir(exist_ok=True, parents=True)
 
     cached_file_path = cache_dir / file_name
     cached_cfg_path = cache_dir / "config.yaml"
@@ -68,7 +108,16 @@ def get_cached_paths(cfg: DictConfig, cache_dir: Path, file_name: str) -> Tuple[
     return cached_file_path, cached_cfg_path
 
 
-def filter_config(config, keys_to_keep):
+def clear_cached_paths(cfg: DictConfig, cache_dir: Path) -> Tuple[Path, Path]:
+    """Clear cached paths under hash directory.."""
+    hash_str = hash_config(cfg)
+
+    cache_dir = cache_dir / hash_str
+    with contextlib.suppress(FileNotFoundError):
+        shutil.rmtree(cache_dir)
+
+
+def filter_config(config, keys_to_keep, keys_to_exclude):
     filtered = OmegaConf.create({})
     for key in keys_to_keep:
         # Use OmegaConf.select() to safely access nested keys using dot notation
@@ -80,16 +129,23 @@ def filter_config(config, keys_to_keep):
         except Exception:
             # Handle cases where the key might be missing if necessary
             pass
+
+    for key in keys_to_exclude:
+        try:
+            del filtered[key]
+        except Exception:
+            pass
+
     return filtered
 
 
-def generate_minimal_config(cfg, keys=(), hash_vars=()):
+def generate_minimal_config(cfg, keys=(), excluded_keys=(), hash_vars=()):
     if len(keys) == 0:
         raise ValueError("Config `keys` used for caching cannot be an empty.")
     # cfg = DictConfig(
     #     {key: OmegaConf.to_container(recursive_getattr(cfg, key), resolve=True) for key in keys},
     # )
-    cfg = filter_config(cfg, keys_to_keep=keys)
+    cfg = filter_config(cfg, keys_to_keep=keys, keys_to_exclude=excluded_keys)
     if len(hash_vars) > 0:
         cfg = {**cfg, "hash_vars": hash_vars}
 
@@ -101,8 +157,10 @@ def get_fully_qualified_cache_paths(
     cache_dir,
     filename="",
     keys: set | tuple = (),
+    excluded_keys: set | tuple = (),
     hash_vars=(),
     verbose: int = 0,
+    mkdir: bool = True,
 ):
     """Get fully-resolved path to unique cache directory, given the config keys
     that distinguish the object being cached."""
@@ -110,15 +168,35 @@ def get_fully_qualified_cache_paths(
     if verbose:
         print(f"Hashing with {keys=}")
 
-    cfg = generate_minimal_config(cfg, keys=keys, hash_vars=hash_vars)
+    cfg = generate_minimal_config(cfg, keys=keys, excluded_keys=excluded_keys, hash_vars=hash_vars)
 
     fully_qualified_file_path, fully_qualified_cfg_path = get_cached_paths(
         cfg,
         Path(cache_dir).resolve(),
         filename,
+        mkdir=mkdir,
     )
 
     return fully_qualified_file_path, fully_qualified_cfg_path, cfg
+
+
+def clear_fully_qualified_cache_paths(
+    cfg,
+    cache_dir,
+    keys: set | tuple = (),
+    excluded_keys: set | tuple = (),
+    hash_vars=(),
+    verbose: int = 0,
+):
+    """Clear fully-resolved path to unique cache directory, given the config
+    keys that distinguish the object being cached."""
+    keys = set(keys)  # Make unique
+    if verbose:
+        print(f"Hashing with {keys=}")
+
+    cfg = generate_minimal_config(cfg, keys=keys, excluded_keys=excluded_keys, hash_vars=hash_vars)
+
+    clear_cached_paths(cfg, Path(cache_dir).resolve())
 
 
 def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
@@ -202,16 +280,12 @@ def instantiate_from_config(
         ) from e
 
 
-def get_value(dictionary, key, default=False):
-    return dictionary.get(key, default)
-
-
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 # Dataset Preparation collation tool
-def get_collation_closure(keys=MAIN_KEYS):
+def get_collation_closure(tasklist: "Tasklist", keys=MAIN_KEYS):
     """Heimdall data collate function."""
 
     def collate_fn(batch):
@@ -219,16 +293,12 @@ def get_collation_closure(keys=MAIN_KEYS):
         first_sample = batch[0]
         for key in keys:
             inner_dict = {}
-            for subtask_name in first_sample[key]:
-                values = [b[key][subtask_name] for b in batch]
-                # Drop Nones, or replace with zeros
-                is_invalid = [v is None for v in values]
-                if all(is_invalid):
-                    inner_dict[subtask_name] = None
-                elif any(is_invalid):
-                    raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
-                else:
-                    inner_dict[subtask_name] = default_collate(values)
+            for subtask_name, subtask in tasklist:
+                if subtask_name not in first_sample[key]:
+                    continue
+                values = [sample[key][subtask_name] for sample in batch]
+                inner_dict[subtask_name] = subtask.collate(values)
+
             collated[key] = inner_dict
         return dict(collated)
 
@@ -613,7 +683,7 @@ def save_umap(
             umap_key = f"X_umap_{embedding_name}"
             leiden_key = f"leiden_{embedding_name}"
 
-            adata.obsm[embedding_name] = embeddings[subtask_name]
+            adata.obsm[embedding_name] = np.array(embeddings[subtask_name])
 
             sc.pp.neighbors(adata, use_rep=embedding_name, key_added=neighbors_key)
             sc.tl.leiden(adata, key_added=leiden_key, neighbors_key=neighbors_key)

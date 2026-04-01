@@ -1,0 +1,21 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: pretrain_geneformer_dev
+  - override /scfm/model@scfm.model: transformer_flash
+  - override /scfm/dataset@scfm.dataset: spatial_pretraining_test
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: geneformer
+  - override /scfm/fe@scfm.fe: zero
+  - override /scfm/fg@scfm.fg: pca_esm2
+
+project_name: spatial_pretraining_test
+run_name: ${scfm.fg.type}_${scfm.fe.type}_${scfm.fc.type}_${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}
+
+scfm:
+  optimizer:
+    args:
+      lr: 2e-3
+
+seed: 55
+work_dir: spatial_pretraining_test

@@ -1,0 +1,26 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: new_sctab_split
+  - override /scfm/model@scfm.model: transformer
+  - override /scfm/dataset@scfm.dataset: new_sctab
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/trainer@scfm.trainer: default
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: geneformer
+  - override /scfm/fg@scfm.fg: identity
+
+project_name: new_sctab_split1
+run_name: ${scfm.fg.type}_${scfm.fe.name}_${scfm.fc.type}_${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}
+
+scfm:
+  optimizer:
+    args:
+      lr: 2e-3
+  tasks:
+    default:
+      args:
+        splits:
+          col: split1
+
+seed: 55
+work_dir: ${project_name}_results/${scfm.fg.type}_${scfm.fe.name}_${scfm.fc.type}_${scfm.dataset.dataset_name}_lr${scfm.optimizer.args.lr}_bz${scfm.tasks.default.args.batchsize}_seed${seed}_ag${scfm.fe.args.drop_zeros}

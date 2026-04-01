@@ -1,0 +1,21 @@
+## trainer details
+type: Heimdall.trainer.HeimdallTrainer
+
+args:
+  random_seed: ${seed}
+  accumulate_grad_batches: 1
+  grad_norm_clip: 1.0
+  epochs: 10
+  batchsize: 32
+  early_stopping: false
+  early_stopping_patience: 5
+  fastdev: false  # if set to true, then only train/evel/test on the first batch
+  skip_umaps: false
+
+cpu: false
+
+dataset_config:
+  type: Heimdall.datasets.PartitionedDataset
+
+cell_rep_config:
+  type: Heimdall.cell_representations.PartitionedCellRepresentation
