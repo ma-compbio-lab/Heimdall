@@ -18,4 +18,4 @@ cell_rep_config:
   type: Heimdall.cell_representations.CellRepresentation
 
 dataset_config:
-  type: Heimdall.datasets.SingleInstanceDataset
+  type: Heimdall.datasets.PairedInstanceDataset

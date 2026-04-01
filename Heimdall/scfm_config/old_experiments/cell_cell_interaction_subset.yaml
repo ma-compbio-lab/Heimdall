@@ -4,15 +4,15 @@
 # Set the experiment parts you would like to import
 ####
 defaults:
-  - override /model: transformer  # the chosen model
-  - override /dataset: zeng_merfish_ccc_subset  # dataset for the relevant task
-  - override /tasks: cell_cell_interaction  # dataset for the relevant task
-  - override /scheduler: cosine  # contains scheduler
-  - override /trainer: default  # contains optimizer and trainer details
-  - override /optimizer: AdamW
-  - override /fc: geneformer
-  - override /fg: identity
-  - override /loss: BCEWithLogitsLoss
+  - override /model@scfm_config.model: transformer  # the chosen model
+  - override /dataset@scfm_config.dataset: zeng_merfish_ccc_subset  # dataset for the relevant task
+  - override /tasks@scfm_config.tasks: cell_cell_interaction  # dataset for the relevant task
+  - override /scheduler@scfm_config.scheduler: cosine  # contains scheduler
+  - override /trainer@scfm_config.trainer: default  # contains optimizer and trainer details
+  - override /optimizer@scfm_config.optimizer: AdamW
+  - override /fc@scfm_config.fc: geneformer
+  - override /fg@scfm_config.fg: identity
+  - override /loss@scfm_config.loss: BCEWithLogitsLoss
 
 ####
 # Set the specific parameters you would like to change from the defaults

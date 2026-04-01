@@ -17,13 +17,8 @@ args:
   shuffle: true
   # batchsize: 32
   # epochs: 50
-  dataset_config:
-    type: Heimdall.datasets.SingleInstanceDataset
   head_config:
     type: Heimdall.models.LinearCellPredHead
     args:
   loss_config:
     type: Heimdall.losses.FlattenCrossEntropyLoss
-
-cell_rep_config:
-  type: Heimdall.cell_representations.CellRepresentation

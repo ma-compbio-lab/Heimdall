@@ -8,8 +8,6 @@ args:
   shuffle: true
   # batchsize: 512
   # epochs: 10
-  dataset_config:
-    type: Heimdall.datasets.PartitionedDataset
     # args:
     #   mask_ratio: 0.15
   head_config:
@@ -17,6 +15,3 @@ args:
     args:
   loss_config:
     type: Heimdall.losses.FlattenCrossEntropyLoss
-
-cell_rep_config:
-  type: Heimdall.cell_representations.PartitionedCellRepresentation

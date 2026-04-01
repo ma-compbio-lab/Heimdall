@@ -6,6 +6,6 @@ args:
     constructor: from_pretrained
     args:
       embeddings: gene_embeddings
-  embedding_filepath: ${data_path}/pretrained_embeddings/ESM2/protein_map_${dataset.preprocess_args.species}_ensembl.pt
-  d_embedding: ${model.args.d_model}
+  embedding_filepath: ${data_path}/pretrained_embeddings/ESM2/protein_map_${scfm_config.dataset.preprocess_args.species}_ensembl.pt
+  d_embedding: ${scfm_config.model.args.d_model}
   frozen: true

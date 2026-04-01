@@ -34,7 +34,6 @@ class Task(ABC):
     shuffle: bool
     # batchsize: int
     # epochs: int
-    dataset_config: DictConfig
     head_config: DictConfig
     loss_config: DictConfig
     interaction_type: str | None = None
@@ -108,7 +107,7 @@ class Task(ABC):
 
     def get_cache_path(self, cache_dir, hash_vars, task_name):
         processed_data_path, _, _ = get_fully_qualified_cache_paths(
-            self.data._cfg,
+            self.data.local_cfg,
             cache_dir,
             filename=f"{task_name}_labels.pkl",
             keys=self.data.TOKENIZER_KEYS,
@@ -117,7 +116,12 @@ class Task(ABC):
         return processed_data_path
 
     def clear_cache_path(self, cache_dir, hash_vars, task_name):
-        clear_fully_qualified_cache_paths(self.data._cfg, cache_dir, keys=self.data.TOKENIZER_KEYS, hash_vars=hash_vars)
+        clear_fully_qualified_cache_paths(
+            self.data.local_cfg,
+            cache_dir,
+            keys=self.data.TOKENIZER_KEYS,
+            hash_vars=hash_vars,
+        )
 
     def to_cache(self, cache_dir, hash_vars, task_name):
         processed_data_path = self.get_cache_path(cache_dir, hash_vars, task_name)
@@ -318,18 +322,17 @@ class Tasklist:
     def __init__(
         self,
         data: "CellRepresentation",
-        subtask_configs: DictConfig | dict,
-        dataset_config: DictConfig | dict,
+        tasks: DictConfig | dict,
     ):
-
+        if not tasks:
+            raise ValueError("Tasklist requires at least one task configuration.")
         self.data = data
         self._tasks = {
             subtask_name: instantiate_from_config(subtask_config, data)
-            for subtask_name, subtask_config in subtask_configs.items()
+            for subtask_name, subtask_config in tasks.items()
         }
 
         self.set_unique_properties()
-        self.dataset_config = dataset_config
         self.num_subtasks = len(self._tasks)
 
     def set_unique_properties(self):

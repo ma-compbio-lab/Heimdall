@@ -7,5 +7,5 @@ args:
     args:
       embeddings: gene_embeddings
   embedding_filepath: ${data_path}/pca_embeds/new_gene2vec_embeds.pt
-  d_embedding: ${model.args.d_model}
+  d_embedding: ${scfm_config.model.args.d_model}
   frozen: true

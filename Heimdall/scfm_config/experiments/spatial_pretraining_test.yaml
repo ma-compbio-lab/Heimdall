@@ -1,28 +1,21 @@
 # @package _global_
-
-###
-# Set the experiment parts you would like to import
-####
 defaults:
-  - override /model: transformer_flash  # the chosen model
-  - override /dataset: spatial_pretraining_test
-  - override /tasks: pretrain_geneformer_dev  # dataset for the relevant task
-  - override /scheduler: cosine  # contains scheduler
-  - override /optimizer: AdamW
-  - override /fc: geneformer
-  - override /fe: zero
-  - override /fg: pca_esm2  # gene2vec
+  - /scfm_config/tasks@scfm_config.tasks.default: pretrain_geneformer_dev
+  - override /scfm_config/model@scfm_config.model: transformer_flash
+  - override /scfm_config/dataset@scfm_config.dataset: spatial_pretraining_test
+  - override /scfm_config/scheduler@scfm_config.scheduler: cosine
+  - override /scfm_config/optimizer@scfm_config.optimizer: AdamW
+  - override /scfm_config/fc@scfm_config.fc: geneformer
+  - override /scfm_config/fe@scfm_config.fe: zero
+  - override /scfm_config/fg@scfm_config.fg: pca_esm2
 
-####
-# Set the specific parameters you would like to change from the defaults
-####
+project_name: spatial_pretraining_test
+run_name: ${scfm_config.fg.type}_${scfm_config.fe.type}_${scfm_config.fc.type}_${scfm_config.model.type}_lr${scfm_config.optimizer.args.lr}_bz${scfm_config.tasks.default.args.batchsize}
+
+scfm_config:
+  optimizer:
+    args:
+      lr: 2e-3
+
 seed: 55
-
-# run_name: ${fg.type}_${fe.type}_${fc.name}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
-run_name: ${fg.type}_${fe.type}_${fc.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}
 work_dir: spatial_pretraining_test
-project_name: spatial_pretraining_test  # project name for WandB
-
-optimizer:
-  args:
-    lr: 2e-3

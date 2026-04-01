@@ -4,21 +4,21 @@
 # Set the experiment parts you would like to import
 ####
 defaults:
-  - override /model: transformer  # the chosen model
-  - override /dataset: amb  # dataset for the relevant task
-  - override /tasks: cell_type_annotation  # dataset for the relevant task
-  - override /scheduler: cosine  # contains scheduler
-  - override /trainer: default  # contains optimizer and trainer details
-  - override /optimizer: AdamW
-  - override /fc: geneformer
-  - override /fg: identity
-  - override /loss: CrossEntropyLoss
+  - override /model@scfm_config.model: transformer  # the chosen model
+  - override /dataset@scfm_config.dataset: amb  # dataset for the relevant task
+  - override /tasks@scfm_config.tasks: cell_type_annotation  # dataset for the relevant task
+  - override /scheduler@scfm_config.scheduler: cosine  # contains scheduler
+  - override /trainer@scfm_config.trainer: default  # contains optimizer and trainer details
+  - override /optimizer@scfm_config.optimizer: AdamW
+  - override /fc@scfm_config.fc: geneformer
+  - override /fg@scfm_config.fg: identity
+  - override /loss@scfm_config.loss: CrossEntropyLoss
 
 ####
 # Set the specific parameters you would like to change from the defaults
 ####
 project_name: cta_amb  # project name for WandB
-run_name: ${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  # what is set for WandB
+run_name: ${scfm_config.model.type}_lr${scfm_config.optimizer.args.lr}_bz${scfm_config.tasks.args.batchsize}  # what is set for WandB
 work_dir: work_dir  # set your custom working directory
 seed: 55
 

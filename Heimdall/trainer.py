@@ -70,7 +70,7 @@ class HeimdallTrainer:
 
         self.data = data
         self.accelerator = accelerator
-        self.has_embeddings = self.cfg.model.name != "logistic_regression"
+        self.has_embeddings = self.model_cfg.name != "logistic_regression"
 
         self.check_flash_attn()
 
@@ -124,6 +124,42 @@ class HeimdallTrainer:
 
         self.print_r0("> Finished Wrapping the model, optimizer, and dataloaders in accelerate")
         self.print_r0("> run HeimdallTrainer.train() to begin training")
+
+    @property
+    def local_cfg(self):
+        return self.data.local_cfg
+
+    @property
+    def model_cfg(self):
+        return self.cfg.scfm_config.model
+
+    @property
+    def dataset_cfg(self):
+        return self.local_cfg.dataset
+
+    @property
+    def trainer_cfg(self):
+        return self.local_cfg.trainer
+
+    @property
+    def optimizer_cfg(self):
+        return self.local_cfg.optimizer
+
+    @property
+    def scheduler_cfg(self):
+        return self.local_cfg.scheduler
+
+    @property
+    def fg_cfg(self):
+        return self.data.fg_cfg
+
+    @property
+    def fe_cfg(self):
+        return self.data.fe_cfg
+
+    @property
+    def fc_cfg(self):
+        return self.data.fc_cfg
 
     def check_flash_attn(self):
         if (
@@ -189,13 +225,21 @@ class HeimdallTrainer:
         self.data.print_r0(message)
 
     def _initialize_optimizer(self):
-        optimizer_class = getattr(torch.optim, self.cfg.optimizer.name)
-        return optimizer_class(self.model.parameters(), **OmegaConf.to_container(self.cfg.optimizer.args))
+        optimizer_class = getattr(torch.optim, self.optimizer_cfg.name)
+        return optimizer_class(
+            self.model.parameters(),
+            **OmegaConf.to_container(self.optimizer_cfg.args),
+        )
 
     def _initialize_wandb(self, **wandb_kwargs):
         if self.run_wandb and self.accelerator.is_main_process:
             print("==> Starting a new WANDB run")
-            new_tags = (self.cfg.dataset.dataset_name, self.cfg.fg.type, self.cfg.fe.type, self.cfg.fc.type)
+            new_tags = (
+                self.dataset_cfg.dataset_name,
+                self.fg_cfg.type,
+                self.fe_cfg.type,
+                self.fc_cfg.type,
+            )
             wandb_config = {
                 "wandb": {
                     "tags": new_tags,
@@ -214,11 +258,11 @@ class HeimdallTrainer:
     def _initialize_lr_scheduler(self):
         global_batch_size = self.batchsize
         total_steps = len(self.dataloader_train.dataset) // global_batch_size * self.epochs
-        warmup_ratio = self.cfg.scheduler.warmup_ratio
+        warmup_ratio = self.scheduler_cfg.warmup_ratio
         warmup_step = int(warmup_ratio * total_steps)
 
         self.lr_scheduler = get_scheduler(
-            name=self.cfg.scheduler.name,
+            name=self.scheduler_cfg.name,
             optimizer=self.optimizer,
             num_warmup_steps=warmup_step,
             num_training_steps=total_steps,
@@ -346,7 +390,7 @@ class HeimdallTrainer:
             # Run one eval pass on the loaded weights to get embeddings
             # _, val_outputs = self.validate_model(self.dataloader_val, "valid")
             # _, test_outputs = self.validate_model(self.dataloader_test, "test")
-            if self.accelerator.is_main_process and self.cfg.model.name != "logistic_regression":
+            if self.accelerator.is_main_process and self.model_cfg.name != "logistic_regression":
                 # self.save_adata_umap(test_embed, val_embed)
                 # self.print_r0(f"> Saved UMAP from checkpoint epoch {last_epoch}")
                 pass
@@ -905,6 +949,23 @@ class HeimdallTrainer:
             except FileExistsError:
                 self.print_r0(f"> Checkpoint directory already exists at {self.results_folder}")
 
+    def get_latest_checkpoint_path(self):
+        self.initialize_checkpointing()
+
+        milestone_path = self.results_folder / "milestone.txt"
+        if not milestone_path.exists():
+            return None
+
+        milestone = milestone_path.read_text().strip()
+        if not milestone:
+            return None
+
+        checkpoint_path = self.results_folder / f"model-{milestone}.pt"
+        if checkpoint_path.exists():
+            return checkpoint_path
+
+        return None
+
     def save_checkpoint(self, epoch):
         """Save model checkpoint at the given epoch."""
         # Only save on the main process
@@ -1035,9 +1096,9 @@ class HeimdallTrainer:
         return epoch
 
     def get_pretrained_load_path(self):
-        config = self.cfg
+        config = self.local_cfg
         load_path = None
-        if "pretrained_milestone" in config:
+        if "pretrained_milestone" in config and config.pretrained_milestone is not None:
             self.initialize_checkpointing()
 
             load_path = self.results_folder / f"model-{config.pretrained_milestone}.pt"
@@ -1045,7 +1106,7 @@ class HeimdallTrainer:
                 self.print_r0(
                     f"> Checkpoint file {load_path} does not exist. `{config.pretrained_milestone=}` is invalid.",
                 )
-        elif "pretrained_ckpt_path" in config:
+        elif "pretrained_ckpt_path" in config and config.pretrained_ckpt_path is not None:
             load_path = Path(config.pretrained_ckpt_path)
             if not load_path.exists():
                 self.print_r0(
@@ -1084,14 +1145,14 @@ class HeimdallTrainer:
 
 
 def setup_trainer_generic(config, setup_model: Callable, cpu=True):
-    accelerator, cr, run_wandb, only_preprocess_data = setup_data(config)
+    accelerator, cr, run_wandb, only_preprocess_data = setup_data(config, cpu=cpu)
 
     if only_preprocess_data:
         return
 
     model = setup_model(config, cr, is_main_process=accelerator.is_main_process)
     trainer = instantiate_from_config(
-        config.trainer,
+        config.scfm_config.trainer,
         cfg=config,
         model=model,
         data=cr,

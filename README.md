@@ -17,7 +17,6 @@ Heimdall is a Python toolkit for implementing and benchmarking tokenizers for si
 
 Check out the documentation [here](https://heimdall-doc.readthedocs.io/en/latest/) for installation instructions, usage examples, and the complete API.
 
-
 # Dev Notes
 
 <details>
@@ -118,7 +117,7 @@ HYDRA_USER=test
 ## Turning off caching
 
 To turn off dataset caching for dev purposes,
-set `cache_preprocessed_dataset_dir: null` in `config/global_vars.yaml`.
+set `cache_preprocessed_dataset_dir: null` in `Heimdall/config.yaml`.
 Alternatively, pass `cache_preprocessed_dataset_dir=null` through the command
 line, e.g.,
 

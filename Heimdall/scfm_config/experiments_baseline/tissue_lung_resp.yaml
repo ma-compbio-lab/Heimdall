@@ -1,35 +1,30 @@
 # @package _global_
-
-###
-# Set the experiment parts you would like to import
-####
 defaults:
-  - override /model: expression_only  # the chosen model
-  - override /dataset: tissue_lung_resp  # dataset for the relevant task
-  - override /tasks: tissue_lung_resp  # dataset for the relevant task
-  - override /scheduler: cosine  # contains scheduler
-  - override /trainer: default  # contains optimizer and trainer details
-  - override /optimizer: AdamW
-  - override /fc: dummy
-  - override /fe: dummy
-  - override /fg: dummy
+  - /scfm_config/tasks@scfm_config.tasks.default: tissue_lung_resp
+  - override /scfm_config/model@scfm_config.model: expression_only
+  - override /scfm_config/dataset@scfm_config.dataset: tissue_lung_resp
+  - override /scfm_config/scheduler@scfm_config.scheduler: cosine
+  - override /scfm_config/trainer@scfm_config.trainer: default
+  - override /scfm_config/optimizer@scfm_config.optimizer: AdamW
+  - override /scfm_config/fc@scfm_config.fc: dummy
+  - override /scfm_config/fe@scfm_config.fe: dummy
+  - override /scfm_config/fg@scfm_config.fg: dummy
 
-####
-# Set the specific parameters you would like to change from the defaults
-####
-project_name: tissue_lung_resp  # project name for WandB
-run_name: ${fg.type}_${fe.type}_${fc.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
-work_dir: work_dir  ## set your custom working directory
-seed: 55
+project_name: tissue_lung_resp
+run_name: ${scfm_config.fg.type}_${scfm_config.fe.type}_${scfm_config.fc.type}_${scfm_config.model.type}_lr${scfm_config.optimizer.args.lr}_bz${scfm_config.tasks.default.args.batchsize}
 
-tasks:
-  args:
-    dataset_config:
-      type: Heimdall.datasets.SingleInstanceDataset
-    head_config:
-      type: Heimdall.models.ExpressionOnlyCellPredHead
+scfm_config:
+  optimizer:
+    args:
+      lr: 2e-3
+  tasks:
+    default:
       args:
+        dataset_config:
+          type: Heimdall.datasets.SingleInstanceDataset
+        head_config:
+          args:
+          type: Heimdall.models.ExpressionOnlyCellPredHead
 
-optimizer:
-  args:
-    lr: 2e-3
+seed: 55
+work_dir: work_dir

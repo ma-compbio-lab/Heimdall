@@ -1,27 +1,21 @@
 # @package _global_
-###
-# Set the experiment parts you would like to import
-####
 defaults:
-  - override /model: transformer  # the chosen model
-  - override /dataset: pretrain_1mill  # dataset for the relevant task
-  - override /tasks: pretrain_geneformer_dev  # dataset for the relevant task
-  - override /scheduler: cosine  # contains scheduler
-  - override /optimizer: AdamW
-  - override /fc: scbert_randsort
-  - override /fe: binning_scbert
-  - override /fg: esm2  # gene2vec
+  - /scfm_config/tasks@scfm_config.tasks.default: pretrain_geneformer_dev
+  - override /scfm_config/model@scfm_config.model: transformer
+  - override /scfm_config/dataset@scfm_config.dataset: pretrain_1mill
+  - override /scfm_config/scheduler@scfm_config.scheduler: cosine
+  - override /scfm_config/optimizer@scfm_config.optimizer: AdamW
+  - override /scfm_config/fc@scfm_config.fc: scbert_randsort
+  - override /scfm_config/fe@scfm_config.fe: binning_scbert
+  - override /scfm_config/fg@scfm_config.fg: esm2
 
-####
-# Set the specific parameters you would like to change from the defaults
-####
+project_name: pretraining
+run_name: ${scfm_config.fg.type}_${scfm_config.fe.type}_${scfm_config.fc.type}_${scfm_config.model.type}_lr${scfm_config.optimizer.args.lr}_bz${scfm_config.tasks.default.args.batchsize}
+
+scfm_config:
+  optimizer:
+    args:
+      lr: 2e-3
+
 seed: 55
-
-# run_name: ${fg.type}_${fe.type}_${fc.name}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
-run_name: ${fg.type}_${fe.type}_${fc.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}
-work_dir: ${project_name}_results/${fg.type}_${fe.name}_${fc.type}_${dataset.dataset_name}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}_seed${seed}_ag${fe.args.drop_zeros}  ## set your custom working directory
-project_name: pretraining  # project name for WandB
-
-optimizer:
-  args:
-    lr: 2e-3
+work_dir: ${project_name}_results/${scfm_config.fg.type}_${scfm_config.fe.name}_${scfm_config.fc.type}_${scfm_config.dataset.dataset_name}_lr${scfm_config.optimizer.args.lr}_bz${scfm_config.tasks.default.args.batchsize}_seed${seed}_ag${scfm_config.fe.args.drop_zeros}

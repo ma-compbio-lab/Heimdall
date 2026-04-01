@@ -50,6 +50,22 @@ class CellRepresentation(SpecialTokenMixin):
     DATASET_KEYS = ("dataset.preprocess_args.data_path", "tasks")
     TOKENIZER_KEYS = ("dataset.preprocess_args.data_path", "fg", "fe", "fc")
 
+    @property
+    def local_cfg(self):
+        return self._cfg.scfm_config
+
+    @property
+    def fg_cfg(self):
+        return self._cfg.scfm_config.fg
+
+    @property
+    def fe_cfg(self):
+        return self._cfg.scfm_config.fe
+
+    @property
+    def fc_cfg(self):
+        return self._cfg.scfm_config.fc
+
     def __init__(self, config, accelerator: Accelerator, auto_setup: bool = True, indent: int = 0):
         """Initialize the Cell Rep object with configuration and AnnData object.
 
@@ -66,11 +82,8 @@ class CellRepresentation(SpecialTokenMixin):
 
         self.setup_finished = False
         self._cfg = config
-        self.data_path = str(self._cfg.dataset.preprocess_args.data_path)
+        self.data_path = str(self.local_cfg.dataset.preprocess_args.data_path)
 
-        self.fg_cfg = config.fg
-        self.fc_cfg = config.fc
-        self.fe_cfg = config.fe
         self.float_dtype = config.float_dtype
         self.adata = None
         self.processed_fcfg = False
@@ -213,12 +226,12 @@ class CellRepresentation(SpecialTokenMixin):
         cache_dir = Path(cache_dir)
 
         # Clear preprocessed dataset
-        clear_fully_qualified_cache_paths(self._cfg, cache_dir / "processed_anndata", keys=self.DATASET_KEYS)
+        clear_fully_qualified_cache_paths(self.local_cfg, cache_dir / "processed_anndata", keys=self.DATASET_KEYS)
         self.print_during_setup("> Cleared `processed_anndata` cache.")
 
         # Clear tokenizer
         clear_fully_qualified_cache_paths(
-            self._cfg,
+            self.local_cfg,
             cache_dir / "processed_data",
             keys=self.TOKENIZER_KEYS,
             hash_vars=hash_vars,
@@ -260,18 +273,11 @@ class CellRepresentation(SpecialTokenMixin):
             )
 
     def create_tasklist(self):
-        if self._cfg.get("subtask_configs", False):
-            self.tasklist = Tasklist(
-                self,
-                subtask_configs=self._cfg.subtask_configs,
-                dataset_config=self._cfg.tasks.args.dataset_config,
-            )
-        else:
-            self.tasklist = Tasklist(
-                self,
-                subtask_configs={"default": self._cfg.tasks},
-                dataset_config=self._cfg.tasks.args.dataset_config,
-            )
+        tasks = self.local_cfg.tasks
+        if not tasks:
+            raise ValueError("No tasks configured. Add at least one task under `*.tasks.<task_name>`.")
+
+        self.tasklist = Tasklist(self, tasks=tasks)
 
         self.num_subtasks = self.tasklist.num_subtasks
 
@@ -284,7 +290,7 @@ class CellRepresentation(SpecialTokenMixin):
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             cache_dir = Path(cache_dir)
             preprocessed_data_path, preprocessed_cfg_path, cfg = get_fully_qualified_cache_paths(
-                self._cfg,
+                self.local_cfg,
                 cache_dir / "processed_anndata",
                 filename,
                 keys=self.DATASET_KEYS,
@@ -303,12 +309,12 @@ class CellRepresentation(SpecialTokenMixin):
     def preprocess_anndata(self):
         self.adata = ad.read_h5ad(self.data_path)
 
-        self.print_during_setup(f"> Finished Loading in {self._cfg.dataset.preprocess_args.data_path}")
+        self.print_during_setup(f"> Finished Loading in {self.local_cfg.dataset.preprocess_args.data_path}")
         # convert gene names to ensembl ids
         self.print_during_setup("> Converting gene names to Ensembl IDs...")
         self.adata, _ = self.convert_to_ensembl_ids(
             data_dir=self._cfg.ensembl_dir,
-            species=self._cfg.dataset.preprocess_args.species,
+            species=self.local_cfg.dataset.preprocess_args.species,
         )
 
         # for key in ('gene_ensembl',):
@@ -319,7 +325,7 @@ class CellRepresentation(SpecialTokenMixin):
             if key in self.adata.uns:
                 del self.adata.uns[key]
 
-        if self._cfg.dataset.preprocess_args.get("normalize", False):
+        if self.local_cfg.dataset.preprocess_args.get("normalize", False):
             self.print_during_setup("> Normalizing AnnData...")
 
             if sparse.issparse(self.adata.X):
@@ -337,12 +343,12 @@ class CellRepresentation(SpecialTokenMixin):
                 data[nan_mask] = np.nan  # NOTE: must not be integer-valued
 
             assert (
-                self._cfg.dataset.preprocess_args.normalize and self._cfg.dataset.preprocess_args.log_1p
+                self.local_cfg.dataset.preprocess_args.normalize and self.local_cfg.dataset.preprocess_args.log_1p
             ), "Normalize and Log1P both need to be TRUE"
         else:
             self.print_during_setup("> Skipping Normalizing anndata...")
 
-        if self._cfg.dataset.preprocess_args.get("log_1p", False):
+        if self.local_cfg.dataset.preprocess_args.get("log_1p", False):
             self.print_during_setup("> Log Transforming anndata...")
 
             sc.pp.log1p(self.adata)
@@ -350,19 +356,19 @@ class CellRepresentation(SpecialTokenMixin):
             self.print_during_setup("> Skipping Log Transforming anndata..")
 
         if (
-            self._cfg.dataset.preprocess_args.get("top_n_genes", False)
-            and self._cfg.dataset.preprocess_args["top_n_genes"] != "false"
+            self.local_cfg.dataset.preprocess_args.get("top_n_genes", False)
+            and self.local_cfg.dataset.preprocess_args["top_n_genes"] != "false"
         ):
             # Identify highly variable genes
             self.print_during_setup(
-                f"> Using highly variable subset... top {self._cfg.dataset.preprocess_args.top_n_genes} genes",
+                f"> Using highly variable subset... top {self.local_cfg.dataset.preprocess_args.top_n_genes} genes",
             )
-            sc.pp.highly_variable_genes(self.adata, n_top_genes=self._cfg.dataset.preprocess_args.top_n_genes)
+            sc.pp.highly_variable_genes(self.adata, n_top_genes=self.local_cfg.dataset.preprocess_args.top_n_genes)
             self.adata = self.adata[:, self.adata.var["highly_variable"]].copy()
         else:
             self.print_during_setup("> No highly variable subset... using entire dataset")
 
-        if self._cfg.dataset.preprocess_args.get("scale_data", False):
+        if self.local_cfg.dataset.preprocess_args.get("scale_data", False):
             # Scale the data
             raise NotImplementedError("Scaling the data is NOT RECOMMENDED, please set it to false")
             self.print_during_setup("> Scaling the data...")
@@ -370,7 +376,7 @@ class CellRepresentation(SpecialTokenMixin):
         else:
             self.print_during_setup("> Not scaling the data...")
 
-        if self._cfg.dataset.preprocess_args.get("get_medians", False):
+        if self.local_cfg.dataset.preprocess_args.get("get_medians", False):
             # Get medians
             self.print_during_setup("> Getting nonzero medians...")
             csc_expression = csc_array(self.adata.X)
@@ -394,7 +400,7 @@ class CellRepresentation(SpecialTokenMixin):
     def prepare_full_dataset(self):
         # Set up full dataset given the processed cell representation data
         # This will prepare: labels, splits
-        full_dataset: Dataset = instantiate_from_config(self.tasklist.dataset_config, self)
+        full_dataset: Dataset = instantiate_from_config(self.local_cfg.trainer.dataset_config, self)
         self.datasets = {"full": full_dataset}
 
     @check_states(adata=True, processed_fcfg=True)
@@ -408,7 +414,7 @@ class CellRepresentation(SpecialTokenMixin):
         # dataloader_kwargs = {}  # TODO: USE THIS IF DEBUGGING
         heimdall_collate_fn = get_collation_closure(self.tasklist)
         dataloader_kwargs = {"num_workers": 4}  # TODO: we can parse additional data loader kwargs from config
-        per_device_batch_size = self._cfg.trainer.args.batchsize // self.accelerator.num_processes
+        per_device_batch_size = self.local_cfg.trainer.args.batchsize // self.accelerator.num_processes
         self.dataloaders = {
             split: DataLoader(
                 dataset,
@@ -436,7 +442,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     def get_tokenizer_cache_path(self, cache_dir, hash_vars, filename: str = "data.pkl"):
         processed_data_path, _, _ = get_fully_qualified_cache_paths(
-            self._cfg,
+            self.local_cfg,
             cache_dir / "processed_data",
             filename,
             keys=self.TOKENIZER_KEYS,
@@ -568,7 +574,7 @@ class PartitionedCellRepresentation(CellRepresentation):
         super().__init__(config, accelerator, auto_setup=False, indent=indent)
 
         # Expect `self._cfg.dataset.preprocess_args.data_path` to hold parent directory, not filepath
-        self.partition_folder = str(self._cfg.dataset.preprocess_args.data_path)
+        self.partition_folder = str(self.local_cfg.dataset.preprocess_args.data_path)
         self.partition_file_paths = sorted(
             Path(self.partition_folder).glob("*.h5ad"),
         )
@@ -577,7 +583,7 @@ class PartitionedCellRepresentation(CellRepresentation):
         if self.num_partitions == 0:
             raise ValueError(
                 "No partitions were found under the directory at "
-                f"'{self._cfg.dataset.preprocess_args.data_path}'. The dataset path "
+                f"'{self.local_cfg.dataset.preprocess_args.data_path}'. The dataset path "
                 "(`config.dataset.preprocess_args.data_path`) is probably set incorrectly.",
             )
 
@@ -589,7 +595,7 @@ class PartitionedCellRepresentation(CellRepresentation):
             if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
                 cache_dir = Path(cache_dir)
                 metadata_path, _, _ = get_fully_qualified_cache_paths(
-                    self._cfg,
+                    self.local_cfg,
                     cache_dir / "processed_anndata",
                     "metadata.pkl",
                     keys=self.DATASET_KEYS,
@@ -764,7 +770,7 @@ class PartitionedCellRepresentation(CellRepresentation):
 
         self.dataloaders = {}
         heimdall_collate_fn = get_collation_closure(self.tasklist)
-        per_device_batch_size = self._cfg.trainer.args.batchsize // self.accelerator.num_processes
+        per_device_batch_size = self.local_cfg.trainer.args.batchsize // self.accelerator.num_processes
         self.dataloaders = {
             split: DataLoader(
                 dataset,
@@ -795,7 +801,6 @@ class PartitionedCellRepresentation(CellRepresentation):
 
 
 def setup_accelerator(config, cpu=False, run_wandb=False):
-    # get accelerate context
     accelerator_log_kwargs = {}
     if run_wandb:
         accelerator_log_kwargs["log_with"] = "wandb"
@@ -805,7 +810,7 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
     init_process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=14400))
 
     accelerator = Accelerator(
-        gradient_accumulation_steps=config.trainer.args.accumulate_grad_batches,
+        gradient_accumulation_steps=config.scfm_config.trainer.args.accumulate_grad_batches,
         step_scheduler_with_optimizer=False,
         cpu=cpu,
         mixed_precision="bf16",
@@ -818,7 +823,6 @@ def setup_accelerator(config, cpu=False, run_wandb=False):
 
 def setup_data(config, cpu=False, accelerator=None):
     """Set up Heimdall data based on config, including cr and accelerator."""
-
     run_wandb = getattr(config, "run_wandb", False)
     if accelerator is None:
         accelerator = setup_accelerator(config, cpu=cpu, run_wandb=run_wandb)
@@ -830,6 +834,6 @@ def setup_data(config, cpu=False, accelerator=None):
         only_preprocess_data = config.pop("only_preprocess_data", None)
         # pop so hash of cfg is not changed depending on value
 
-    cr = instantiate_from_config(config.tasks.cell_rep_config, config, accelerator)
+    cr = instantiate_from_config(config.scfm_config.trainer.cell_rep_config, config, accelerator)
 
     return accelerator, cr, run_wandb, only_preprocess_data

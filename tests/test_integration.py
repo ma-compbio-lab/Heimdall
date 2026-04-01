@@ -21,19 +21,19 @@ def test_default_hydra_train(session_cache_dir):
             config_name="config",
             overrides=[
                 # "+experiments_dev=classification_experiment_dev",
-                "+experiments=spatial_cancer_split1",
+                "+scfm_config/experiments=spatial_cancer_split1",
                 # "user=lane-nick"
-                "model=transformer_small",
-                "model.args.use_flash_attn=true",  # Also tests flash-attn ;)
-                "fg=pca_esm2",
-                "fe=identity",
-                "fc=uce",
+                "scfm_config/model=transformer_small",
+                "scfm_config.model.args.use_flash_attn=true",  # Also tests flash-attn ;)
+                "scfm_config/fg=pca_esm2",
+                "scfm_config/fe=identity",
+                "scfm_config/fc=uce",
                 "seed=55",
                 "project_name=demo",
                 "run_wandb=false",
-                "trainer.args.epochs=1",
-                "fc.args.max_input_length=256",
-                "fc.args.tailor_config.args.sample_size=200",
+                "scfm_config.trainer.args.epochs=1",
+                "scfm_config.fc.args.max_input_length=256",
+                "scfm_config.fc.args.tailor_config.args.sample_size=200",
                 "work_dir=null",
                 f"cache_preprocessed_dataset_dir={session_cache_dir}",
                 # f"user={os.environ['HYDRA_USER']}"
@@ -55,19 +55,20 @@ def test_partitioned_hydra_train(session_cache_dir):
             config_name="config",
             overrides=[
                 # "+experiments_dev=classification_experiment_dev",
-                "+experiments=pretraining",
-                "dataset=pretrain_dev",
+                "+scfm_config/experiments=pretraining",
+                "scfm_config/dataset=pretrain_dev",
                 # "user=lane-nick"
-                "model=transformer_small",
+                "scfm_config/model=transformer_small",
+                "scfm_config/trainer=partitioned",
                 "seed=55",
                 "project_name=demo",
                 "run_wandb=false",
-                "trainer.args.epochs=1",
+                "scfm_config.trainer.args.epochs=1",
                 "work_dir=null",
                 f"cache_preprocessed_dataset_dir={session_cache_dir}",
-                "fc.args.max_input_length=256",
+                "scfm_config.fc.args.max_input_length=256",
                 # f"user={os.environ['HYDRA_USER']}"
-                "trainer.args.skip_umaps=true",
+                "scfm_config.trainer.args.skip_umaps=true",
             ],
         )
 
@@ -87,19 +88,21 @@ def test_partitioned_precomputation(session_cache_dir):
             config_name="config",
             overrides=[
                 # "+experiments_dev=classification_experiment_dev",
-                "+experiments=pretraining",
-                "dataset=pretrain_dev",
+                "+scfm_config/experiments=pretraining",
+                "scfm_config/dataset=pretrain_dev",
                 # "user=lane-nick"
-                "model=transformer_small",
+                "scfm_config/model=transformer_small",
+                "scfm_config/trainer=partitioned",
+                "scfm_config/dataset=pretrain_dev",
                 "seed=55",
                 "project_name=demo",
                 "run_wandb=false",
-                "trainer.args.epochs=1",
+                "scfm_config.trainer.args.epochs=1",
                 "work_dir=null",
                 f"cache_preprocessed_dataset_dir={session_cache_dir}",
-                "fc.args.max_input_length=256",
+                "scfm_config.fc.args.max_input_length=256",
                 # f"user={os.environ['HYDRA_USER']}"
-                "trainer.args.skip_umaps=true",
+                "scfm_config.trainer.args.skip_umaps=true",
             ],
         )
 

@@ -6,7 +6,7 @@ args:
     type: Heimdall.embedding.FlexibleTypeEmbedding
     args:
       num_embeddings: vocab_size
-      embedding_dim: ${fe.args.d_embedding}
+      embedding_dim: ${scfm_config.fe.args.d_embedding}
   num_bins: 7  ## also the number of bins
-  d_embedding: ${model.args.d_model}
+  d_embedding: ${scfm_config.model.args.d_model}
   drop_zeros: true

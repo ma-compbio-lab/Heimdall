@@ -8,13 +8,8 @@ args:
   shuffle: true
   # batchsize: 32
   # epochs: 10
-  dataset_config:
-    type: Heimdall.datasets.SingleInstanceDataset
   head_config:
     type: Heimdall.models.ExpressionOnlyCellPredHead
     args:
   loss_config:
     name: CrossEntropyLoss
-
-cell_rep_config:
-  type: Heimdall.cell_representations.CellRepresentation
