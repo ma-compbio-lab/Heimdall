@@ -103,6 +103,54 @@ class LinearSeqPredHead(SeqPredHeadMixin, LinearDecoderMixin):
     """Linear sequence prediction head."""
 
 
+class ContrastiveDecoder(nn.Module):
+    """Return the two contrastive cell-view embeddings for loss construction."""
+
+    def __init__(self, dim_in: int, dim_out: int | None = None, initial_tau_inv: float = 3.0):
+        super().__init__()
+        self.tau_inv = nn.Parameter(torch.tensor(initial_tau_inv), requires_grad=True)
+
+    def forward(self, encoder_output):
+        cls_embeddings = encoder_output[:, 0, :]
+        double_batch_size, d_model = cls_embeddings.size()
+        batch_size = double_batch_size // 2
+
+        view_1 = cls_embeddings[:batch_size]
+        view_2 = cls_embeddings[batch_size:]
+
+        # Encode the learnable temperature directly into the view embeddings so
+        # downstream losses can construct either contrastive matrix.
+        scale = self.tau_inv.exp().sqrt()
+        view_1 = torch.nn.functional.normalize(view_1, p=2, dim=1) * scale
+        view_2 = torch.nn.functional.normalize(view_2, p=2, dim=1) * scale
+        contrastive_views = torch.stack([view_1, view_2], dim=0)
+
+        return TransformerOutput(
+            logits=contrastive_views,
+            sequence_embeddings=encoder_output,
+            cls_embeddings=cls_embeddings,
+        )
+
+
+class SameViewContrastiveDecoder(nn.Module):
+    """Deprecated alias for `ContrastiveDecoder`.
+
+    Phase-specific contrastive matrices are now constructed inside the losses.
+
+    """
+
+    def __init__(self, dim_in: int, dim_out: int | None = None, initial_tau_inv: float = 3.0):
+        super().__init__()
+        self.contrastive_decoder = ContrastiveDecoder(
+            dim_in=dim_in,
+            dim_out=dim_out,
+            initial_tau_inv=initial_tau_inv,
+        )
+
+    def forward(self, encoder_output):
+        return self.contrastive_decoder(encoder_output)
+
+
 class NonnegativeFactorizationMixin(nn.Module):
     def __init__(self, dim_in: int, dim_out: int, k: int = 20, **kwargs):
         """Constrained Nonnegative Matrix Factorization (NMF) embedding.

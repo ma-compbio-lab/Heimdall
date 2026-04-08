@@ -15,7 +15,7 @@ from pytest import fixture
 
 from Heimdall.cell_representations import CellRepresentation, setup_data
 from Heimdall.models import setup_model
-from Heimdall.utils import INPUT_KEYS, get_dtype, instantiate_from_config
+from Heimdall.utils import INPUT_KEYS, get_collation_closure, get_dtype, instantiate_from_config
 
 load_dotenv()
 
@@ -154,6 +154,33 @@ def partition_config(request, toy_partitioned_data_path):
     return conf
 
 
+@fixture(scope="module")
+def contrastive_task_config(request, toy_single_data_path):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+        conf = hydra.compose(
+            config_name="config",
+            overrides=[
+                "scfm/model=transformer",
+                "scfm.model.args.d_model=64",
+                f"data_path={os.environ['DATA_PATH']}",
+                f"ensembl_dir={os.environ['DATA_PATH']}",
+                "scfm/dataset=test",
+                f"+scfm/tasks@scfm.tasks.default={request.param}",
+                f"scfm.dataset.preprocess_args.data_path={toy_single_data_path}",
+                "cache_preprocessed_dataset_dir=null",
+                "work_dir=work_dir",
+                "run_wandb=false",
+                "scfm/fg=identity",
+                "scfm/fe=zero",
+                "scfm/fc=geneformer",
+                "scfm.trainer.args.batchsize=4",
+            ],
+        )
+        OmegaConf.resolve(conf)
+
+    return conf
+
+
 # @fixture(scope="module")
 # def accelerator(config):
 #     setup
@@ -165,8 +192,8 @@ def instantiate_and_run_model(config):
 
     model = setup_model(config, cr, is_main_process=accelerator.is_main_process)
 
-    # Test execution
-    batch = next(iter(cr.dataloaders["train"]))
+    # Avoid the dataloader worker stack for model smoke tests.
+    batch = get_collation_closure(cr.tasklist)([cr.datasets["train"][0]])
     inputs = {input_key: batch[input_key] for input_key in INPUT_KEYS if input_key in batch}
     model(inputs=inputs)
 
@@ -214,3 +241,12 @@ def test_paired_task_model_instantiation(paired_task_config):
 )
 def test_partitioned_model_instantiation(partition_config):
     instantiate_and_run_model(partition_config)
+
+
+@pytest.mark.parametrize(
+    "contrastive_task_config",
+    ["contrast", "same_view_contrast"],
+    indirect=True,
+)
+def test_contrastive_task_model_instantiation(contrastive_task_config):
+    instantiate_and_run_model(contrastive_task_config)

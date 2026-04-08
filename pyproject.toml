@@ -44,13 +44,13 @@ classifiers = [
 
 [tool.hatch.build.targets.sdist]
 include = [
-  "Heimdall/*.py",
+  "Heimdall/**/*.py",
   "Heimdall/config/**",
 ]
 
 [tool.hatch.build.targets.wheel]
 include = [
-  "Heimdall/*.py",
+  "Heimdall/**/*.py",
   "Heimdall/config/**",
 ]
 
@@ -90,4 +90,15 @@ markers = [
 
 testpaths = [
     "tests/"
+]
+
+# Dev requirements
+[dependency-groups]
+dev = [
+    "ipdb",
+    "ipython",
+    "nox",
+    "pre-commit",
+    "pytest",
+    "python-dotenv"
 ]

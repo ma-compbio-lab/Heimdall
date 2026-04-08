@@ -1,0 +1,14 @@
+type: Heimdall.task.ContrastiveViewTask
+
+args:
+  task_type: regression
+  metrics: []
+  train_split: 0.95
+  shuffle: true
+  min_panel_size: 2
+  head_config:
+    type: Heimdall.models.ContrastiveDecoder
+  loss_config:
+    type: Heimdall.losses.ScheduledContrastiveLoss
+    args:
+      switch_ratio: 0.1
