@@ -1,9 +1,11 @@
 from Heimdall.models._head import (
+    ContrastiveDecoder,
     ExpressionOnlyCellPredHead,
     GenericPredHeadMixin,
     LinearCellPredHead,
     LinearSeqPredHead,
     NonnegativeFactorizationPredHead,
+    SameViewContrastiveDecoder,
     SeqPredHeadMixin,
     TransformerOutput,
 )
@@ -28,6 +30,8 @@ __all__ = [
     ExpressionWeightedSum.__name__,
     ExpressionOnly.__name__,
     TransformerOutput.__name__,
+    ContrastiveDecoder.__name__,
+    SameViewContrastiveDecoder.__name__,
     LinearCellPredHead.__name__,
     LinearSeqPredHead.__name__,
     ExpressionOnlyCellPredHead.__name__,

@@ -268,7 +268,6 @@ class PartitionedDataset(SingleInstanceDataset):
     def _setup_random_splits(self):
         print("> Did not find splits in config, generating random splits.")
         for partition in range(self.num_partitions):
-            self.partition = partition
             self.partition_splits[partition] = self._get_random_splits_partition(
                 partition,  # TODO: pass train_split correctly via self.data.tasklist.splits
             )

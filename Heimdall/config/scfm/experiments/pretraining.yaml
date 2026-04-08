@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - /scfm/tasks@scfm.tasks.default: pretrain_geneformer_dev
+  - /scfm/tasks@scfm.tasks.default: mlm
   - override /scfm/model@scfm.model: transformer_large
   - override /scfm/dataset@scfm.dataset: new_sctab_pretrain
   - override /scfm/scheduler@scfm.scheduler: cosine

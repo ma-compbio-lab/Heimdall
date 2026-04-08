@@ -260,6 +260,8 @@ class HeimdallTrainer:
         total_steps = len(self.dataloader_train.dataset) // global_batch_size * self.epochs
         warmup_ratio = self.scheduler_cfg.warmup_ratio
         warmup_step = int(warmup_ratio * total_steps)
+        self.total_training_steps = total_steps
+        self.warmup_steps = warmup_step
 
         self.lr_scheduler = get_scheduler(
             name=self.scheduler_cfg.name,
@@ -543,6 +545,7 @@ class HeimdallTrainer:
             loss_name = subtask.loss_config.type.split(".")[-1]
             if loss_name.startswith("Flatten"):
                 loss_kwargs["num_labels"] = self.num_labels[subtask_name]
+            loss_kwargs["trainer"] = self
 
             loss_functions[subtask_name] = instantiate_from_config(subtask.loss_config, **loss_kwargs)
 

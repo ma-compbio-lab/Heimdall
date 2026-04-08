@@ -302,6 +302,87 @@ class SeqMaskedMLMTask(TransformationMixin, MaskedMixin, MLMMixin, SingleInstanc
         return data
 
 
+@dataclass
+class ContrastiveViewTask(Task):
+    min_panel_size: int = 400
+
+    @property
+    def rng(self):
+        return self.data.rng
+
+    @property
+    def num_raw_genes(self):
+        return len(self.data.raw_gene_names)
+
+    def log_sample(self, min_genes, max_genes):
+        if min_genes >= max_genes:
+            return min_genes
+
+        log_sample = self.rng.uniform(np.log2(min_genes), np.log2(max_genes))
+        sample = int(np.exp2(log_sample))
+
+        return max(min(sample, max_genes), min_genes)
+
+    def setup_labels(self):
+        # Dummy labels used to size the contrastive head to the training batch.
+        batchsize = self.data.local_cfg.trainer.args.batchsize
+        self.labels = np.zeros((len(self.data.adata), batchsize), dtype=np.float32)
+
+    def get_inputs(self, idx, shared_inputs):
+        if not (hasattr(self, "panel_1_idx") and hasattr(self, "panel_2_idx")):
+            self.on_batch()
+
+        labels = self.labels[shared_inputs["idx"]]
+
+        self.data.fe.gene_panel_idx = self.panel_1_idx
+        inputs_1 = self.data.fc[idx]
+
+        self.data.fe.gene_panel_idx = self.panel_2_idx
+        inputs_2 = self.data.fc[idx]
+
+        # Reset back to the full gene panel after building the two views.
+        self.data.fe.gene_panel_idx = np.arange(self.data.num_genes)
+
+        view_inputs = [inputs_1, inputs_2]
+        inputs = {key: [view_input[key] for view_input in view_inputs] for key in inputs_1}
+        inputs["labels"] = [labels for _ in view_inputs]
+
+        return inputs
+
+    def on_batch(self):
+        """Sample two independent, non-overlapping gene panels for this
+        batch."""
+        all_indices = np.arange(self.num_raw_genes)
+        panel_size_1 = self.log_sample(self.min_panel_size, self.num_raw_genes)
+        panel_idx_1 = self.rng.choice(all_indices, panel_size_1, replace=False)
+
+        remaining_indices = np.setdiff1d(all_indices, panel_idx_1, assume_unique=True)
+        if len(remaining_indices) < self.min_panel_size:
+            panel_idx_2 = remaining_indices
+        else:
+            panel_size_2 = self.log_sample(self.min_panel_size, self.num_raw_genes - panel_size_1)
+            panel_idx_2 = self.rng.choice(remaining_indices, panel_size_2, replace=False)
+            assert np.intersect1d(panel_idx_1, panel_idx_2).size == 0, "Panels overlap"
+
+        self.panel_1_idx = panel_idx_1
+        self.panel_2_idx = panel_idx_2
+
+    def collate(self, values: list[Tensor | None]):
+        is_invalid = [v is None for v in values]
+        if all(is_invalid):
+            return None
+        elif any(is_invalid):
+            raise ValueError("Cannot have multiple samples with inhomogenous input validities.")
+
+        first_value = values[0]
+        if not isinstance(first_value, (list, tuple)):
+            return default_collate(values)
+
+        view_1_values = [view_1 for view_1, _ in values]
+        view_2_values = [view_2 for _, view_2 in values]
+        return default_collate(view_1_values + view_2_values)
+
+
 class Tasklist:
     """Container for multiple Heimdall tasks.
 
