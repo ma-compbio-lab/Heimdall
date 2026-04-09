@@ -44,7 +44,14 @@ from Heimdall.utils import (  # get_cached_paths,
 
 
 class HeimdallTrainer:
-    CHECKPOINT_KEYS = ("tasks", "fg", "fe", "fc", "model", "dataset.preprocess_args.data_path")
+    CHECKPOINT_KEYS = (
+        "scfm.tasks",
+        "scfm.fg",
+        "scfm.fe",
+        "scfm.fc",
+        "scfm.model",
+        "scfm.dataset.preprocess_args.data_path",
+    )
 
     def __init__(
         self,
@@ -171,7 +178,7 @@ class HeimdallTrainer:
 
     def setup_class_names_and_num_labels(self, data):
         self.class_names = {}
-        for subtask_name, subtask in data.tasklist:
+        for subtask_name, subtask in data.tasklist.active_items:
             label_key = subtask.label_col_name
             label_obsm_key = subtask.label_obsm_name
 
@@ -187,7 +194,7 @@ class HeimdallTrainer:
                     self.class_names[subtask_name] = data.adata.uns["task_order"]  # NOTE: first entry might be NULL
 
         self.num_labels = {}
-        for subtask_name, subtask in data.tasklist:
+        for subtask_name, subtask in data.tasklist.active_items:
             label_key = subtask.label_col_name
             label_obsm_key = subtask.label_obsm_name
             if subtask.task_type in ("multiclass", "binary") and (label_key or label_obsm_key):
@@ -279,7 +286,7 @@ class HeimdallTrainer:
     def _initialize_metrics(self):
         """Initializing the metrics based on the hydra config."""
         metrics = defaultdict(dict)
-        for subtask_name, subtask in self.data.tasklist:
+        for subtask_name, subtask in self.data.tasklist.active_items:
             subtask_metrics = metrics[subtask_name]
             task_type = subtask.task_type
 
@@ -400,7 +407,7 @@ class HeimdallTrainer:
 
         # If the tracked parameter is specified
         best_metric = defaultdict(dict)
-        for subtask_name, subtask in self.data.tasklist:
+        for subtask_name, subtask in self.data.tasklist.active_items:
             if subtask.track_metric is not None:
                 best_metric[subtask_name] = defaultdict(lambda: float("-inf"))
                 assert (
@@ -419,7 +426,7 @@ class HeimdallTrainer:
 
             # Track the best metric if specified
             reset_patience_counter = False
-            for subtask_name, subtask in self.data.tasklist:
+            for subtask_name, subtask in self.data.tasklist.active_items:
                 if subtask.track_metric is not None:
                     val_metric = valid_log.get(f"valid_{subtask_name}_{subtask.track_metric}", float("-inf"))
                     if (
@@ -511,7 +518,7 @@ class HeimdallTrainer:
                     self.print_r0("> Skipped saving UMAP")
 
             if self.run_wandb and self.accelerator.is_main_process:
-                for subtask_name, subtask in self.data.tasklist:
+                for subtask_name, subtask in self.data.tasklist.active_items:
                     if subtask.track_metric is not None:  # logging the best val score and the tracked test scores
                         self.accelerator.log(best_metric[subtask_name])
                 self.accelerator.end_training()
@@ -540,7 +547,7 @@ class HeimdallTrainer:
 
     def instantiate_loss_functions_from_config(self):
         loss_functions = {}
-        for subtask_name, subtask in self.data.tasklist:
+        for subtask_name, subtask in self.data.tasklist.active_items:
             loss_kwargs = {}
             loss_name = subtask.loss_config.type.split(".")[-1]
             if loss_name.startswith("Flatten"):
@@ -745,16 +752,17 @@ class HeimdallTrainer:
                             f"Loss: {batch_loss:.4f} ",
                         )
 
-                        for subtask_name, _ in self.data.tasklist:
-                            for key, value in batch_outputs[subtask_name].items():
+                        for subtask_name, subtask_batch_outputs in batch_outputs.items():
+                            for key, value in subtask_batch_outputs.items():
                                 outputs[key][subtask_name].extend(value.detach().cpu().numpy())
 
                     if metrics is not None and not self.get_precomputed:
-                        for subtask_name, subtask in self.data.tasklist:
+                        for subtask_name, subtask_batch_outputs in batch_outputs.items():
+                            subtask = self.data.tasklist[subtask_name]
                             for metric_name, metric in metrics[subtask_name].items():  # noqa: B007
                                 # Built-in metric
-                                subtask_labels = batch_outputs[subtask_name]["labels"]
-                                subtask_preds = batch_outputs[subtask_name]["preds"]
+                                subtask_labels = subtask_batch_outputs["labels"]
+                                subtask_preds = subtask_batch_outputs["preds"]
 
                                 if subtask.task_type in ["multiclass", "mlm"]:
                                     subtask_labels = subtask_labels.to(torch.int)
@@ -812,7 +820,7 @@ class HeimdallTrainer:
             )
 
         if dataloader_loss is None:
-            loss = {subtask_name: 0.0 for subtask_name, _ in self.data.tasklist}  # 0. is a sentinel value
+            loss = {subtask_name: 0.0 for subtask_name, _ in self.data.tasklist.active_items}  # 0. is a sentinel value
         else:
             loss = {
                 subtask_name: subtask_loss / len(dataloader) for subtask_name, subtask_loss in dataloader_loss.items()

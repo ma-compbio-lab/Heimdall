@@ -151,7 +151,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     def setup(self, hash_vars=(), ops=("preprocess", "labels")):
         if "preprocess" in ops:
-            self.load_anndata()
+            self.load_anndata(hash_vars=hash_vars)
             self.setup_tokenizer(hash_vars=hash_vars)
         if "labels" in ops:
             self.setup_labels(hash_vars=hash_vars)
@@ -281,7 +281,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         self.num_subtasks = self.tasklist.num_subtasks
 
-    def load_anndata(self, filename: str = "data.h5ad"):
+    def load_anndata(self, filename: str = "data.h5ad", hash_vars=()):
         """Load AnnData into memory (and preprocess, if necessary)."""
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
@@ -294,6 +294,7 @@ class CellRepresentation(SpecialTokenMixin):
                 cache_dir / "processed_anndata",
                 filename,
                 keys=self.DATASET_KEYS,
+                hash_vars=hash_vars,
             )
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
 
@@ -599,6 +600,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                     cache_dir / "processed_anndata",
                     "metadata.pkl",
                     keys=self.DATASET_KEYS,
+                    hash_vars=(),
                 )
 
             if self._cfg.overwrite:
@@ -619,16 +621,40 @@ class PartitionedCellRepresentation(CellRepresentation):
                 # Using zeroth partition as dummy
                 for rank in range(self.num_replicas):
                     if rank == self.rank:
-                        self.print_during_setup("> Dummy partition loading...")
+                        self.print_during_setup(
+                            f"> Rank {self.rank}: starting dummy partition loading...",
+                            is_printable_process=True,
+                        )
                         self.indent += 1
                         dummy_partition = 0
                         self.prepare_partition(dummy_partition)
-                        super().setup(hash_vars=(dummy_partition,), ops=("preprocess",))
+                        super().setup(hash_vars=(int(dummy_partition),), ops=("preprocess",))
+
+                        expected_partition_size = self.get_stale_metadata_expected_size(dummy_partition)
+                        actual_partition_size = self.get_stale_metadata_actual_size()
+                        size_name = self.get_stale_metadata_size_name()
+                        if expected_partition_size is not None and int(expected_partition_size) != int(
+                            actual_partition_size,
+                        ):
+                            raise RuntimeError(
+                                "Cached partition metadata is stale: "
+                                f"partition {dummy_partition} expected {size_name} {expected_partition_size}, "
+                                f"but current data has {size_name} {actual_partition_size}. "
+                                f"Remove stale metadata at {metadata_path} and rerun.",
+                            )
 
                         self.prepare_full_dataset()
                         SpecialTokenMixin.__init__(self)
                         self.partition = None
                         self.indent -= 1
+                        self.print_during_setup(
+                            f"> Rank {self.rank}: finished dummy partition loading.",
+                            is_printable_process=True,
+                        )
+                    self.print_during_setup(
+                        f"> Rank {self.rank}: waiting at dummy partition barrier for loop rank {rank}.",
+                        is_printable_process=True,
+                    )
                     self.accelerator.wait_for_everyone()
 
             else:
@@ -649,6 +675,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                 self.print_during_setup("> Finished setting up labels")
 
                 if cache_dir is not None:
+                    metadata_path.parent.mkdir(exist_ok=True, parents=True)
                     with open(metadata_path, "wb") as metadata_file:
                         metadata = (
                             self.partition_sizes,
@@ -667,6 +694,15 @@ class PartitionedCellRepresentation(CellRepresentation):
     def _initialize_partition(self):
         self.dataloaders["full"].batch_sampler.sampler.partition_idx = 0
 
+    def get_stale_metadata_expected_size(self, partition: int):
+        return self.partition_sizes.get(partition)
+
+    def get_stale_metadata_actual_size(self):
+        return self.adata.n_obs
+
+    def get_stale_metadata_size_name(self):
+        return "size"
+
     def set_partition_size(self):
         """Get the size of the current partition."""
         self.partition_sizes[self.partition] = self.adata.n_obs
@@ -680,7 +716,19 @@ class PartitionedCellRepresentation(CellRepresentation):
     def setup(self, ops=("preprocess", "labels")):
         for rank in range(self.num_replicas):
             if rank == self.rank:
+                self.print_during_setup(
+                    f"> Rank {self.rank}: starting partition setup pass {ops=}.",
+                    is_printable_process=True,
+                )
                 self._setup_partitions(ops=ops)
+                self.print_during_setup(
+                    f"> Rank {self.rank}: finished partition setup pass {ops=}.",
+                    is_printable_process=True,
+                )
+            self.print_during_setup(
+                f"> Rank {self.rank}: waiting at partition setup barrier for loop rank {rank}.",
+                is_printable_process=True,
+            )
             self.accelerator.wait_for_everyone()
 
     def _setup_partitions(self, ops):
@@ -703,11 +751,30 @@ class PartitionedCellRepresentation(CellRepresentation):
         # print(f"[Rank {self.accelerator.process_index}] Setting to {self.data_path=}")
         super().preprocess_anndata()
 
-    def load_anndata(self, filename="data.h5ad"):
+    def load_anndata(self, filename="data.h5ad", hash_vars=()):
         partition_source_path = self.partition_file_paths[self.partition]
         partition_filename = Path(partition_source_path).name
-        # partition_filename = f"partition_{self.partition}_{filename}"
-        super().load_anndata(partition_filename)
+        # Keep all partition AnnData caches in the same dataset-level cache directory.
+        # The filenames are already unique per partition.
+        super().load_anndata(partition_filename, hash_vars=())
+        if getattr(self.adata, "filename", None) is None and self._cfg.cache_preprocessed_dataset_dir is not None:
+            cache_dir = Path(self._cfg.cache_preprocessed_dataset_dir)
+            preprocessed_data_path, _, _ = get_fully_qualified_cache_paths(
+                self.local_cfg,
+                cache_dir / "processed_anndata",
+                partition_filename,
+                keys=self.DATASET_KEYS,
+                hash_vars=(),
+            )
+            if preprocessed_data_path.is_file():
+                self.adata = ad.read_h5ad(
+                    preprocessed_data_path,
+                    backed="r",
+                )
+        print(
+            f"> Loaded partition {self.partition + 1} cache from "
+            f"{getattr(self.adata, 'filename', None)!r} with obsm_keys={sorted(self.adata.obsm.keys())}",
+        )
 
     def close_partition(self, is_original_replica: bool = True):
         """Close current partition."""
@@ -753,7 +820,10 @@ class PartitionedCellRepresentation(CellRepresentation):
         # Preprocess partition AnnData
         partition_prepared = self.prepare_partition(partition)
         if partition_prepared:
-            super().setup(hash_vars=(int(self.partition),), ops=("preprocess", "labels"))
+            super().setup(
+                hash_vars=(int(self.partition),),
+                ops=("preprocess", "labels"),
+            )
 
     @check_states(processed_fcfg=True)
     def prepare_dataset_loaders(self):

@@ -110,7 +110,10 @@ class Task(ABC):
             self.data.local_cfg,
             cache_dir,
             filename=f"{task_name}_labels.pkl",
-            keys=self.data.TOKENIZER_KEYS,
+            keys=(
+                *self.data.TOKENIZER_KEYS,
+                f"tasks.{task_name}",
+            ),
             hash_vars=hash_vars,
         )
         return processed_data_path
@@ -119,7 +122,10 @@ class Task(ABC):
         clear_fully_qualified_cache_paths(
             self.data.local_cfg,
             cache_dir,
-            keys=self.data.TOKENIZER_KEYS,
+            keys=(
+                *self.data.TOKENIZER_KEYS,
+                f"tasks.{task_name}",
+            ),
             hash_vars=hash_vars,
         )
 
@@ -137,10 +143,21 @@ class Task(ABC):
                 f"> Found already processed labels for task {task_name}: {processed_data_path}",
             )
             with open(processed_data_path, "rb") as label_file:
-                self.labels = pkl.load(label_file)
+                cached_labels = pkl.load(label_file)
+
+            if not self.validate_cached_labels(cached_labels):
+                self.data.print_during_setup(
+                    f"> Ignoring incompatible cached labels for task {task_name}: {processed_data_path}",
+                )
+                return False
+
+            self.labels = cached_labels
             return True
 
         return False
+
+    def validate_cached_labels(self, labels) -> bool:
+        return True
 
     def get_inputs(self, idx, shared_inputs):
         return {
@@ -305,6 +322,7 @@ class SeqMaskedMLMTask(TransformationMixin, MaskedMixin, MLMMixin, SingleInstanc
 @dataclass
 class ContrastiveViewTask(Task):
     min_panel_size: int = 400
+    batchsize: int | None = None
 
     @property
     def rng(self):
@@ -325,8 +343,17 @@ class ContrastiveViewTask(Task):
 
     def setup_labels(self):
         # Dummy labels used to size the contrastive head to the training batch.
-        batchsize = self.data.local_cfg.trainer.args.batchsize
+        if self.batchsize is None:
+            raise ValueError("`ContrastiveViewTask` requires `args.batchsize` to be set in the task config.")
+        batchsize = self.batchsize
         self.labels = np.zeros((len(self.data.adata), batchsize), dtype=np.float32)
+
+    def validate_cached_labels(self, labels) -> bool:
+        if self.batchsize is None:
+            return False
+        batchsize = self.batchsize
+        expected_shape = (len(self.data.adata), batchsize)
+        return isinstance(labels, np.ndarray) and labels.shape == expected_shape
 
     def get_inputs(self, idx, shared_inputs):
         if not (hasattr(self, "panel_1_idx") and hasattr(self, "panel_2_idx")):
@@ -444,6 +471,14 @@ class Tasklist:
 
     def __iter__(self):
         yield from self._tasks.items()
+
+    @property
+    def active_items(self):
+        return tuple(
+            (subtask_name, subtask)
+            for subtask_name, subtask in self._tasks.items()
+            if not getattr(subtask, "is_pseudo", False)
+        )
 
     def __len__(self):
         return self.num_subtasks
