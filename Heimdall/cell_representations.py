@@ -226,23 +226,30 @@ class CellRepresentation(SpecialTokenMixin):
         cache_dir = Path(cache_dir)
 
         # Clear preprocessed dataset
-        clear_fully_qualified_cache_paths(self.local_cfg, cache_dir / "processed_anndata", keys=self.DATASET_KEYS)
-        self.print_during_setup("> Cleared `processed_anndata` cache.")
+        cleared_processed_dir = clear_fully_qualified_cache_paths(
+            self.local_cfg,
+            cache_dir / "processed_anndata",
+            keys=self.DATASET_KEYS,
+        )
+        self.print_during_setup(f"> Cleared `processed_anndata` cache at {cleared_processed_dir}.")
 
         # Clear tokenizer
-        clear_fully_qualified_cache_paths(
+        cleared_tokenizer_dir = clear_fully_qualified_cache_paths(
             self.local_cfg,
             cache_dir / "processed_data",
             keys=self.TOKENIZER_KEYS,
             hash_vars=hash_vars,
         )
-        self.print_during_setup("> Cleared tokenizer cache.")
+        self.print_during_setup(f"> Cleared tokenizer cache at {cleared_tokenizer_dir}.")
 
         # Clear labels
+        cleared_label_dirs = []
         for subtask_name, subtask in self.tasklist:
-            subtask.clear_cache_path(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
+            cleared_label_dirs.append(
+                subtask.clear_cache_path(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name),
+            )
 
-        self.print_during_setup("> Cleared label cache.")
+        self.print_during_setup(f"> Cleared label cache at {cleared_label_dirs}.")
 
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():

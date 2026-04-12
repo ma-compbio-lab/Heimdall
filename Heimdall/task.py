@@ -119,7 +119,7 @@ class Task(ABC):
         return processed_data_path
 
     def clear_cache_path(self, cache_dir, hash_vars, task_name):
-        clear_fully_qualified_cache_paths(
+        return clear_fully_qualified_cache_paths(
             self.data.local_cfg,
             cache_dir,
             keys=(
@@ -142,8 +142,14 @@ class Task(ABC):
             self.data.print_during_setup(
                 f"> Found already processed labels for task {task_name}: {processed_data_path}",
             )
-            with open(processed_data_path, "rb") as label_file:
-                cached_labels = pkl.load(label_file)
+            try:
+                with open(processed_data_path, "rb") as label_file:
+                    cached_labels = pkl.load(label_file)
+            except (pkl.UnpicklingError, EOFError, ValueError) as exc:
+                self.data.print_during_setup(
+                    f"> Ignoring corrupted cached labels for task {task_name}: {processed_data_path} ({exc})",
+                )
+                return False
 
             if not self.validate_cached_labels(cached_labels):
                 self.data.print_during_setup(
@@ -216,6 +222,11 @@ class SingleInstanceTask(Task):
             raise ValueError("Either 'label_col_name' or 'label_obsm_name' needs to be set.")
 
         self.labels = labels
+
+
+class DummyTask(Task):
+    def setup_labels(self):
+        self.labels = np.zeros((len(self.data.adata), 1), dtype=np.float32)
 
 
 class PairedInstanceTask(Task):

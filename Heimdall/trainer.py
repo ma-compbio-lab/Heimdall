@@ -32,7 +32,7 @@ import Heimdall.losses
 import wandb
 from Heimdall.cell_representations import setup_data
 from Heimdall.models import TransformerOutput, setup_model
-from Heimdall.utils import (  # get_cached_paths,
+from Heimdall.utils import (
     INPUT_KEYS,
     get_fully_qualified_cache_paths,
     instantiate_from_config,
@@ -46,6 +46,7 @@ from Heimdall.utils import (  # get_cached_paths,
 class HeimdallTrainer:
     CHECKPOINT_KEYS = (
         "scfm.tasks",
+        "scfm.trainer.args.batchsize",
         "scfm.fg",
         "scfm.fe",
         "scfm.fc",
@@ -169,9 +170,11 @@ class HeimdallTrainer:
         return self.data.fc_cfg
 
     def check_flash_attn(self):
+        cell_sentence_model = getattr(self.model.encoder, "cell_sentence_model", None)
         if (
-            hasattr(self.model.encoder.cell_sentence_model, "use_flash_attn")
-            and self.model.encoder.cell_sentence_model.use_flash_attn
+            cell_sentence_model is not None
+            and hasattr(cell_sentence_model, "use_flash_attn")
+            and cell_sentence_model.use_flash_attn
             and self.accelerator.mixed_precision != "bf16"
         ):
             raise ValueError("If using Flash Attention, mixed precision must be bf16")
@@ -598,7 +601,8 @@ class HeimdallTrainer:
 
                     values[subtask_name] = value
 
-        inputs = {input_key: batch[input_key] for input_key in INPUT_KEYS if input_key in batch}
+        input_keys = INPUT_KEYS | self.data.fc.extra_keys
+        inputs = {input_key: batch[input_key] for input_key in input_keys if input_key in batch}
 
         # inputs = (batch["identity_inputs"], batch["expression_inputs"])
 

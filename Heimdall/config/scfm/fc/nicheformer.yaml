@@ -1,0 +1,12 @@
+type: Heimdall.fc.NicheformerFc
+
+args:
+  max_input_length: 1
+  embedding_parameters:
+    type: torch.nn.Module  # Should throw an error if called
+  tailor_config:
+    type: Heimdall.tailor.Tailor  # Should throw an error if called
+  order_config:
+    type: Heimdall.order.Order  # Should throw an error if called
+  reduce_config:
+    type: Heimdall.reduce.Reduce  # Should throw an error if called

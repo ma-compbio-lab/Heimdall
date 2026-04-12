@@ -6,6 +6,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+from scipy.sparse import issparse
 
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
@@ -46,6 +47,7 @@ class Fc:
         self.float_dtype = float_dtype
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.rng = np.random.default_rng(rng)
+        self.extra_keys = set()
 
         self.tailor = instantiate_from_config(tailor_config, fc=self)
         self.order = instantiate_from_config(order_config, fc=self)
@@ -193,6 +195,7 @@ class DummyFc(Fc):
         self.fe = fe
         # self.adata = adata
         self.max_input_length = max_input_length
+        self.extra_keys = set()
 
     """Dummy `Fc` that does not tailor the size of the input."""
 
@@ -213,3 +216,99 @@ class DummyFc(Fc):
         }
 
         return outputs
+
+
+class NicheformerFc(Fc):
+    """FC variant that emits full gene-space expression and metadata codes.
+
+    This mirrors the metadata/data-shaping behavior required by the Nicheformer
+    encoder while keeping the SCFM path inside Heimdall.
+
+    """
+
+    def __init__(
+        self,
+        fg: Fg | None,
+        fe: Fe | None,
+        data: "CellRepresentation",
+        tailor_config: DictConfig,
+        order_config: DictConfig,
+        reduce_config: DictConfig,
+        embedding_parameters: DictConfig,
+        max_input_length: Optional[int] = None,
+        float_dtype: str = "float32",
+        rng: int | np.random.Generator = 0,
+    ):
+        self.fg = fg
+        self.fe = fe
+        self.data = data
+        self.max_input_length = max_input_length
+        self.float_dtype = float_dtype
+        self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
+        self.rng = np.random.default_rng(rng)
+        self.extra_keys = {"technology", "species", "modality", "assay"}
+        if not hasattr(self.data, "nicheformer_metadata_codebooks"):
+            self.data.nicheformer_metadata_codebooks = {}
+
+    def __getitem__(self, cell_index: int):
+        valid_mask = self._get_identity_valid_mask()
+        num_genes = int(valid_mask.sum())
+
+        if cell_index == -1:
+            outputs = {
+                "identity_inputs": np.zeros((1,), dtype=np.int64),
+                "expression_inputs": np.zeros((num_genes,), dtype=np.float32),
+                "expression_padding": np.ones((1,), dtype=bool),
+                "technology": np.array(-1, dtype=np.int64),
+                "species": np.array(-1, dtype=np.int64),
+                "modality": np.array(-1, dtype=np.int64),
+            }
+            if "assay" in self.adata.obs:
+                outputs["assay"] = np.array(-1, dtype=np.int64)
+            return outputs
+
+        expression = self.adata.X[cell_index, valid_mask]
+        if issparse(expression):
+            expression = expression.toarray().ravel()
+        else:
+            expression = np.asarray(expression).ravel()
+
+        expression = expression.astype(np.float32, copy=False)
+        panel_idx = getattr(self.data.fe, "gene_panel_idx", None)
+        if panel_idx is not None:
+            panel_idx = np.asarray(panel_idx, dtype=np.int64)
+            masked_expression = np.zeros_like(expression)
+            masked_expression[panel_idx] = expression[panel_idx]
+            expression = masked_expression
+
+        outputs = {
+            "identity_inputs": np.zeros((1,), dtype=np.int64),
+            "expression_inputs": expression,
+            "expression_padding": np.zeros((1,), dtype=bool),
+            "technology": self._get_metadata_code("technology", cell_index),
+            "species": self._get_metadata_code("species", cell_index),
+            "modality": self._get_metadata_code("modality", cell_index),
+        }
+        if "assay" in self.adata.obs:
+            outputs["assay"] = self._get_metadata_code("assay", cell_index)
+
+        return outputs
+
+    def _get_identity_valid_mask(self):
+        if self.fg is not None and hasattr(self.fg, "identity_valid_mask"):
+            return np.asarray(self.fg.identity_valid_mask)
+
+        return np.ones(self.adata.n_vars, dtype=bool)
+
+    def _get_metadata_code(self, field: str, cell_index: int) -> np.int64:
+        if field not in self.adata.obs:
+            raise ValueError(f"`adata.obs[{field!r}]` is required for NicheformerFc.")
+
+        series = self.adata.obs[field].astype("category")
+        categories = [str(category) for category in series.cat.categories]
+        if not hasattr(self.data, "nicheformer_metadata_codebooks"):
+            self.data.nicheformer_metadata_codebooks = {}
+        if field not in self.data.nicheformer_metadata_codebooks:
+            self.data.nicheformer_metadata_codebooks[field] = categories
+
+        return np.int64(series.cat.codes.iloc[int(cell_index)])

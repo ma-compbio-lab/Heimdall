@@ -214,3 +214,41 @@ def test_geneformer_fc_reduce(geneformer_fc):
     # )
 
     # assert np.allclose(expected, output)
+
+
+def test_nicheformer_fc_returns_full_expression_and_metadata(mock_dataset, identity_fg, identity_fe):
+    from Heimdall.fc import NicheformerFc
+
+    mock_dataset.adata.obs["technology"] = ["merscope", "merscope", "visium", "visium"]
+    mock_dataset.adata.obs["species"] = ["mouse", "mouse", "mouse", "mouse"]
+    mock_dataset.adata.obs["modality"] = ["spatial", "spatial", "spatial", "spatial"]
+    mock_dataset.adata.obs["assay"] = ["merscope", "merscope", "visium", "visium"]
+    mock_dataset.adata.var["identity_valid_mask"] = [True, True, False, True]
+    mock_dataset.set_representation_functions(fg=identity_fg, fe=identity_fe)
+    fc = NicheformerFc(
+        fg=identity_fg,
+        fe=identity_fe,
+        data=mock_dataset,
+        max_input_length=1,
+        float_dtype="float32",
+        rng=0,
+        embedding_parameters=OmegaConf.create({"type": "torch.nn.Module"}),
+        tailor_config=OmegaConf.create({"type": "Heimdall.tailor.Tailor"}),
+        order_config=OmegaConf.create({"type": "Heimdall.order.Order"}),
+        reduce_config=OmegaConf.create({"type": "Heimdall.reduce.Reduce"}),
+    )
+    mock_dataset.set_representation_functions(fg=identity_fg, fe=identity_fe, fc=fc)
+
+    outputs = fc[0]
+
+    assert outputs["identity_inputs"].shape == (1,)
+    assert outputs["expression_inputs"].shape == (3,)
+    assert outputs["expression_padding"].shape == (1,)
+    assert outputs["technology"] == 0
+    assert outputs["species"] == 0
+    assert outputs["modality"] == 0
+    assert outputs["assay"] == 0
+    assert np.allclose(outputs["expression_inputs"], np.array([1.0, 4.0, 2.0], dtype=np.float32))
+    assert mock_dataset.nicheformer_metadata_codebooks["technology"] == ["merscope", "visium"]
+    assert mock_dataset.nicheformer_metadata_codebooks["species"] == ["mouse"]
+    assert mock_dataset.nicheformer_metadata_codebooks["modality"] == ["spatial"]

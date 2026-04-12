@@ -209,7 +209,8 @@ class PairedInstanceDataset(Dataset):
 
     def get_shared_inputs(self, idx):
         pair_inputs = [self.data.fc[cell_idx] for cell_idx in self.idx[idx]]
-        inputs = {key: [pair_input[key] for pair_input in pair_inputs] for key in FC_KEYS}
+        pair_input_keys = set().union(*(pair_input.keys() for pair_input in pair_inputs))
+        inputs = {key: [pair_input[key] for pair_input in pair_inputs] for key in pair_input_keys}
         inputs["idx"] = tuple(self.idx[idx])
 
         return inputs
