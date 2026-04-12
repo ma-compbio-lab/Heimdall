@@ -115,6 +115,7 @@ def clear_cached_paths(cfg: DictConfig, cache_dir: Path) -> Tuple[Path, Path]:
     cache_dir = cache_dir / hash_str
     with contextlib.suppress(FileNotFoundError):
         shutil.rmtree(cache_dir)
+    return cache_dir
 
 
 def filter_config(config, keys_to_keep, keys_to_exclude):
@@ -196,7 +197,7 @@ def clear_fully_qualified_cache_paths(
 
     cfg = generate_minimal_config(cfg, keys=keys, excluded_keys=excluded_keys, hash_vars=hash_vars)
 
-    clear_cached_paths(cfg, Path(cache_dir).resolve())
+    return clear_cached_paths(cfg, Path(cache_dir).resolve())
 
 
 def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):

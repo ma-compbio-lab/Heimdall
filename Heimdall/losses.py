@@ -53,6 +53,10 @@ class MaskedBCEWithLogitsLoss(TrainerBoundMixin, MaskedLossMixin, nn.BCEWithLogi
     """BCEWithLogitsLoss evaluated on unmasked entires."""
 
 
+class TrainerMSELoss(TrainerBoundMixin, nn.MSELoss):
+    """MSELoss that accepts Heimdall's injected `trainer` kwarg."""
+
+
 class CrossEntropyFocalLoss(TrainerBoundMixin, nn.Module):
     def __init__(self, trainer, alpha=0.25, gamma=2.0, reduction="mean"):
         """

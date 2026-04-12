@@ -110,7 +110,10 @@ def contrastive_representation(
 
 def test_contrastive_task_instantiation(contrastive_representation):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
-        conf = hydra.compose(config_name="contrast")
+        conf = hydra.compose(
+            config_name="contrast",
+            overrides=["args.batchsize=4"],
+        )
         OmegaConf.resolve(conf)
 
     task = ContrastiveViewTask(contrastive_representation, **conf.args)
@@ -120,7 +123,10 @@ def test_contrastive_task_instantiation(contrastive_representation):
 
 def test_scheduled_contrastive_task_instantiation(contrastive_representation):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
-        conf = hydra.compose(config_name="scheduled_contrast")
+        conf = hydra.compose(
+            config_name="scheduled_contrast",
+            overrides=["args.batchsize=4"],
+        )
         OmegaConf.resolve(conf)
 
     task = ContrastiveViewTask(contrastive_representation, **conf.args)
@@ -134,7 +140,10 @@ def test_scheduled_contrastive_task_instantiation(contrastive_representation):
 
 def test_contrastive_task_on_batch_samples_disjoint_panels(contrastive_representation):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
-        conf = hydra.compose(config_name="contrast")
+        conf = hydra.compose(
+            config_name="contrast",
+            overrides=["args.batchsize=4"],
+        )
         OmegaConf.resolve(conf)
 
     task = ContrastiveViewTask(contrastive_representation, **conf.args)
@@ -147,7 +156,10 @@ def test_contrastive_task_on_batch_samples_disjoint_panels(contrastive_represent
 
 def test_contrastive_task_get_inputs_restores_gene_panel(contrastive_representation):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
-        conf = hydra.compose(config_name="contrast")
+        conf = hydra.compose(
+            config_name="contrast",
+            overrides=["args.batchsize=4"],
+        )
         OmegaConf.resolve(conf)
 
     task = ContrastiveViewTask(contrastive_representation, **conf.args)
@@ -169,7 +181,10 @@ def test_contrastive_task_get_inputs_restores_gene_panel(contrastive_representat
 
 def test_contrastive_task_collate_flattens_two_views(contrastive_representation):
     with hydra.initialize(version_base=None, config_path="../Heimdall/config/scfm/tasks"):
-        conf = hydra.compose(config_name="contrast")
+        conf = hydra.compose(
+            config_name="contrast",
+            overrides=["args.batchsize=4"],
+        )
         OmegaConf.resolve(conf)
 
     task = ContrastiveViewTask(contrastive_representation, **conf.args)
