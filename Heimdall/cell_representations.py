@@ -517,9 +517,9 @@ class CellRepresentation(SpecialTokenMixin):
             verbose=self.verbose,
         )
         self.tokenizer_context = self.tokenizer.context
-        self.fg = self.tokenizer.fg
-        self.fe = self.tokenizer.fe
-        self.fc = self.tokenizer.fc
+        self.fg: Fg = self.tokenizer.fg
+        self.fe: Fe = self.tokenizer.fe
+        self.fc: Fc = self.tokenizer.fc
 
     # @check_states(adata=True)
     def setup_tokenizer(self, hash_vars=()):

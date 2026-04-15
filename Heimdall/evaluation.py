@@ -119,12 +119,13 @@ def export_pooled_embeddings(trainer, canonical_subtask_name=None, batch_size=No
     data._save_precomputed = True
 
     if hasattr(data, "num_partitions"):
+        rank = trainer.accelerator.process_index
         assigned_partitions = list(
-            range(trainer.accelerator.process_index, data.num_partitions, trainer.accelerator.num_processes),
+            range(rank, data.num_partitions, trainer.accelerator.num_processes),
         )
         if trainer.accelerator.is_main_process:
             print(
-                f"> Export helper assigned partitions for rank {trainer.accelerator.process_index}: {assigned_partitions}",
+                f"> Export helper assigned partitions for rank {rank}: {assigned_partitions}",
                 flush=True,
             )
         for partition in assigned_partitions:
