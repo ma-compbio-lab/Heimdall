@@ -11,7 +11,7 @@ from torch.utils.data import Dataset as PyTorchDataset
 from torch.utils.data import Subset
 
 from Heimdall.task import CellFeatType, LabelType, Task
-from Heimdall.utils import FC_KEYS, MAIN_KEYS
+from Heimdall.utils import MAIN_KEYS
 
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
