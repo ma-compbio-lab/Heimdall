@@ -1,0 +1,4 @@
+type: Heimdall.tokenizer.KnnTokenizerContext
+
+args:
+  feature_obsm_key: ${preprocess.args.feature_obsm_key}

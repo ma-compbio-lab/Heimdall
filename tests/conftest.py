@@ -40,6 +40,16 @@ class MockCellRepresentation(CellRepresentation):
         self.fe = fe
         self.fc = fc
 
+    @property
+    def feature_matrix(self):
+        return self.adata.X
+
+    @property
+    def identity_valid_mask(self):
+        if self.fg.identity_valid_mask is not None:
+            return np.asarray(self.fg.identity_valid_mask, dtype=bool)
+        return np.ones(len(self.raw_gene_names), dtype=bool)
+
 
 @fixture(scope="module")
 def gene_names():
@@ -191,8 +201,8 @@ def zero_expression_mock_dataset(gene_names):
 
 
 @fixture
-def identity_fg(mock_dataset):
-    fg_config = OmegaConf.create(
+def identity_fg_config():
+    return OmegaConf.create(
         {
             "embedding_parameters": {
                 "type": "torch.nn.Embedding",
@@ -205,47 +215,56 @@ def identity_fg(mock_dataset):
             "d_embedding": 128,
         },
     )
-    identity_fg = IdentityFg(mock_dataset, **fg_config)
+
+
+@fixture
+def identity_fe_config():
+    return OmegaConf.create(
+        {
+            "vocab_size": 32,
+            "embedding_parameters": {
+                "type": "Heimdall.embedding.TwoLayerNN",
+                "args": {
+                    "in_features": 1,
+                    "out_features": 128,
+                },
+            },
+            "d_embedding": 128,
+        },
+    )
+
+
+@fixture
+def knn_feature_frame(mock_dataset):
+    return pd.DataFrame(
+        [
+            [10.0, 0.0, 12.0, 13.0],
+            [20.0, 21.0, 0.0, 23.0],
+            [30.0, 31.0, 32.0, 0.0],
+            [40.0, 41.0, 42.0, 43.0],
+        ],
+        index=mock_dataset.adata.obs_names.copy(),
+        columns=["g1", "g2", "g3", "g4"],
+    )
+
+
+@fixture
+def identity_fg(mock_dataset, identity_fg_config):
+    identity_fg = IdentityFg(mock_dataset, **identity_fg_config)
 
     return identity_fg
 
 
 @fixture
-def identity_fg_all_valid_genes(mock_dataset_all_valid_genes):
-    fg_config = OmegaConf.create(
-        {
-            "embedding_parameters": {
-                "type": "torch.nn.Embedding",
-                "args": {
-                    "num_embeddings": "vocab_size",
-                    "embedding_dim": 128,
-                },
-            },
-            "vocab_size": 6,
-            "d_embedding": 128,
-        },
-    )
-    identity_fg = IdentityFg(mock_dataset_all_valid_genes, **fg_config)
+def identity_fg_all_valid_genes(mock_dataset_all_valid_genes, identity_fg_config):
+    identity_fg = IdentityFg(mock_dataset_all_valid_genes, **identity_fg_config)
 
     return identity_fg
 
 
 @fixture
-def zero_expression_identity_fg(zero_expression_mock_dataset):
-    fg_config = OmegaConf.create(
-        {
-            "embedding_parameters": {
-                "type": "torch.nn.Embedding",
-                "args": {
-                    "num_embeddings": "vocab_size",
-                    "embedding_dim": 128,
-                },
-            },
-            "vocab_size": 6,
-            "d_embedding": 128,
-        },
-    )
-    identity_fg = IdentityFg(zero_expression_mock_dataset, **fg_config)
+def zero_expression_identity_fg(zero_expression_mock_dataset, identity_fg_config):
+    identity_fg = IdentityFg(zero_expression_mock_dataset, **identity_fg_config)
 
     return identity_fg
 

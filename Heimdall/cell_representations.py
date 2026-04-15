@@ -24,6 +24,7 @@ from Heimdall.fe import Fe
 from Heimdall.fg import Fg
 from Heimdall.samplers import DefaultBatchSampler, PartitionedBatchSampler, PartitionedDistributedSampler
 from Heimdall.task import Tasklist
+from Heimdall.tokenizer import Tokenizer
 
 # from Heimdall.samplers import PartitionedDistributedSampler
 from Heimdall.utils import (
@@ -48,7 +49,7 @@ class SpecialTokenMixin:
 
 class CellRepresentation(SpecialTokenMixin):
     DATASET_KEYS = ("dataset.preprocess_args.data_path", "tasks")
-    TOKENIZER_KEYS = ("dataset.preprocess_args.data_path", "fg", "fe", "fc")
+    TOKENIZER_KEYS = ("dataset.preprocess_args.data_path", "tokenizer_context", "fg", "fe", "fc")
 
     @property
     def local_cfg(self):
@@ -187,8 +188,13 @@ class CellRepresentation(SpecialTokenMixin):
 
     @property
     def gene_names(self, mask_key: str = "identity_valid_mask"):
-        valid_mask = self.adata.var[mask_key]
-        return self.raw_gene_names[valid_mask]
+        if self.fg.identity_valid_mask is not None:
+            valid_mask = np.asarray(self.fg.identity_valid_mask, dtype=bool)
+            return self.raw_gene_names[valid_mask]
+        if mask_key in self.adata.var:
+            valid_mask = self.adata.var[mask_key].to_numpy(dtype=bool, copy=False)
+            return self.raw_gene_names[valid_mask]
+        return self.raw_gene_names
 
     @property
     def num_genes(self):
@@ -476,8 +482,12 @@ class CellRepresentation(SpecialTokenMixin):
                     expression_embeddings,
                 ) = pkl.load(rep_file)
 
-            self.fg.load_from_cache(identity_embedding_index, identity_valid_mask, gene_embeddings)
-            self.fe.load_from_cache(expression_embeddings)
+            self.tokenizer.load_from_cache(
+                identity_embedding_index,
+                identity_valid_mask,
+                gene_embeddings,
+                expression_embeddings,
+            )
 
             self.processed_fcfg = True
 
@@ -488,53 +498,28 @@ class CellRepresentation(SpecialTokenMixin):
         return False
 
     def save_tokenizer_to_cache(self, cache_dir, hash_vars):
-        # Gather things for caching
-        identity_embedding_index, identity_valid_mask = self.fg.__getitem__(self.adata.var_names, return_mask=True)
-
-        gene_embeddings = self.fg.gene_embeddings
-        expression_embeddings = self.fe.expression_embeddings
-
         processed_data_path = self.get_tokenizer_cache_path(cache_dir, hash_vars)
         if not processed_data_path.is_file():
             with open(processed_data_path, "wb") as rep_file:
-                cache_representation = (
-                    identity_embedding_index,
-                    identity_valid_mask,
-                    gene_embeddings,
-                    expression_embeddings,
-                )
+                cache_representation = self.tokenizer.get_cache_state()
                 pkl.dump(cache_representation, rep_file)
                 self.print_during_setup(f"> Finished writing cell representations at {processed_data_path}")
 
-    def instantiate_representation_functions(self):
-        """Instantiate `f_g`, `fe` and `f_c` according to config."""
-        self.fg: Fg
-        self.fe: Fe
-        self.fc: Fc
-        self.fg, fg_name = instantiate_from_config(
-            self.fg_cfg,
-            self,
-            vocab_size=len(self.raw_gene_names) + 2,
+    def instantiate_tokenizer(self):
+        """Instantiate tokenizer context and `Fg`, `Fe`, `Fc` according to
+        config."""
+        self.tokenizer = Tokenizer(
+            self._cfg,
+            adata=self.adata,
+            raw_gene_names=self.raw_gene_names,
             rng=self.rng,
-            return_name=True,
-        )
-        self.fe, fe_name = instantiate_from_config(
-            self.fe_cfg,
-            self,
-            vocab_size=len(self.raw_gene_names) + 2,
-            # TODO: figure out a way to fix the number of expr tokens... probably specify in config?
-            rng=self.rng,
-            return_name=True,
-        )
-        self.fc, fc_name = instantiate_from_config(
-            self.fc_cfg,
-            self.fg,
-            self.fe,
-            self,
             float_dtype=self.float_dtype,
-            rng=self.rng,
-            return_name=True,
+            verbose=self.verbose,
         )
+        self.tokenizer_context = self.tokenizer.context
+        self.fg = self.tokenizer.fg
+        self.fe = self.tokenizer.fe
+        self.fc = self.tokenizer.fc
 
     # @check_states(adata=True)
     def setup_tokenizer(self, hash_vars=()):
@@ -546,17 +531,15 @@ class CellRepresentation(SpecialTokenMixin):
 
         """
 
-        self.instantiate_representation_functions()
+        self.instantiate_tokenizer()
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             cache_dir = Path(cache_dir)
             is_cached = self.load_tokenizer_from_cache(cache_dir, hash_vars=hash_vars)
             if is_cached:
                 return
 
-        self.fg.preprocess_embeddings()
+        self.tokenizer.preprocess_embeddings()
         self.print_during_setup(f"> Finished calculating fg with {self.fg_cfg.type}")
-
-        self.fe.preprocess_embeddings()
         self.print_during_setup(f"> Finished calculating fe with {self.fe_cfg.type}")
 
         self.processed_fcfg = True

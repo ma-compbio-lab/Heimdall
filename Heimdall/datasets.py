@@ -134,7 +134,7 @@ class SingleInstanceDataset(Dataset):
             raise ValueError(f"Unknown split type {split_type!r}")
 
     def get_shared_inputs(self, idx):
-        outputs = self.data.fc[idx]
+        outputs = self.data.tokenizer[idx]
         outputs["idx"] = self.idx[idx]
 
         return outputs
@@ -208,7 +208,7 @@ class PairedInstanceDataset(Dataset):
         adata.obsp["full_mask"] = full_mask
 
     def get_shared_inputs(self, idx):
-        pair_inputs = [self.data.fc[cell_idx] for cell_idx in self.idx[idx]]
+        pair_inputs = [self.data.tokenizer[cell_idx] for cell_idx in self.idx[idx]]
         pair_input_keys = set().union(*(pair_input.keys() for pair_input in pair_inputs))
         inputs = {key: [pair_input[key] for pair_input in pair_inputs] for key in pair_input_keys}
         inputs["idx"] = tuple(self.idx[idx])

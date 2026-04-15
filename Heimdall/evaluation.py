@@ -83,7 +83,7 @@ def export_partition_pooled_embeddings(trainer, canonical_subtask_name, batch_si
     for start in progress:
         end = min(start + batch_size, num_cells)
         batch_indices = cell_indices[start:end]
-        fc_outputs = [data.fc[int(idx)] for idx in batch_indices]
+        fc_outputs = [data.tokenizer[int(idx)] for idx in batch_indices]
         cell_inputs = collate_fc_outputs(fc_outputs, subtask_names, extra_keys=data.fc.extra_keys)
         cell_inputs = {
             key: {

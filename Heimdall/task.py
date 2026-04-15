@@ -373,10 +373,10 @@ class ContrastiveViewTask(Task):
         labels = self.labels[shared_inputs["idx"]]
 
         self.data.fe.gene_panel_idx = self.panel_1_idx
-        inputs_1 = self.data.fc[idx]
+        inputs_1 = self.data.tokenizer[idx]
 
         self.data.fe.gene_panel_idx = self.panel_2_idx
-        inputs_2 = self.data.fc[idx]
+        inputs_2 = self.data.tokenizer[idx]
 
         # Reset back to the full gene panel after building the two views.
         self.data.fe.gene_panel_idx = np.arange(self.data.num_genes)

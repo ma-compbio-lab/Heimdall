@@ -1,4 +1,4 @@
-# <img src="Heimdall_logo.png"  width=25%/>
+# <img src="logo.png"  width=25%/>
 
 [![Lint](https://github.com/gkrieg/Heimdall/actions/workflows/lint.yml/badge.svg)](https://github.com/gkrieg/Heimdall/actions/workflows/lint.yml)
 
@@ -25,7 +25,8 @@ Check out the documentation [here](https://heimdall-doc.readthedocs.io/en/latest
 ## Dev installation
 
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.12
+uv sync --group dev
 ```
 
 Once the `pre-commit` command line tool is installed, every time you commit
@@ -98,13 +99,13 @@ New test suites can be added under `tests/test_{suite_name}.py`.
 Run a particular test suite with:
 
 ```bash
-python -m pytest tests/test_{suite_name}.py
+uv run --group dev python -m pytest tests/test_{suite_name}.py
 ```
 
 Run all tests but the integration test:
 
 ```bash
-python -m pytest -m 'not integration'
+uv run --group dev python -m pytest -m 'not integration'
 ```
 
 Note: to run the integration test, you'll need to specify the Hydra user using a `.env` file.
