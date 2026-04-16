@@ -3,18 +3,6 @@ import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
 
 
-class TrainerBoundMixin:
-    def __init__(self, trainer, *args, **kwargs):
-        self.trainer = trainer
-        super().__init__(*args, **kwargs)
-
-    @property
-    def step(self):
-        if self.trainer is None:
-            return None
-        return self.trainer.step
-
-
 class MaskedLossMixin:
     def __init__(
         self,
@@ -49,23 +37,23 @@ class MaskedLossMixin:
         return loss
 
 
-class MaskedBCEWithLogitsLoss(TrainerBoundMixin, MaskedLossMixin, nn.BCEWithLogitsLoss):
+class MaskedBCEWithLogitsLoss(MaskedLossMixin, nn.BCEWithLogitsLoss):
     """BCEWithLogitsLoss evaluated on unmasked entires."""
 
 
-class TrainerMSELoss(TrainerBoundMixin, nn.MSELoss):
-    """MSELoss that accepts Heimdall's injected `trainer` kwarg."""
+class TrainerMSELoss(nn.MSELoss):
+    """Compatibility alias for MSE loss."""
 
 
-class CrossEntropyFocalLoss(TrainerBoundMixin, nn.Module):
-    def __init__(self, trainer, alpha=0.25, gamma=2.0, reduction="mean"):
+class CrossEntropyFocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction="mean"):
         """
         Args:
             alpha (float or list): Balancing factor for each class. If a single float, applies to class 1.
             gamma (float): Modulating factor to down-weight easy samples.
             reduction (str): 'none', 'mean', or 'sum'.
         """
-        super().__init__(trainer=trainer)
+        super().__init__()
         raise NotImplementedError("This class is not implemented correctly yet.")
         self.alpha = alpha
         self.gamma = gamma
@@ -103,15 +91,15 @@ class FlattenCrossEntropyFocalLoss(FlattenMixin, CrossEntropyFocalLoss):
     """CrossEntropyFocalLoss with automatic flattening."""
 
 
-class FlattenCrossEntropyLoss(TrainerBoundMixin, FlattenMixin, nn.CrossEntropyLoss):
+class FlattenCrossEntropyLoss(FlattenMixin, nn.CrossEntropyLoss):
     """CrossEntropyFocalLoss with automatic flattening."""
 
 
-class ContrastiveMulticlassLoss(TrainerBoundMixin, nn.Module):
+class ContrastiveMulticlassLoss(nn.Module):
     """Cross-entropy over pairwise token matching across two cell views."""
 
-    def __init__(self, trainer):
-        super().__init__(trainer=trainer)
+    def __init__(self):
+        super().__init__()
         self.cross_entropy = nn.CrossEntropyLoss()
 
     def _build_logits(self, logits: Tensor) -> Tensor:
@@ -142,12 +130,12 @@ class ContrastiveMulticlassLoss(TrainerBoundMixin, nn.Module):
         return self.cross_entropy(logits, target)
 
 
-class CLIPLoss(TrainerBoundMixin, nn.Module):
+class CLIPLoss(nn.Module):
     """Symmetric contrastive loss over both matching directions."""
 
-    def __init__(self, trainer):
-        super().__init__(trainer=trainer)
-        self.contrastive_multiclass_loss = ContrastiveMulticlassLoss(trainer=trainer)
+    def __init__(self):
+        super().__init__()
+        self.contrastive_multiclass_loss = ContrastiveMulticlassLoss()
 
     def _build_logits(self, logits: Tensor) -> Tensor:
         if logits.ndim == 2:
@@ -171,7 +159,7 @@ class CLIPLoss(TrainerBoundMixin, nn.Module):
         return (loss_1 + loss_2) / 2
 
 
-class ScheduledContrastiveLoss(TrainerBoundMixin, nn.Module):
+class ScheduledContrastiveLoss(nn.Module):
     """Switch between two contrastive objectives based on the trainer step."""
 
     def __init__(
@@ -180,16 +168,23 @@ class ScheduledContrastiveLoss(TrainerBoundMixin, nn.Module):
         switch_step: int | None = None,
         switch_ratio: float | None = None,
     ):
-        super().__init__(trainer=trainer)
+        super().__init__()
         if (switch_step is None) == (switch_ratio is None):
             raise ValueError("Exactly one of `switch_step` or `switch_ratio` must be provided.")
         if switch_ratio is not None and not (0.0 <= switch_ratio <= 1.0):
             raise ValueError("`switch_ratio` must lie in [0, 1].")
 
+        self.trainer = trainer
         self._switch_step = switch_step
         self.switch_ratio = switch_ratio
-        self.pre_switch_loss = CLIPLoss(trainer=trainer)
-        self.post_switch_loss = ContrastiveMulticlassLoss(trainer=trainer)
+        self.pre_switch_loss = CLIPLoss()
+        self.post_switch_loss = ContrastiveMulticlassLoss()
+
+    @property
+    def step(self):
+        if self.trainer is None:
+            return None
+        return self.trainer.step
 
     @property
     def switch_step(self):
