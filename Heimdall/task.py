@@ -229,6 +229,33 @@ class DummyTask(Task):
         self.labels = np.zeros((len(self.data.adata), 1), dtype=np.float32)
 
 
+class AutoencoderTask(Task):
+    """Reconstruct the current batch expression inputs with an MSE loss.
+
+    This is intended for use with `model=expression_only`, where the model
+    forwards `expression_inputs` directly and the head learns a reconstruction
+    of that expression vector.
+
+    """
+
+    @property
+    def num_tasks(self) -> int:
+        return len(self.data.tokenizer_context.raw_gene_names)
+
+    def setup_labels(self):
+        # Keep cached task metadata small; per-batch labels are taken directly
+        # from shared tokenizer outputs in `get_inputs`.
+        self.labels = np.empty((len(self.data.adata), 1), dtype=np.float32)
+
+    def validate_cached_labels(self, labels) -> bool:
+        return isinstance(labels, np.ndarray) and labels.shape == (len(self.data.adata), 1)
+
+    def get_inputs(self, idx, shared_inputs):
+        return {
+            "labels": np.asarray(shared_inputs["expression_inputs"], dtype=np.float32),
+        }
+
+
 class PairedInstanceTask(Task):
     def setup_labels(self):
         adata = self.data.adata
