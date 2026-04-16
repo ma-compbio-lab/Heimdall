@@ -1,0 +1,12 @@
+type: Heimdall.task.AutoencoderTask
+
+args:
+  task_type: regression
+  metrics: [MSE]
+  train_split: 0.95
+  shuffle: true
+  head_config:
+    type: Heimdall.models.ExpressionOnlyCellPredHead
+    args:
+  loss_config:
+    type: Heimdall.losses.TrainerMSELoss

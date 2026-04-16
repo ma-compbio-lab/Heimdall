@@ -11,6 +11,7 @@ from Heimdall.models._head import (
 )
 from Heimdall.models._models import (
     Average,
+    Bottleneck,
     ExpressionOnly,
     ExpressionWeightedSum,
     HeimdallModel,
@@ -29,6 +30,7 @@ __all__ = [
     Average.__name__,
     ExpressionWeightedSum.__name__,
     ExpressionOnly.__name__,
+    Bottleneck.__name__,
     TransformerOutput.__name__,
     ContrastiveDecoder.__name__,
     SameViewContrastiveDecoder.__name__,
