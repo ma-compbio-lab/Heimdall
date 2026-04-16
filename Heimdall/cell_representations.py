@@ -187,14 +187,10 @@ class CellRepresentation(SpecialTokenMixin):
         self._raw_gene_names = val
 
     @property
-    def gene_names(self, mask_key: str = "identity_valid_mask"):
-        if self.fg.identity_valid_mask is not None:
-            valid_mask = np.asarray(self.fg.identity_valid_mask, dtype=bool)
-            return self.raw_gene_names[valid_mask]
-        if mask_key in self.adata.var:
-            valid_mask = self.adata.var[mask_key].to_numpy(dtype=bool, copy=False)
-            return self.raw_gene_names[valid_mask]
-        return self.raw_gene_names
+    def gene_names(self):
+        if not hasattr(self, "tokenizer_context"):
+            raise RuntimeError("`CellRepresentation.gene_names` requires `tokenizer_context` to be initialized.")
+        return self.tokenizer_context.gene_names
 
     @property
     def num_genes(self):
@@ -761,10 +757,10 @@ class PartitionedCellRepresentation(CellRepresentation):
                     preprocessed_data_path,
                     backed="r",
                 )
-        print(
-            f"> Loaded partition {self.partition + 1} cache from "
-            f"{getattr(self.adata, 'filename', None)!r} with obsm_keys={sorted(self.adata.obsm.keys())}",
-        )
+        # print(
+        #     f"> Loaded partition {self.partition + 1} cache from "
+        #     f"{getattr(self.adata, 'filename', None)!r} with obsm_keys={sorted(self.adata.obsm.keys())}",
+        # )
 
     def close_partition(self, is_original_replica: bool = True):
         """Close current partition."""
