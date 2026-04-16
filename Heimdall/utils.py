@@ -642,6 +642,9 @@ def _get_inputs_from_csr(feature_matrix, identity_valid_mask, num_genes: int, ce
     """Get expression values and gene indices from internal CSR representation.
 
     Args:
+        feature_matrix: Active tokenizer feature matrix. Sparse matrices use the
+            CSR extraction path; dense NumPy-like arrays fall back to direct
+            indexing.
         cell_index: row index for which to process expression values.
 
     """
@@ -652,11 +655,14 @@ def _get_inputs_from_csr(feature_matrix, identity_valid_mask, num_genes: int, ce
             (cell_identity_inputs,) = cell.nonzero()
             cell_expression_inputs = cell[cell_identity_inputs]
         else:
-            cell_expression_inputs_full = feature_matrix[cell_index, :][identity_valid_mask]
+            cell_expression_inputs_full = np.asarray(feature_matrix[cell_index, :]).flatten()[identity_valid_mask]
             (cell_identity_inputs,) = np.nonzero(cell_expression_inputs_full)
             cell_expression_inputs = cell_expression_inputs_full[cell_identity_inputs]
     else:
-        cell_expression_inputs = feature_matrix[[cell_index], :].toarray().flatten()[identity_valid_mask]
+        if issparse(feature_matrix):
+            cell_expression_inputs = feature_matrix[[cell_index], :].toarray().flatten()[identity_valid_mask]
+        else:
+            cell_expression_inputs = np.asarray(feature_matrix[cell_index, :]).flatten()[identity_valid_mask]
         cell_identity_inputs = np.arange(num_genes)
 
     return cell_identity_inputs, cell_expression_inputs
