@@ -555,7 +555,8 @@ class HeimdallTrainer:
             loss_name = subtask.loss_config.type.split(".")[-1]
             if loss_name.startswith("Flatten"):
                 loss_kwargs["num_labels"] = self.num_labels[subtask_name]
-            loss_kwargs["trainer"] = self
+            if loss_name == "ScheduledContrastiveLoss":
+                loss_kwargs["trainer"] = self
 
             loss_functions[subtask_name] = instantiate_from_config(subtask.loss_config, **loss_kwargs)
 
