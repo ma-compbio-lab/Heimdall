@@ -21,6 +21,14 @@ load_dotenv()
 from dataclasses import dataclass
 
 
+class MockTokenizer:
+    def __init__(self, fc: Fc):
+        self.fc = fc
+
+    def __getitem__(self, cell_index: int):
+        return self.fc[cell_index]
+
+
 @dataclass
 class MockCellRepresentation(CellRepresentation):
     adata: ad.AnnData
@@ -36,9 +44,14 @@ class MockCellRepresentation(CellRepresentation):
         fe: Fe | None = None,
         fc: Fc | None = None,
     ):
+        if not hasattr(self, "tokenizer_context"):
+            self.tokenizer_context = MockTokenizerContext(self)
         self.fg = fg
         self.fe = fe
         self.fc = fc
+        self.tokenizer_context.set_representation_functions(fg=fg, fe=fe, fc=fc)
+        if fc is not None:
+            self.tokenizer = MockTokenizer(fc)
 
     @property
     def feature_matrix(self):
@@ -49,6 +62,43 @@ class MockCellRepresentation(CellRepresentation):
         if self.fg.identity_valid_mask is not None:
             return np.asarray(self.fg.identity_valid_mask, dtype=bool)
         return np.ones(len(self.raw_gene_names), dtype=bool)
+
+
+class MockTokenizerContext:
+    def __init__(self, data: "MockCellRepresentation"):
+        self.adata = data.adata
+        self.raw_gene_names = np.asarray(data.raw_gene_names)
+        self.float_dtype = data.float_dtype if hasattr(data, "float_dtype") else "float32"
+        self.verbose = data.verbose
+        self.fg = None
+        self.fe = None
+        self.fc = None
+
+    @property
+    def identity_valid_mask(self):
+        if self.fg is not None and self.fg.identity_valid_mask is not None:
+            return np.asarray(self.fg.identity_valid_mask, dtype=bool)
+        return np.ones(len(self.raw_gene_names), dtype=bool)
+
+    @property
+    def gene_names(self):
+        return self.raw_gene_names[self.identity_valid_mask]
+
+    @property
+    def feature_matrix(self):
+        return self.adata.X
+
+    @property
+    def num_genes(self):
+        return len(self.gene_names)
+
+    def set_representation_functions(self, fg=None, fe=None, fc=None):
+        if fg is not None:
+            self.fg = fg
+        if fe is not None:
+            self.fe = fe
+        if fc is not None:
+            self.fc = fc
 
 
 @fixture(scope="module")
