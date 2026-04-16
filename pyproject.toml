@@ -25,6 +25,7 @@ dependencies = [  # TODO: check which are necessary
     "scanpy[leiden]",
     "scikit-learn",
     "scipy",
+    "torch==2.5.*",
     "torchmetrics",
     "transformers",
     "datasets",
@@ -42,6 +43,11 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+flash = [
+    "flash-attn @ https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl ; sys_platform == 'linux' and python_version == '3.12'",
+]
+
 [tool.hatch.build.targets.sdist]
 include = [
   "Heimdall/**/*.py",
@@ -53,6 +59,9 @@ include = [
   "Heimdall/**/*.py",
   "Heimdall/config/**",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 path = "Heimdall/__about__.py"

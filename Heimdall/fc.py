@@ -12,7 +12,7 @@ from Heimdall.fg import Fg
 from Heimdall.utils import instantiate_from_config
 
 if TYPE_CHECKING:
-    from Heimdall.cell_representations import CellRepresentation
+    from Heimdall.tokenizer import TokenizerContext
 
 
 class Fc:
@@ -30,7 +30,7 @@ class Fc:
         self,
         fg: Fg | None,
         fe: Fe | None,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         tailor_config: DictConfig,
         order_config: DictConfig,
         reduce_config: DictConfig,
@@ -41,11 +41,12 @@ class Fc:
     ):
         self.fg = fg
         self.fe = fe
-        self.data = data
+        self.context = context
         self.max_input_length = max_input_length
         self.float_dtype = float_dtype
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.rng = np.random.default_rng(rng)
+        self.extra_keys = set()
 
         self.tailor = instantiate_from_config(tailor_config, fc=self)
         self.order = instantiate_from_config(order_config, fc=self)
@@ -66,7 +67,7 @@ class Fc:
         else:
             identity_indices, expression_inputs = self.fe[cell_index]
 
-            gene_list = self.data.gene_names[identity_indices]  # convert to ENSEMBL Gene Names
+            gene_list = self.gene_names[identity_indices]  # convert to ENSEMBL Gene Names
             identity_inputs = self.fg[gene_list]  # convert the genes into fg
 
             if len(identity_inputs) != len(expression_inputs):
@@ -104,8 +105,12 @@ class Fc:
         return outputs
 
     @property
+    def gene_names(self):
+        return self.context.gene_names
+
+    @property
     def adata(self):
-        return self.data.adata
+        return self.context.adata
 
 
 class ChromosomeAwareFc(Fc):
@@ -179,7 +184,7 @@ class DummyFc(Fc):
         self,
         fg: Fg | None,
         fe: Fe | None,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         # adata: ad.AnnData,
         tailor_config: DictConfig,
         order_config: DictConfig,
@@ -191,8 +196,10 @@ class DummyFc(Fc):
     ):
         self.fg = fg
         self.fe = fe
+        self.context = context
         # self.adata = adata
         self.max_input_length = max_input_length
+        self.extra_keys = set()
 
     """Dummy `Fc` that does not tailor the size of the input."""
 

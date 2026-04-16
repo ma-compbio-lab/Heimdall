@@ -115,6 +115,7 @@ def clear_cached_paths(cfg: DictConfig, cache_dir: Path) -> Tuple[Path, Path]:
     cache_dir = cache_dir / hash_str
     with contextlib.suppress(FileNotFoundError):
         shutil.rmtree(cache_dir)
+    return cache_dir
 
 
 def filter_config(config, keys_to_keep, keys_to_exclude):
@@ -196,7 +197,7 @@ def clear_fully_qualified_cache_paths(
 
     cfg = generate_minimal_config(cfg, keys=keys, excluded_keys=excluded_keys, hash_vars=hash_vars)
 
-    clear_cached_paths(cfg, Path(cache_dir).resolve())
+    return clear_cached_paths(cfg, Path(cache_dir).resolve())
 
 
 def searchsorted2d(bin_edges: NDArray, expression: NDArray, side: str = "left"):
@@ -637,28 +638,32 @@ def get_dtype(dtype_name: str, backend: str = "torch"):
     return dtype
 
 
-def _get_inputs_from_csr(data: "CellRepresentation", cell_index: int, drop_zeros: bool):
+def _get_inputs_from_csr(feature_matrix, identity_valid_mask, num_genes: int, cell_index: int, drop_zeros: bool):
     """Get expression values and gene indices from internal CSR representation.
 
     Args:
-        cell_index: cell for which to process expression values and get indices, as stored in `adata`.
+        feature_matrix: Active tokenizer feature matrix. Sparse matrices use the
+            CSR extraction path; dense NumPy-like arrays fall back to direct
+            indexing.
+        cell_index: row index for which to process expression values.
 
     """
 
-    adata = data.adata
-    identity_valid_mask = data.fg.identity_valid_mask
     if drop_zeros is True:
-        if issparse(adata.X):
-            cell = adata.X[[cell_index], :].toarray().flatten()[identity_valid_mask]
+        if issparse(feature_matrix):
+            cell = feature_matrix[[cell_index], :].toarray().flatten()[identity_valid_mask]
             (cell_identity_inputs,) = cell.nonzero()
             cell_expression_inputs = cell[cell_identity_inputs]
         else:
-            cell_expression_inputs_full = adata.X[cell_index, :][identity_valid_mask]
+            cell_expression_inputs_full = np.asarray(feature_matrix[cell_index, :]).flatten()[identity_valid_mask]
             (cell_identity_inputs,) = np.nonzero(cell_expression_inputs_full)
             cell_expression_inputs = cell_expression_inputs_full[cell_identity_inputs]
     else:
-        cell_expression_inputs = adata.X[[cell_index], :].toarray().flatten()[identity_valid_mask]
-        cell_identity_inputs = np.arange(data.num_genes)
+        if issparse(feature_matrix):
+            cell_expression_inputs = feature_matrix[[cell_index], :].toarray().flatten()[identity_valid_mask]
+        else:
+            cell_expression_inputs = np.asarray(feature_matrix[cell_index, :]).flatten()[identity_valid_mask]
+        cell_identity_inputs = np.arange(num_genes)
 
     return cell_identity_inputs, cell_expression_inputs
 

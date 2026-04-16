@@ -24,6 +24,7 @@ from Heimdall.fe import Fe
 from Heimdall.fg import Fg
 from Heimdall.samplers import DefaultBatchSampler, PartitionedBatchSampler, PartitionedDistributedSampler
 from Heimdall.task import Tasklist
+from Heimdall.tokenizer import Tokenizer
 
 # from Heimdall.samplers import PartitionedDistributedSampler
 from Heimdall.utils import (
@@ -48,7 +49,7 @@ class SpecialTokenMixin:
 
 class CellRepresentation(SpecialTokenMixin):
     DATASET_KEYS = ("dataset.preprocess_args.data_path", "tasks")
-    TOKENIZER_KEYS = ("dataset.preprocess_args.data_path", "fg", "fe", "fc")
+    TOKENIZER_KEYS = ("dataset.preprocess_args.data_path", "tokenizer_context", "fg", "fe", "fc")
 
     @property
     def local_cfg(self):
@@ -151,7 +152,7 @@ class CellRepresentation(SpecialTokenMixin):
 
     def setup(self, hash_vars=(), ops=("preprocess", "labels")):
         if "preprocess" in ops:
-            self.load_anndata()
+            self.load_anndata(hash_vars=hash_vars)
             self.setup_tokenizer(hash_vars=hash_vars)
         if "labels" in ops:
             self.setup_labels(hash_vars=hash_vars)
@@ -186,9 +187,10 @@ class CellRepresentation(SpecialTokenMixin):
         self._raw_gene_names = val
 
     @property
-    def gene_names(self, mask_key: str = "identity_valid_mask"):
-        valid_mask = self.adata.var[mask_key]
-        return self.raw_gene_names[valid_mask]
+    def gene_names(self):
+        if not hasattr(self, "tokenizer_context"):
+            raise RuntimeError("`CellRepresentation.gene_names` requires `tokenizer_context` to be initialized.")
+        return self.tokenizer_context.gene_names
 
     @property
     def num_genes(self):
@@ -226,23 +228,30 @@ class CellRepresentation(SpecialTokenMixin):
         cache_dir = Path(cache_dir)
 
         # Clear preprocessed dataset
-        clear_fully_qualified_cache_paths(self.local_cfg, cache_dir / "processed_anndata", keys=self.DATASET_KEYS)
-        self.print_during_setup("> Cleared `processed_anndata` cache.")
+        cleared_processed_dir = clear_fully_qualified_cache_paths(
+            self.local_cfg,
+            cache_dir / "processed_anndata",
+            keys=self.DATASET_KEYS,
+        )
+        self.print_during_setup(f"> Cleared `processed_anndata` cache at {cleared_processed_dir}.")
 
         # Clear tokenizer
-        clear_fully_qualified_cache_paths(
+        cleared_tokenizer_dir = clear_fully_qualified_cache_paths(
             self.local_cfg,
             cache_dir / "processed_data",
             keys=self.TOKENIZER_KEYS,
             hash_vars=hash_vars,
         )
-        self.print_during_setup("> Cleared tokenizer cache.")
+        self.print_during_setup(f"> Cleared tokenizer cache at {cleared_tokenizer_dir}.")
 
         # Clear labels
+        cleared_label_dirs = []
         for subtask_name, subtask in self.tasklist:
-            subtask.clear_cache_path(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name)
+            cleared_label_dirs.append(
+                subtask.clear_cache_path(cache_dir / "processed_data", hash_vars=hash_vars, task_name=subtask_name),
+            )
 
-        self.print_during_setup("> Cleared label cache.")
+        self.print_during_setup(f"> Cleared label cache at {cleared_label_dirs}.")
 
     def anndata_from_cache(self, preprocessed_data_path, preprocessed_cfg_path, cfg):
         if preprocessed_data_path.is_file():
@@ -281,7 +290,7 @@ class CellRepresentation(SpecialTokenMixin):
 
         self.num_subtasks = self.tasklist.num_subtasks
 
-    def load_anndata(self, filename: str = "data.h5ad"):
+    def load_anndata(self, filename: str = "data.h5ad", hash_vars=()):
         """Load AnnData into memory (and preprocess, if necessary)."""
         if self.adata is not None:
             raise ValueError("Anndata object already exists, are you sure you want to reprocess again?")
@@ -294,6 +303,7 @@ class CellRepresentation(SpecialTokenMixin):
                 cache_dir / "processed_anndata",
                 filename,
                 keys=self.DATASET_KEYS,
+                hash_vars=hash_vars,
             )
             is_cached = self.anndata_from_cache(preprocessed_data_path, preprocessed_cfg_path, cfg)
 
@@ -468,8 +478,12 @@ class CellRepresentation(SpecialTokenMixin):
                     expression_embeddings,
                 ) = pkl.load(rep_file)
 
-            self.fg.load_from_cache(identity_embedding_index, identity_valid_mask, gene_embeddings)
-            self.fe.load_from_cache(expression_embeddings)
+            self.tokenizer.load_from_cache(
+                identity_embedding_index,
+                identity_valid_mask,
+                gene_embeddings,
+                expression_embeddings,
+            )
 
             self.processed_fcfg = True
 
@@ -480,53 +494,28 @@ class CellRepresentation(SpecialTokenMixin):
         return False
 
     def save_tokenizer_to_cache(self, cache_dir, hash_vars):
-        # Gather things for caching
-        identity_embedding_index, identity_valid_mask = self.fg.__getitem__(self.adata.var_names, return_mask=True)
-
-        gene_embeddings = self.fg.gene_embeddings
-        expression_embeddings = self.fe.expression_embeddings
-
         processed_data_path = self.get_tokenizer_cache_path(cache_dir, hash_vars)
         if not processed_data_path.is_file():
             with open(processed_data_path, "wb") as rep_file:
-                cache_representation = (
-                    identity_embedding_index,
-                    identity_valid_mask,
-                    gene_embeddings,
-                    expression_embeddings,
-                )
+                cache_representation = self.tokenizer.get_cache_state()
                 pkl.dump(cache_representation, rep_file)
                 self.print_during_setup(f"> Finished writing cell representations at {processed_data_path}")
 
-    def instantiate_representation_functions(self):
-        """Instantiate `f_g`, `fe` and `f_c` according to config."""
-        self.fg: Fg
-        self.fe: Fe
-        self.fc: Fc
-        self.fg, fg_name = instantiate_from_config(
-            self.fg_cfg,
-            self,
-            vocab_size=len(self.raw_gene_names) + 2,
+    def instantiate_tokenizer(self):
+        """Instantiate tokenizer context and `Fg`, `Fe`, `Fc` according to
+        config."""
+        self.tokenizer = Tokenizer(
+            self._cfg,
+            adata=self.adata,
+            raw_gene_names=self.raw_gene_names,
             rng=self.rng,
-            return_name=True,
-        )
-        self.fe, fe_name = instantiate_from_config(
-            self.fe_cfg,
-            self,
-            vocab_size=len(self.raw_gene_names) + 2,
-            # TODO: figure out a way to fix the number of expr tokens... probably specify in config?
-            rng=self.rng,
-            return_name=True,
-        )
-        self.fc, fc_name = instantiate_from_config(
-            self.fc_cfg,
-            self.fg,
-            self.fe,
-            self,
             float_dtype=self.float_dtype,
-            rng=self.rng,
-            return_name=True,
+            verbose=self.verbose,
         )
+        self.tokenizer_context = self.tokenizer.context
+        self.fg: Fg = self.tokenizer.fg
+        self.fe: Fe = self.tokenizer.fe
+        self.fc: Fc = self.tokenizer.fc
 
     # @check_states(adata=True)
     def setup_tokenizer(self, hash_vars=()):
@@ -538,17 +527,15 @@ class CellRepresentation(SpecialTokenMixin):
 
         """
 
-        self.instantiate_representation_functions()
+        self.instantiate_tokenizer()
         if (cache_dir := self._cfg.cache_preprocessed_dataset_dir) is not None:
             cache_dir = Path(cache_dir)
             is_cached = self.load_tokenizer_from_cache(cache_dir, hash_vars=hash_vars)
             if is_cached:
                 return
 
-        self.fg.preprocess_embeddings()
+        self.tokenizer.preprocess_embeddings()
         self.print_during_setup(f"> Finished calculating fg with {self.fg_cfg.type}")
-
-        self.fe.preprocess_embeddings()
         self.print_during_setup(f"> Finished calculating fe with {self.fe_cfg.type}")
 
         self.processed_fcfg = True
@@ -599,6 +586,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                     cache_dir / "processed_anndata",
                     "metadata.pkl",
                     keys=self.DATASET_KEYS,
+                    hash_vars=(),
                 )
 
             if self._cfg.overwrite:
@@ -619,16 +607,40 @@ class PartitionedCellRepresentation(CellRepresentation):
                 # Using zeroth partition as dummy
                 for rank in range(self.num_replicas):
                     if rank == self.rank:
-                        self.print_during_setup("> Dummy partition loading...")
+                        self.print_during_setup(
+                            f"> Rank {self.rank}: starting dummy partition loading...",
+                            is_printable_process=True,
+                        )
                         self.indent += 1
                         dummy_partition = 0
                         self.prepare_partition(dummy_partition)
-                        super().setup(hash_vars=(dummy_partition,), ops=("preprocess",))
+                        super().setup(hash_vars=(int(dummy_partition),), ops=("preprocess",))
+
+                        expected_partition_size = self.get_stale_metadata_expected_size(dummy_partition)
+                        actual_partition_size = self.get_stale_metadata_actual_size()
+                        size_name = self.get_stale_metadata_size_name()
+                        if expected_partition_size is not None and int(expected_partition_size) != int(
+                            actual_partition_size,
+                        ):
+                            raise RuntimeError(
+                                "Cached partition metadata is stale: "
+                                f"partition {dummy_partition} expected {size_name} {expected_partition_size}, "
+                                f"but current data has {size_name} {actual_partition_size}. "
+                                f"Remove stale metadata at {metadata_path} and rerun.",
+                            )
 
                         self.prepare_full_dataset()
                         SpecialTokenMixin.__init__(self)
                         self.partition = None
                         self.indent -= 1
+                        self.print_during_setup(
+                            f"> Rank {self.rank}: finished dummy partition loading.",
+                            is_printable_process=True,
+                        )
+                    self.print_during_setup(
+                        f"> Rank {self.rank}: waiting at dummy partition barrier for loop rank {rank}.",
+                        is_printable_process=True,
+                    )
                     self.accelerator.wait_for_everyone()
 
             else:
@@ -649,6 +661,7 @@ class PartitionedCellRepresentation(CellRepresentation):
                 self.print_during_setup("> Finished setting up labels")
 
                 if cache_dir is not None:
+                    metadata_path.parent.mkdir(exist_ok=True, parents=True)
                     with open(metadata_path, "wb") as metadata_file:
                         metadata = (
                             self.partition_sizes,
@@ -667,6 +680,15 @@ class PartitionedCellRepresentation(CellRepresentation):
     def _initialize_partition(self):
         self.dataloaders["full"].batch_sampler.sampler.partition_idx = 0
 
+    def get_stale_metadata_expected_size(self, partition: int):
+        return self.partition_sizes.get(partition)
+
+    def get_stale_metadata_actual_size(self):
+        return self.adata.n_obs
+
+    def get_stale_metadata_size_name(self):
+        return "size"
+
     def set_partition_size(self):
         """Get the size of the current partition."""
         self.partition_sizes[self.partition] = self.adata.n_obs
@@ -680,7 +702,19 @@ class PartitionedCellRepresentation(CellRepresentation):
     def setup(self, ops=("preprocess", "labels")):
         for rank in range(self.num_replicas):
             if rank == self.rank:
+                self.print_during_setup(
+                    f"> Rank {self.rank}: starting partition setup pass {ops=}.",
+                    is_printable_process=True,
+                )
                 self._setup_partitions(ops=ops)
+                self.print_during_setup(
+                    f"> Rank {self.rank}: finished partition setup pass {ops=}.",
+                    is_printable_process=True,
+                )
+            self.print_during_setup(
+                f"> Rank {self.rank}: waiting at partition setup barrier for loop rank {rank}.",
+                is_printable_process=True,
+            )
             self.accelerator.wait_for_everyone()
 
     def _setup_partitions(self, ops):
@@ -703,11 +737,30 @@ class PartitionedCellRepresentation(CellRepresentation):
         # print(f"[Rank {self.accelerator.process_index}] Setting to {self.data_path=}")
         super().preprocess_anndata()
 
-    def load_anndata(self, filename="data.h5ad"):
+    def load_anndata(self, filename="data.h5ad", hash_vars=()):
         partition_source_path = self.partition_file_paths[self.partition]
         partition_filename = Path(partition_source_path).name
-        # partition_filename = f"partition_{self.partition}_{filename}"
-        super().load_anndata(partition_filename)
+        # Keep all partition AnnData caches in the same dataset-level cache directory.
+        # The filenames are already unique per partition.
+        super().load_anndata(partition_filename, hash_vars=())
+        if getattr(self.adata, "filename", None) is None and self._cfg.cache_preprocessed_dataset_dir is not None:
+            cache_dir = Path(self._cfg.cache_preprocessed_dataset_dir)
+            preprocessed_data_path, _, _ = get_fully_qualified_cache_paths(
+                self.local_cfg,
+                cache_dir / "processed_anndata",
+                partition_filename,
+                keys=self.DATASET_KEYS,
+                hash_vars=(),
+            )
+            if preprocessed_data_path.is_file():
+                self.adata = ad.read_h5ad(
+                    preprocessed_data_path,
+                    backed="r",
+                )
+        # print(
+        #     f"> Loaded partition {self.partition + 1} cache from "
+        #     f"{getattr(self.adata, 'filename', None)!r} with obsm_keys={sorted(self.adata.obsm.keys())}",
+        # )
 
     def close_partition(self, is_original_replica: bool = True):
         """Close current partition."""
@@ -753,7 +806,10 @@ class PartitionedCellRepresentation(CellRepresentation):
         # Preprocess partition AnnData
         partition_prepared = self.prepare_partition(partition)
         if partition_prepared:
-            super().setup(hash_vars=(int(self.partition),), ops=("preprocess", "labels"))
+            super().setup(
+                hash_vars=(int(self.partition),),
+                ops=("preprocess", "labels"),
+            )
 
     @check_states(processed_fcfg=True)
     def prepare_dataset_loaders(self):

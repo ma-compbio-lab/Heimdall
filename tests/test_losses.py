@@ -19,7 +19,7 @@ def test_contrastive_multiclass_loss_returns_scalar():
     logits = make_contrastive_views(batch_size=4, dim=8)
     labels = torch.zeros(4, 8)
 
-    loss = ContrastiveMulticlassLoss(trainer=DummyTrainer())(logits, labels)
+    loss = ContrastiveMulticlassLoss()(logits, labels)
 
     assert loss.ndim == 0
     assert torch.isfinite(loss)
@@ -29,7 +29,7 @@ def test_clip_loss_returns_scalar():
     logits = make_contrastive_views(batch_size=2, dim=8)
     labels = torch.zeros(2, 4)
 
-    loss = CLIPLoss(trainer=DummyTrainer())(logits, labels)
+    loss = CLIPLoss()(logits, labels)
 
     assert loss.ndim == 0
     assert torch.isfinite(loss)
@@ -42,10 +42,10 @@ def test_scheduled_contrastive_loss_switches_on_step():
     loss_fn = ScheduledContrastiveLoss(trainer=trainer, switch_ratio=0.1)
 
     pre_switch_loss = loss_fn(logits, labels)
-    expected_pre_switch = CLIPLoss(trainer=trainer)(logits, labels)
+    expected_pre_switch = CLIPLoss()(logits, labels)
     assert torch.allclose(pre_switch_loss, expected_pre_switch)
 
     trainer.step = 10
     post_switch_loss = loss_fn(logits, labels)
-    expected_post_switch = ContrastiveMulticlassLoss(trainer=trainer)(logits, labels)
+    expected_post_switch = ContrastiveMulticlassLoss()(logits, labels)
     assert torch.allclose(post_switch_loss, expected_post_switch)

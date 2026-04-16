@@ -128,6 +128,55 @@ def expression_only_config(request, toy_single_data_path):
 
 
 @fixture(scope="module")
+def autoencoder_config(toy_single_data_path):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+        conf = hydra.compose(
+            config_name="config",
+            overrides=[
+                "scfm/model=expression_only",
+                f"data_path={os.environ['DATA_PATH']}",
+                f"ensembl_dir={os.environ['DATA_PATH']}",
+                "scfm/dataset=test",
+                "+scfm/tasks@scfm.tasks.default=autoencoder",
+                f"scfm.dataset.preprocess_args.data_path={toy_single_data_path}",
+                "cache_preprocessed_dataset_dir=null",
+                "work_dir=work_dir",
+                "scfm/fg=dummy",
+                "scfm/fe=dummy",
+                "scfm/fc=dummy",
+            ],
+        )
+        OmegaConf.resolve(conf)
+
+    return conf
+
+
+@fixture(scope="module")
+def bottleneck_autoencoder_config(toy_single_data_path):
+    with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
+        conf = hydra.compose(
+            config_name="config",
+            overrides=[
+                "scfm/model=bottleneck",
+                "scfm.model.args.d_model=128",
+                f"data_path={os.environ['DATA_PATH']}",
+                f"ensembl_dir={os.environ['DATA_PATH']}",
+                "scfm/dataset=test",
+                "+scfm/tasks@scfm.tasks.default=autoencoder",
+                f"scfm.dataset.preprocess_args.data_path={toy_single_data_path}",
+                "cache_preprocessed_dataset_dir=null",
+                "work_dir=work_dir",
+                "scfm/fg=dummy",
+                "scfm/fe=dummy",
+                "scfm/fc=dummy",
+            ],
+        )
+        OmegaConf.resolve(conf)
+
+    return conf
+
+
+@fixture(scope="module")
 def partition_config(request, toy_partitioned_data_path):
     model_config, fc_config = request.param
     with hydra.initialize(version_base=None, config_path="../Heimdall/config"):
@@ -218,6 +267,14 @@ def test_multitask_model_instantiation(multitask_config):
 
 def test_expression_only_instantiation(expression_only_config):
     instantiate_and_run_model(expression_only_config)
+
+
+def test_autoencoder_task_instantiation(autoencoder_config):
+    instantiate_and_run_model(autoencoder_config)
+
+
+def test_bottleneck_autoencoder_task_instantiation(bottleneck_autoencoder_config):
+    instantiate_and_run_model(bottleneck_autoencoder_config)
 
 
 @pytest.mark.parametrize(

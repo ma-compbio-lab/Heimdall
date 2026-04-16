@@ -7,6 +7,7 @@ defaults:
   - scheduler: cosine
   - trainer: default
   - optimizer: AdamW
+  - tokenizer_context: default
   - fc: geneformer
   - fe: dummy
   - fg: identity

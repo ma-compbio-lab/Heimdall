@@ -18,7 +18,7 @@ def flake8(session):
         "flake8-use-fstring",
         "pep8-naming",
     )
-    session.run("flake8", "Heimdall/", "train.py")
+    session.run("flake8", "Heimdall/", *Path("scripts").glob("*.py"))
 
 
 @nox.session(reuse_venv=True)

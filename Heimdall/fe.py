@@ -10,7 +10,7 @@ from omegaconf.dictconfig import DictConfig
 from Heimdall.utils import _get_inputs_from_csr, check_states
 
 if TYPE_CHECKING:
-    from Heimdall.cell_representations import CellRepresentation
+    from Heimdall.tokenizer import TokenizerContext
 
 
 class Fe(ABC):
@@ -25,7 +25,7 @@ class Fe(ABC):
 
     def __init__(
         self,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         vocab_size: int,
         embedding_parameters: DictConfig,
         d_embedding: int,
@@ -34,7 +34,7 @@ class Fe(ABC):
         drop_zeros: bool = True,
         rng: int | np.random.Generator = 0,
     ):
-        self.data = data
+        self.context = context
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.d_embedding = d_embedding
         self.vocab_size = vocab_size
@@ -61,10 +61,13 @@ class Fe(ABC):
 
         """
         identity_inputs, expression_inputs = _get_inputs_from_csr(
-            self.data,
+            self.context.feature_matrix,
+            identity_valid_mask=self.context.identity_valid_mask,
+            num_genes=self.context.num_genes,
             cell_index=cell_index,
             drop_zeros=self.drop_zeros,
         )
+
         is_in_panel = np.isin(identity_inputs, self.gene_panel_idx)
         identity_inputs = identity_inputs[is_in_panel]
         expression_inputs = expression_inputs[is_in_panel]
@@ -123,12 +126,12 @@ class Fe(ABC):
 
     @property
     def adata(self):
-        return self.data.adata
+        return self.context.adata
 
     @property
     def gene_panel_idx(self):
         if not hasattr(self, "_gene_panel_idx"):
-            self._gene_panel_idx = np.arange(self.data.num_genes)
+            self._gene_panel_idx = np.arange(self.context.num_genes)
 
         return self._gene_panel_idx
 
@@ -142,14 +145,14 @@ class ScBERTBinningFe(Fe):
 
     def __init__(
         self,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         # adata: ad.AnnData,
         num_bins: int,  # CLASS - 2 in scBERT
         **fe_kwargs,
     ):
         fe_kwargs.pop("vocab_size", None)
         vocab_size = num_bins + 3  # [0, ..., num_bins], <PAD>, <MASK>
-        super().__init__(data, vocab_size=vocab_size, **fe_kwargs)
+        super().__init__(context, vocab_size=vocab_size, **fe_kwargs)
         self.num_bins = num_bins
 
     def binning(self, row, n_bins) -> Union[np.ndarray, torch.Tensor]:
@@ -191,14 +194,14 @@ class BinningFe(Fe):
 
     def __init__(
         self,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         # adata: ad.AnnData,
         num_bins: int,
         **fe_kwargs,
     ):
         fe_kwargs.pop("vocab_size", None)
         vocab_size = num_bins + 3  # Accounting for mask, pad tokens and empty bin (zero expr.)
-        super().__init__(data, vocab_size=vocab_size, **fe_kwargs)
+        super().__init__(context, vocab_size=vocab_size, **fe_kwargs)
         self.num_bins = num_bins
 
     def _digitize(self, x: np.ndarray, bins: np.ndarray, side="both") -> np.ndarray:
@@ -315,7 +318,7 @@ class BinningFe(Fe):
 
 class ZeroFe(Fe):
     def __getitem__(self, cell_index: int):
-        n = self.data.num_genes
+        n = self.context.num_genes
         cell_identity_inputs = np.arange(n, dtype=np.int64)
         cell_expression_inputs = np.zeros(n, dtype=np.float32)
 

@@ -115,14 +115,34 @@ class ExpressionOnly(nn.Module):
 
         """
 
-        self.vocab_size = data.adata.n_vars + 2
+        self.vocab_size = len(data.tokenizer_context.raw_gene_names) + 2
         self.float_dtype = data.float_dtype
-        _, self.d_encoded = data.adata.shape
+        self.d_encoded = len(data.tokenizer_context.raw_gene_names)
 
     def forward(self, inputs, labels=None, attention_mask=None):
         outputs = inputs["expression_inputs"]  # extract expression only
 
         return outputs.to(get_dtype(self.float_dtype))  # convert to float32?
+
+
+class Bottleneck(nn.Module):
+    def __init__(
+        self,
+        data: CellRepresentation,
+        d_model: int,
+    ):
+        super().__init__()
+        """Project expression inputs into a lower-dimensional latent space."""
+
+        self.vocab_size = len(data.tokenizer_context.raw_gene_names) + 2
+        self.float_dtype = data.float_dtype
+        self.d_encoded = d_model
+        self.num_features = len(data.tokenizer_context.raw_gene_names)
+        self.encoder = nn.Linear(self.num_features, d_model)
+
+    def forward(self, inputs, labels=None, attention_mask=None):
+        outputs = inputs["expression_inputs"].to(get_dtype(self.float_dtype))
+        return self.encoder(outputs)
 
 
 class CellSentenceModel(nn.Module):
@@ -150,7 +170,7 @@ class CellSentenceModel(nn.Module):
         self.d_encoded = d_model
         self.fc = data.fc
 
-        self.vocab_size = data.adata.n_vars + 2  # <PAD> and <MASK> TODO: data.vocab_size
+        self.vocab_size = len(data.tokenizer_context.raw_gene_names) + 2  # <PAD> and <MASK>
 
         # Setting up embedding layers
         if data.fg.d_embedding is not None:

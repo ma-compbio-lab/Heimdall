@@ -1,0 +1,4 @@
+type: Heimdall.tokenizer.KnnTokenizerContext
+
+args:
+  feature_obsm_key: X_atlas_knn_mean_expr

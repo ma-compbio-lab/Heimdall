@@ -7,6 +7,8 @@ from omegaconf import OmegaConf
 from pytest import fixture
 from scipy.sparse import csr_array
 
+from Heimdall.fg import IdentityFg
+
 
 def pad(tokens, pad_length, pad_value):
     pad_widths = (0, pad_length - len(tokens))
@@ -21,12 +23,12 @@ def pad(tokens, pad_length, pad_value):
 
 
 def test_zero_expression_binning_fe(zero_expression_identity_fg, zero_expression_binning_fe):
-    zero_expression_identity_fg.data.set_representation_functions(
+    zero_expression_identity_fg.context.set_representation_functions(
         fg=zero_expression_identity_fg,
         fe=zero_expression_binning_fe,
     )
 
-    zero_expression_binning_fe.data.set_representation_functions(
+    zero_expression_binning_fe.context.set_representation_functions(
         fg=zero_expression_identity_fg,
         fe=zero_expression_binning_fe,
     )
@@ -67,12 +69,12 @@ def test_zero_expression_binning_fe(zero_expression_identity_fg, zero_expression
 
 
 def test_binning_fe(identity_fg, binning_fe):
-    identity_fg.data.set_representation_functions(
+    identity_fg.context.set_representation_functions(
         fg=identity_fg,
         fe=binning_fe,
     )
 
-    binning_fe.data.set_representation_functions(
+    binning_fe.context.set_representation_functions(
         fg=identity_fg,
         fe=binning_fe,
     )
@@ -91,12 +93,12 @@ def test_binning_fe(identity_fg, binning_fe):
 
 
 def test_scbert_binning_fe(identity_fg, zero_expression_scbert_binning_fe):
-    identity_fg.data.set_representation_functions(
+    identity_fg.context.set_representation_functions(
         fg=identity_fg,
         fe=zero_expression_scbert_binning_fe,
     )
 
-    zero_expression_scbert_binning_fe.data.set_representation_functions(
+    zero_expression_scbert_binning_fe.context.set_representation_functions(
         fg=identity_fg,
         fe=zero_expression_scbert_binning_fe,
     )
@@ -124,12 +126,12 @@ def test_scbert_binning_fe(identity_fg, zero_expression_scbert_binning_fe):
 
 
 def test_identity_fe(zero_expression_identity_fg, zero_expression_identity_fe):
-    zero_expression_identity_fg.data.set_representation_functions(
+    zero_expression_identity_fg.context.set_representation_functions(
         fg=zero_expression_identity_fg,
         fe=zero_expression_identity_fe,
     )
 
-    zero_expression_identity_fe.data.set_representation_functions(
+    zero_expression_identity_fe.context.set_representation_functions(
         fg=zero_expression_identity_fg,
         fe=zero_expression_identity_fe,
     )

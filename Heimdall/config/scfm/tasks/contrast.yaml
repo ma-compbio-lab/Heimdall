@@ -6,6 +6,7 @@ args:
   train_split: 0.95
   shuffle: true
   min_panel_size: 2
+  batchsize: ${scfm.trainer.args.batchsize}
   head_config:
     type: Heimdall.models.ContrastiveDecoder
   loss_config:

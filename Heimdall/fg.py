@@ -14,7 +14,7 @@ from pandas.api.typing import NAType
 from Heimdall.utils import check_states, conditional_print, pca_reduction
 
 if TYPE_CHECKING:
-    from Heimdall.cell_representations import CellRepresentation
+    from Heimdall.tokenizer import TokenizerContext
 
 
 class Fg(ABC):
@@ -27,7 +27,7 @@ class Fg(ABC):
 
     def __init__(
         self,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         embedding_parameters: DictConfig,
         d_embedding: int,
         vocab_size: int,
@@ -37,7 +37,7 @@ class Fg(ABC):
         rng: int | np.random.Generator = 0,
         do_pca_reduction: bool = True,
     ):
-        self.data = data
+        self.context = context
         self.d_embedding = d_embedding
         self.embedding_parameters = OmegaConf.to_container(embedding_parameters, resolve=True)
         self.vocab_size = vocab_size
@@ -46,6 +46,8 @@ class Fg(ABC):
         self.frozen = frozen
         self.rng = np.random.default_rng(rng)
         self.do_pca_reduction = do_pca_reduction
+        self._identity_embedding_index = None
+        self._identity_valid_mask = None
 
     @abstractmethod
     @check_states(adata=True)
@@ -61,11 +63,8 @@ class Fg(ABC):
 
         Returns:
             Sets `self.gene_embeddings`.
-            Sets the following fields of `self.adata`:
-            `.var['identity_embedding_index']` : :class:`~numpy.ndarray` (shape `(self.adata.n_vars,)`)
-                Index of gene in embeddings.
-            `.var['identity_valid_mask']` : :class:`~numpy.ndarray` (shape `(self.adata.n_vars,)`)
-                Boolean mask indicating whether or not gene is mapped by this `Fg`.
+            Sets tokenizer-local identity state keyed by `context.raw_gene_names`:
+            `identity_embedding_index` and `identity_valid_mask`.
 
         """
 
@@ -81,9 +80,11 @@ class Fg(ABC):
             Index of gene in the embedding, or `pd.NA` if the gene has no mapping.
 
         """
-        embedding_indices = self.adata.var.loc[gene_names, "identity_embedding_index"]
+        if self._identity_embedding_index is None or self._identity_valid_mask is None:
+            raise ValueError("`Fg` must be preprocessed before use.")
 
-        valid_mask = self.adata.var.loc[gene_names, "identity_valid_mask"]
+        embedding_indices = self._identity_embedding_index.loc[gene_names]
+        valid_mask = self._identity_valid_mask.loc[gene_names]
         if (valid_mask.sum() != len(gene_names)) and not return_mask:
             raise KeyError(
                 "At least one gene is not mapped in this `Fg`. "
@@ -97,13 +98,25 @@ class Fg(ABC):
 
     @property
     def identity_valid_mask(self):
-        return self.adata.var["identity_valid_mask"]
+        if self._identity_valid_mask is None:
+            return None
+        return self._identity_valid_mask.to_numpy()
+
+    @property
+    def identity_embedding_index(self):
+        if self._identity_embedding_index is None:
+            return None
+        return self._identity_embedding_index
 
     @identity_valid_mask.setter
     def identity_valid_mask(self, val):
-        self.vocab_size -= self.adata.n_vars - np.sum(val)
+        val = np.asarray(val, dtype=bool)
+        self.vocab_size -= len(self.context.raw_gene_names) - np.sum(val)
+        self._identity_valid_mask = pd.Series(val, index=self.context.raw_gene_names, dtype=bool)
 
-        self.adata.var["identity_valid_mask"] = val
+    @identity_embedding_index.setter
+    def identity_embedding_index(self, val):
+        self._identity_embedding_index = pd.Series(val, index=self.context.raw_gene_names)
 
     def prepare_embedding_parameters(self):
         """Replace config placeholders with values after preprocessing."""
@@ -133,7 +146,7 @@ class Fg(ABC):
         """Load processed values from cache."""
         # TODO: add tests
 
-        self.adata.var["identity_embedding_index"] = identity_embedding_index
+        self.identity_embedding_index = identity_embedding_index
         self.identity_valid_mask = identity_valid_mask
         self.gene_embeddings = gene_embeddings
 
@@ -141,7 +154,7 @@ class Fg(ABC):
 
     @property
     def adata(self):
-        return self.data.adata
+        return self.context.adata
 
 
 class PretrainedFg(Fg, ABC):
@@ -157,13 +170,13 @@ class PretrainedFg(Fg, ABC):
 
     def __init__(
         self,
-        data: "CellRepresentation",
+        context: "TokenizerContext",
         # adata: ad.AnnData,
         embedding_parameters: OmegaConf,
         embedding_filepath: Optional[str | PathLike] = None,
         **fg_kwargs,
     ):
-        super().__init__(data, embedding_parameters, **fg_kwargs)
+        super().__init__(context, embedding_parameters=embedding_parameters, **fg_kwargs)
         self.embedding_filepath = Path(embedding_filepath)
 
     @abstractmethod
@@ -191,7 +204,7 @@ class PretrainedFg(Fg, ABC):
             conditional_print(
                 f"> Warning, the `Fg` embedding dim {first_embedding.shape} is larger than the model "
                 f"dim {self.d_embedding}, truncation may occur.",
-                condition=self.data.verbose,
+                condition=self.context.verbose,
             )
 
             if self.do_pca_reduction:
@@ -204,7 +217,7 @@ class PretrainedFg(Fg, ABC):
                     embedding_map = self.load_embeddings()
                     conditional_print(
                         "> Loaded PCA-reduced `Fg` embeddings from cache.",
-                        condition=self.data.verbose,
+                        condition=self.context.verbose,
                     )
                 else:
                     embedding_map = pca_reduction(embedding_map, n_components=self.d_embedding)
@@ -214,14 +227,15 @@ class PretrainedFg(Fg, ABC):
                     )
                     conditional_print(
                         "> Used PCA to reduce `Fg` embeddings and cached for future use.",
-                        condition=self.data.verbose,
+                        condition=self.context.verbose,
                     )
 
                 self.embedding_filepath = original_embedding_filepath
 
         valid_gene_names = list(embedding_map.keys())
+        source_gene_names = pd.Index(self.context.raw_gene_names)
 
-        valid_mask = pd.array(self.adata.var_names.isin(valid_gene_names))
+        valid_mask = pd.array(source_gene_names.isin(valid_gene_names))
         num_mapped_genes = valid_mask.sum()
         (valid_indices,) = np.nonzero(valid_mask)
 
@@ -229,24 +243,24 @@ class PretrainedFg(Fg, ABC):
         index_map[~valid_mask] = None
         index_map[valid_indices] = np.arange(num_mapped_genes)
 
-        self.adata.var["identity_embedding_index"] = index_map
+        self.identity_embedding_index = index_map
         self.identity_valid_mask = valid_mask.to_numpy()
 
         self.gene_embeddings = np.zeros((num_mapped_genes, self.d_embedding), dtype=float_dtype)
 
-        for gene_name in self.adata.var_names:
-            embedding_index = self.adata.var.loc[gene_name, "identity_embedding_index"]
+        for gene_name in source_gene_names:
+            embedding_index = self.identity_embedding_index.loc[gene_name]
             if not pd.isna(embedding_index):
                 self.gene_embeddings[embedding_index] = embedding_map[gene_name][: self.d_embedding]
 
         self.prepare_embedding_parameters()
 
         conditional_print(
-            f"Found {len(valid_indices)} genes with mappings out of {len(self.adata.var_names)} genes.",
-            condition=self.data.verbose,
+            f"Found {len(valid_indices)} genes with mappings out of {len(source_gene_names)} genes.",
+            condition=self.context.verbose,
         )
 
-        map_ratio = len(valid_indices) / len(self.adata.var_names)
+        map_ratio = len(valid_indices) / len(source_gene_names)
         if map_ratio < 0.5:
             raise ValueError(
                 "Very few genes in the dataset are mapped by the `Fg`."
@@ -266,8 +280,8 @@ class IdentityFg(Fg):
     @check_states(adata=True)
     def preprocess_embeddings(self, float_dtype: str = "float32"):
         self.gene_embeddings = None
-        self.adata.var["identity_embedding_index"] = np.arange(self.adata.n_vars)
-        self.identity_valid_mask = np.full(self.adata.n_vars, True)
+        self.identity_embedding_index = np.arange(len(self.context.raw_gene_names))
+        self.identity_valid_mask = np.full(len(self.context.raw_gene_names), True)
 
         self.prepare_embedding_parameters()
 

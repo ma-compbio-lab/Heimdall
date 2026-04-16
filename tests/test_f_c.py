@@ -2,9 +2,15 @@ from pathlib import Path
 
 import anndata as ad
 import numpy as np
+import pandas as pd
 from omegaconf import OmegaConf
 from pytest import fixture
 from scipy.sparse import csr_array
+
+from Heimdall.fc import Fc
+from Heimdall.fe import IdentityFe
+from Heimdall.fg import IdentityFg
+from Heimdall.tokenizer import KnnTokenizerContext
 
 
 def test_dummy_getitem(geneformer_fc, scgpt_fc):
@@ -214,3 +220,49 @@ def test_geneformer_fc_reduce(geneformer_fc):
     # )
 
     # assert np.allclose(expected, output)
+
+
+def test_knn_context_with_default_fc_reads_precomputed_expression(mock_dataset, identity_fg_config, identity_fe_config):
+    feature_matrix = csr_array(
+        np.array(
+            [
+                [10.0, 11.0, 12.0, 13.0],
+                [20.0, 21.0, 22.0, 23.0],
+                [30.0, 31.0, 32.0, 33.0],
+                [40.0, 41.0, 42.0, 43.0],
+            ],
+            dtype=np.float32,
+        ),
+    )
+    mock_dataset.adata.obsm["X_atlas_knn_mean_expr"] = feature_matrix
+    mock_dataset.adata.uns["atlas_knn"] = {"feature_gene_names": ["g1", "g2", "g3", "g4"]}
+
+    context = KnnTokenizerContext(
+        adata=mock_dataset.adata,
+        raw_gene_names=mock_dataset.raw_gene_names,
+        feature_obsm_key="X_atlas_knn_mean_expr",
+    )
+    fg = IdentityFg(context, **identity_fg_config)
+    fe = IdentityFe(context, **identity_fe_config)
+    fc = Fc(
+        fg=fg,
+        fe=fe,
+        context=context,
+        max_input_length=4,
+        float_dtype="float32",
+        rng=0,
+        embedding_parameters=OmegaConf.create({"type": "torch.nn.Module"}),
+        tailor_config=OmegaConf.create({"type": "Heimdall.tailor.ReorderTailor"}),
+        order_config=OmegaConf.create({"type": "Heimdall.order.ExpressionOrder"}),
+        reduce_config=OmegaConf.create({"type": "Heimdall.reduce.IdentityReduce"}),
+    )
+    context.set_representation_functions(fg=fg, fe=fe, fc=fc)
+    fg.preprocess_embeddings()
+    fe.preprocess_embeddings()
+
+    outputs = fc[1]
+
+    assert np.array_equal(context.gene_names, np.array(["g1", "g2", "g3", "g4"]))
+    assert outputs["identity_inputs"].shape == (4,)
+    assert outputs["expression_padding"].shape == (4,)
+    assert np.allclose(outputs["expression_inputs"], np.sort(feature_matrix.toarray()[1])[::-1])
