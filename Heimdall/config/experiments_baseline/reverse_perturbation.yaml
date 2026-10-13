@@ -20,6 +20,17 @@ defaults:
 project_name: reverse_perturbation  # project name for WandB
 run_name: ${fg.type}_${fe.type}_${fc.type}_${model.type}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}  ## what is set for WandB
 work_dir: ${project_name}_results/${fg.type}_${fe.name}_${fc.type}_${dataset.dataset_name}_lr${optimizer.args.lr}_bz${tasks.args.batchsize}_seed${seed}_ag${fe.args.drop_zeros}  ## set your custom working directory
+
+tasks:
+  args:
+    dataset_config:
+      type: Heimdall.datasets.PairedInstanceDataset
+    head_config:
+      type: Heimdall.models.ExpressionOnlyCellPredHead
+      args:
+ 
+
+
 seed: 55
 
 optimizer:

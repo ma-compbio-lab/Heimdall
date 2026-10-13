@@ -25,6 +25,11 @@ class SumReducer(Reducer):
         return torch.sum(torch.stack(tensors, axis=0), axis=0)
 
 
+class DifferenceReducer(Reducer):
+    def forward(self, tensors: list[Tensor]):
+        return torch.diff(torch.stack(tensors, axis=0), axis=0).squeeze(0)
+
+
 class MeanReducer(Reducer):
     def forward(self, tensors: list[Tensor]):
         return torch.mean(torch.stack(tensors, axis=0), axis=0)
