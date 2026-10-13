@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 if TYPE_CHECKING:
     from Heimdall.cell_representations import CellRepresentation
 
+from Heimdall.fe import BinningFe, ScBERTBinningFe
 from Heimdall.utils import get_fully_qualified_cache_paths, instantiate_from_config
 
 CellFeatType = NDArray[np.int_] | NDArray[np.float32]
@@ -221,13 +222,15 @@ class PairedInstanceTask(Task):
 class MLMMixin:
     def get_inputs(self, idx, shared_inputs):
         identity_inputs = shared_inputs["identity_inputs"]
-        return {
+        out = {
             "identity_inputs": identity_inputs,
             "labels": identity_inputs.astype(int),
         }
+        if "expression_inputs" in shared_inputs:
+            out["expression_inputs"] = shared_inputs["expression_inputs"]
+        return out
 
     def setup_labels(self):
-        # Dummy labels to indicate task size
         self.labels = np.empty(self.data.fg.vocab_size)
 
 
@@ -273,9 +276,20 @@ class SeqMaskedMLMTask(TransformationMixin, MaskedMixin, MLMMixin, SingleInstanc
         data["identity_inputs"][mask] = self.mask_token
 
         data["identity_inputs"][mask] = self.mask_token
-        # data["expression_inputs"][mask] = self.mask_token
+        #data["expression_inputs"][mask] = self.mask_token
         data["masks"] = mask
-
+        
+        #expression-bins
+        if "expression_inputs" in data and isinstance(self.data.fe, (ScBERTBinningFe, BinningFe)):
+            # Binning `Fe`s store bin indices as whole-number floats (see `Fe.bin`), so cast to
+            # int before masking with a token id. Non-binned `Fe`s (identity/zero/scfoundation)
+            # carry continuous values and aren't masked here.
+            expr = data["expression_inputs"].astype(int)
+            #keep labels
+            data["expr_labels"] = expr.copy()
+            data["expr_masks"] = mask.copy()
+            expr[mask] = self.data.fe.mask_value
+            data["expression_inputs"] = expr
         return data
 
 
