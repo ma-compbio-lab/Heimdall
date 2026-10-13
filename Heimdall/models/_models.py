@@ -185,6 +185,13 @@ class CellSentenceModel(nn.Module):
         # Initialize the [CLS] token as a learnable parameter
         self.cls_token = nn.Parameter(torch.zeros(1, 1, d_model))
 
+        # Input projection when embedding dim != d_model (e.g. 2x/4x width scaling)
+        d_embedding = data.fg.d_embedding if data.fg.d_embedding is not None else data.fe.d_embedding
+        if d_embedding != d_model:
+            self.input_projection = nn.Linear(d_embedding, d_model)
+        else:
+            self.input_projection = nn.Identity()
+
         # # Encoder - must be subsequently instantiated by child class
         self.cell_sentence_model = None
 
@@ -199,6 +206,8 @@ class CellSentenceModel(nn.Module):
             self.expression_embeddings,
             self.metadata_embeddings,
         )
+
+        input_embeds = self.input_projection(input_embeds)
 
         batch_size = identity_inputs.size(0)
         seq_length = input_embeds.size(1)

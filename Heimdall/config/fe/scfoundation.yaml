@@ -10,5 +10,5 @@ args:
       bin_alpha: 1
       mask_token_id:
       pad_token_id:
-  d_embedding: ${model.args.d_model}
+  d_embedding: ${fg.args.d_embedding} 
   drop_zeros: true

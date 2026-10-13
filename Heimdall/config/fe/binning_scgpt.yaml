@@ -8,5 +8,5 @@ args:
       num_embeddings: vocab_size  # this is the number of bins
       embedding_dim: ${fe.args.d_embedding}
   num_bins: 50  ## also the number of bins
-  d_embedding: ${model.args.d_model}
+  d_embedding: ${fg.args.d_embedding} 
   drop_zeros: true
