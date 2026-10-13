@@ -118,12 +118,18 @@ class HeimdallTrainer:
         self.print_r0("> run HeimdallTrainer.train() to begin training")
 
     def check_flash_attn(self):
-        if (
-            hasattr(self.model.encoder.cell_sentence_model, "use_flash_attn")
-            and self.model.encoder.cell_sentence_model.use_flash_attn
-            and self.accelerator.mixed_precision != "bf16"
-        ):
+        encoder = getattr(self.model, "encoder", None)
+        #this will be None for ExpressionOnly
+        cell_sentence_model = getattr(encoder, "cell_sentence_model", None)
+        
+        if cell_sentence_model is None:
+            return
+
+        use_flash_attn = getattr(cell_sentence_model, "use_flash_attn", False)
+
+        if use_flash_attn and self.accelerator.mixed_precision != "bf16":
             raise ValueError("If using Flash Attention, mixed precision must be bf16")
+        
 
     def setup_class_names_and_num_labels(self, data):
         self.class_names = {}
@@ -1012,7 +1018,7 @@ class HeimdallTrainer:
                     f"> Checkpoint file {load_path} does not exist. `{config.pretrained_milestone=}` is invalid.",
                 )
                 return
-        elif "pretrained_ckpt_path" in config:
+        elif "pretrained_ckpt_path" in config and config.pretrained_ckpt_path is not None:
             load_path = Path(config.pretrained_ckpt_path)
             if not load_path.exists():
                 self.print_r0(
