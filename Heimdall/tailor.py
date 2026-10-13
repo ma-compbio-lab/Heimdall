@@ -124,6 +124,11 @@ class ChromosomeTailor(Tailor):
     ) -> tuple[NDArray, NDArray]:
         """Weighted sampling."""
 
+        if len(identity_inputs) == 0:
+            # No valid (non-NaN) genes for this cell; let `pad` fill the sequence with
+            # pad tokens instead of crashing in `rng.choice` on an empty pool.
+            return identity_inputs, expression_inputs
+
         weights = np.log1p(expression_inputs)
         weights /= np.sum(weights)
 
@@ -225,6 +230,11 @@ class WeightedResampleTailor(Tailor):
         gene_order: NDArray,
     ) -> tuple[NDArray, NDArray]:
         """Weighted sampling."""
+
+        if len(identity_inputs) == 0:
+            # No valid (non-NaN) genes for this cell; let `pad` fill the sequence with
+            # pad tokens instead of crashing in `rng.choice` on an empty pool.
+            return identity_inputs, expression_inputs
 
         weights = np.log1p(expression_inputs)
         weights /= np.sum(weights)
