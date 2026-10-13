@@ -567,6 +567,46 @@ def get_dtype(dtype_name: str, backend: str = "torch"):
     return dtype
 
 
+def _read_sparse_row(X, cell_index: int) -> NDArray:
+    """Read a single row of a sparse `X` as a dense 1D array.
+
+    For an in-memory `scipy.sparse` matrix, this indexes it directly. For a
+    *backed* anndata `CSRDataset`/`CSCDataset`, this reads via a plain
+    in-memory `scipy.sparse.csr_matrix` built once from the underlying HDF5
+    group's raw `data`/`indices`/`indptr` arrays, instead of going through
+    `X[[cell_index], :]` directly. That call routes through
+    `anndata._core.sparse_dataset.BaseCompressedSparseDataset.__getitem__`,
+    which -- independent of matrix size -- corrupts single/list-row fancy
+    indexing for on-disk CSR/CSC datasets under the currently installed
+    anndata/scipy versions (`AttributeError: 'tuple' object has no attribute
+    'ndim'` / inhomogeneous-shape `ValueError`s). A real in-memory
+    `csr_matrix`'s own indexing is unaffected by that bug (and is vectorized
+    C code, not a per-row Python slice), so wrapping the arrays once sidesteps
+    the bug and is the cheaper read besides.
+    """
+    if isinstance(X, (CSRDataset, CSCDataset)):
+        csr = getattr(X, "_heimdall_csr_cache", None)
+        if csr is None:
+            group = getattr(X, "group", None) or getattr(X, "_group", None)
+            if group is None:
+                raise AttributeError(
+                    f"Could not find the underlying HDF5 group on backed sparse dataset {type(X)!r}",
+                )
+            # Bulk-load indptr/indices/data once per backed partition instead of hitting HDF5 for
+            # every single row: per-row reads here were the dominant cost during training (GPUs sat
+            # ~90% idle waiting on this), since each row touched HDF5 four separate times. These
+            # arrays are a small fraction (tens of GB at most) of the per-job memory budget.
+            csr = sp.csr_matrix(
+                (group["data"][:], group["indices"][:], group["indptr"][:]),
+                shape=X.shape,
+            )
+            X._heimdall_csr_cache = csr
+
+        return csr[cell_index, :].toarray().ravel()
+
+    return X[[cell_index], :].toarray().flatten()
+
+
 def _get_inputs_from_csr(data: "CellRepresentation", cell_index: int, drop_zeros: bool):
     """Get expression values and gene indices from internal CSR representation.
 
@@ -577,18 +617,28 @@ def _get_inputs_from_csr(data: "CellRepresentation", cell_index: int, drop_zeros
 
     adata = data.adata
     identity_valid_mask = data.fg.identity_valid_mask
-    if drop_zeros is True:
-        if issparse(adata.X):
-            cell = adata.X[[cell_index], :].toarray().flatten()[identity_valid_mask]
-            (cell_identity_inputs,) = cell.nonzero()
-            cell_expression_inputs = cell[cell_identity_inputs]
-        else:
-            cell_expression_inputs_full = adata.X[cell_index, :][identity_valid_mask]
-            (cell_identity_inputs,) = np.nonzero(cell_expression_inputs_full)
-            cell_expression_inputs = cell_expression_inputs_full[cell_identity_inputs]
+
+    # `adata.X` is a property that, for backed AnnData, rebuilds a fresh `sparse_dataset`
+    # wrapper (incl. an HDF5 attribute read to detect CSR/CSC format) on every access -- not
+    # once per partition. This function used to hit it twice per cell, so every one of the
+    # ~20M x 10 epoch cell fetches paid that reconstruction cost. Resolve it once per `adata`
+    # (i.e. once per partition, since partitions get fresh `adata` objects) and reuse it.
+    X = getattr(adata, "_heimdall_X_ref", None)
+    if X is None:
+        X = adata.X
+        adata._heimdall_X_ref = X
+
+    if issparse(X):
+        cell = _read_sparse_row(X, cell_index)[identity_valid_mask]
     else:
-        cell_expression_inputs = adata.X[[cell_index], :].toarray().flatten()[identity_valid_mask]
+        cell = X[cell_index, :][identity_valid_mask]
+
+    if drop_zeros:
+        (cell_identity_inputs,) = cell.nonzero()
+        cell_expression_inputs = cell[cell_identity_inputs]
+    else:
         cell_identity_inputs = np.arange(data.num_genes)
+        cell_expression_inputs = cell
 
     return cell_identity_inputs, cell_expression_inputs
 

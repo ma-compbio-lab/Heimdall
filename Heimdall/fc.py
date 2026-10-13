@@ -81,7 +81,9 @@ class Fc:
             # TODO: what does `NaN` represent here?
             valid_mask = ~np.isnan(expression_inputs)
 
-            identity_inputs = identity_inputs[valid_mask].to_numpy()
+            # `np.asarray` (not `.to_numpy()`) so this works whether `identity_inputs` is a plain
+            # numpy array (the Fg hot-path fast case) or a pandas array (rarer paths).
+            identity_inputs = np.asarray(identity_inputs[valid_mask])
             # identity_indices = identity_indices[valid_mask]
             expression_inputs = expression_inputs[valid_mask]
 

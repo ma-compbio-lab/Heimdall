@@ -231,7 +231,16 @@ class PartitionedDataset(SingleInstanceDataset):
 
     @property
     def idx(self):
-        return np.arange(self.data.adata.n_obs)
+        # Called once per cell fetch (via `get_shared_inputs`) just to look up a single scalar
+        # (`self.idx[idx] == idx`, always, since this is a plain positional arange) -- rebuilding
+        # a full `n_obs`-sized array from scratch on every call was hugely wasteful. Cache it,
+        # invalidated whenever `adata` changes (i.e. on partition switch).
+        adata = self.data.adata
+        cached = getattr(self, "_heimdall_idx_cache", None)
+        if cached is None or cached[0] is not adata:
+            cached = (adata, np.arange(adata.n_obs))
+            self._heimdall_idx_cache = cached
+        return cached[1]
 
     @property
     def partition(self):

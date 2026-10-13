@@ -81,14 +81,45 @@ class Fg(ABC):
             Index of gene in the embedding, or `pd.NA` if the gene has no mapping.
 
         """
-        embedding_indices = self.adata.var.loc[gene_names, "identity_embedding_index"]
+        # `var.loc[gene_names, col]` does a pandas string-label index-alignment lookup, called
+        # once per cell for every active gene in that cell -- profiling showed this dominating
+        # CPU time during training. Genes are looked up by name here only because the caller
+        # (`Fc.__getitem__`) converts integer gene positions to name strings right before this
+        # call; precomputing a name->position map once (invalidated if `var` changes, e.g. on a
+        # partition switch) and indexing the underlying numpy arrays directly is equivalent but
+        # avoids repeating that string-hashing round trip on every single cell.
+        var = self.adata.var
+        cache = getattr(self, "_heimdall_lookup_cache", None)
+        if cache is None or cache[0] is not var:
+            cache = (
+                var,
+                var["identity_embedding_index"].to_numpy(),
+                var["identity_valid_mask"].to_numpy(),
+                {name: i for i, name in enumerate(var.index)},
+            )
+            self._heimdall_lookup_cache = cache
+        _, embedding_index_arr, valid_mask_arr, name_to_pos = cache
 
-        valid_mask = self.adata.var.loc[gene_names, "identity_valid_mask"]
-        if (valid_mask.sum() != len(gene_names)) and not return_mask:
+        positions = [name_to_pos[g] for g in gene_names]
+        raw_indices = embedding_index_arr[positions]
+        valid_mask = valid_mask_arr[positions]
+        all_valid = valid_mask.sum() == len(gene_names)
+
+        if not all_valid and not return_mask:
             raise KeyError(
                 "At least one gene is not mapped in this `Fg`. "
                 "Please remove such genes from consideration in the `Fc`.",
             )
+
+        if return_mask:
+            # Rare, non-hot-path call (only used once per partition, for the full gene panel);
+            # some entries may be invalid/NA here, so keep the nullable-dtype construction.
+            embedding_indices = pd.array(raw_indices, dtype="Int64")
+        else:
+            # Hot path: every position is already known-valid (checked above), so there are no
+            # NAs to represent -- skip `pd.array`'s nullable-dtype construction (~90x slower than
+            # a plain numpy cast for no benefit here) and return a plain int64 array.
+            embedding_indices = raw_indices.astype(np.int64, copy=False)
 
         if return_mask:
             return embedding_indices, valid_mask
