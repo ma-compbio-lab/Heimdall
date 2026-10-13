@@ -1046,8 +1046,6 @@ class HeimdallTrainer:
         model.load_state_dict(filtered_pretrained_params, strict=False)
         # model.load_state_dict(data["model"])
 
-        self.load_trainer_state(data)
-
         if self.accelerator.is_main_process:
             print(f">Finished loading pretrained params loaded from {load_path}")
 
