@@ -1,161 +1,113 @@
 import math
 
 import numpy as np
-from torch.utils.data import BatchSampler, DistributedSampler, Subset
+from torch.utils.data import DataLoader, DistributedSampler, Subset
 
 from Heimdall.datasets import PartitionedDataset, PartitionedSubset
-from Heimdall.utils import AllPartitionsExhausted
 
 
-class PartitionedDistributedSampler(DistributedSampler):
-    """Distributed sampler for `PartitionedDataset`."""
+class PartitionedDataLoader:
+    """Iterates one epoch across all of a `PartitionedDataset`'s partitions,
+    giving each partition its own real `DataLoader` (with `num_workers`
+    workers) instead of one `DataLoader` spanning every partition.
 
-    def __init__(self, dataset: PartitionedSubset | PartitionedDataset, *args, **kwargs):
-        super().__init__(dataset, *args, **kwargs)
-        self.unshuffled = True
+    A single dataloader can't have workers here: worker processes are forked
+    once (at the start of iteration) and never see the main process's later
+    `full_dataset.data.partition = ...` switches -- each fork gets its own
+    copy of the dataset object, so they'd keep serving from whichever
+    partition happened to be loaded at fork time. Building a fresh,
+    short-lived `DataLoader` *after* switching to each partition means its
+    workers fork with the right partition's `adata` already loaded, and get
+    torn down (along with that partition's data) before the next switch.
 
-        if isinstance(self.dataset, Subset):
-            subset = dataset
-            self.full_dataset = subset.dataset
-            self.partition_sizes = {partition: len(indices) for partition, indices in subset._indices.items()}
-        else:
-            self.full_dataset = dataset
-            self.partition_sizes = self.full_dataset._data.partition_sizes
-
-        self.rng = np.random.default_rng(seed=self.full_dataset._data._cfg.seed)
-
-        self.total_samples_per_partition = {}
-
-        for p, part_size in self.partition_sizes.items():
-            # If the dataset length is evenly divisible by # of replicas, then there
-            # is no need to drop any data, since the dataset will be split equally.
-            if self.drop_last and part_size % self.num_replicas != 0:  # type: ignore[arg-type]
-                # Split to nearest available length that is evenly divisible.
-                # This is to ensure each rank receives the same amount of data when
-                # using this Sampler.
-                num_samples_part = math.ceil(
-                    (part_size - self.num_replicas) / self.num_replicas,  # type: ignore[arg-type]
-                )
-            else:
-                num_samples_part = math.ceil(part_size / self.num_replicas)  # type: ignore[arg-type]
-
-            self.total_samples_per_partition[p] = num_samples_part * self.num_replicas
-
-        self.partition_order = list(range(self.num_partitions))
-        self._partition_idx = None
-
-        self.iterator = PartitionIndexIterator(self)
-
-    @property
-    def partition_idx(self):
-        return self._partition_idx
-
-    @property
-    def num_partitions(self):
-        return self.full_dataset.num_partitions
-
-    @property
-    def num_cells(self):
-        return self.full_dataset.num_cells
-
-    @partition_idx.setter
-    def partition_idx(self, partition_idx: int | None):
-        self._partition_idx = partition_idx
-        if partition_idx is None:
-            self.full_dataset.partition = None
-            return
-
-        partition = self.partition_order[partition_idx]
-
-        # load underlying partition
-        self.full_dataset.partition = partition
-
-        self.iterator.set_indices(self.generate_partition_indices(partition))
-
-    def generate_partition_indices(self, partition):
-        indices = list(range(self.partition_sizes[partition]))
-        if self.shuffle:
-            indices = self.rng.permutation(indices).astype(int).tolist()
-
-        if not self.drop_last:
-            # add extra samples to make it evenly divisible
-            padding_size = self.total_samples_per_partition[partition] - len(indices)
-            if padding_size <= len(indices):
-                indices += indices[:padding_size]
-            else:
-                indices += (indices * math.ceil(padding_size / len(indices)))[:padding_size]
-        else:
-            # remove tail of data to make it evenly divisible.
-            indices = indices[: self.total_samples_per_partition[partition]]
-        assert len(indices) == self.total_samples_per_partition[partition]
-
-        # subsample
-        indices = indices[self.rank : self.total_samples_per_partition[partition] : self.num_replicas]
-        assert len(indices) == self.total_samples_per_partition[partition] / self.num_replicas
-
-        yield from indices
-
-    # def __iter__(self):
-    #     return self.generate_partition_indices(self.full_dataset.partition)
-
-    def __iter__(self):
-        if self.shuffle and self.unshuffled:
-            self.partition_order = self.rng.permutation(self.partition_order)
-            self.unshuffled = False
-
-        if self.partition_idx is None:
-            self.partition_idx = 0
-
-        return self.iterator
-
-    def __len__(self) -> int:
-        return sum(self.total_samples_per_partition.values()) // self.num_replicas
-
-
-class PartitionIndexIterator:
-    def __init__(self, sampler: PartitionedDistributedSampler):
-        self.sampler = sampler
-
-    def set_indices(self, partition_indices: list):
-        self.partition_indices = partition_indices
-
-    def __next__(self):
-        try:
-            return next(self.partition_indices)
-        except StopIteration as e:
-            if self.sampler.partition_idx + 1 == self.sampler.num_partitions:
-                self.sampler.unshuffled = True
-                raise AllPartitionsExhausted()
-
-            raise e
-
-
-class PartitionedBatchSampler(BatchSampler):
-    """Virtualized batched sampling from multiple partitions.
-
-    Iterates through the indices provided by the PartitionedDistributedSampler for a partition until
-    the end, and then moves onto the next partition and tries again. If no more partitions exist
-    (as detected by an `AllPartitionsExhausted` exception), the epoch is finished.
-
+    Batches never span a partition boundary here, matching the previous
+    single-dataloader behavior (`PartitionedBatchSampler` flushed each
+    partition's remainder as its own short final batch rather than
+    concatenating it with the next partition's samples).
     """
 
+    def __init__(
+        self,
+        full_dataset: PartitionedDataset,
+        partition_indices: dict,
+        batch_size: int,
+        shuffle: bool,
+        collate_fn,
+        num_workers: int,
+        num_replicas: int,
+        rank: int,
+        seed: int,
+        drop_last: bool = False,
+    ):
+        self.full_dataset = full_dataset
+        self.data_rep = full_dataset.data
+        self.partition_indices = {p: idx for p, idx in partition_indices.items() if len(idx) > 0}
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.collate_fn = collate_fn
+        self.num_workers = num_workers
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.seed = seed
+        self.drop_last = drop_last
+        self.epoch = 0
+
+        # Exposed for callers that only need a total sample count (e.g. LR-scheduler total-step
+        # math via `len(dataloader.dataset)`), not for direct indexing.
+        self.dataset = PartitionedSubset(full_dataset, partition_indices)
+
+    def __len__(self):
+        # Mirrors the previous cross-partition sampler's length: the combined per-rank sample
+        # count across *all* partitions, divided into batches once, globally -- not a sum of
+        # per-partition batch counts. Those can differ slightly whenever a partition's per-rank
+        # sample count isn't a multiple of `batch_size`, since real iteration flushes each
+        # partition's remainder as its own shorter final batch. Kept as-is for parity with
+        # existing step-counting/logging math, which relies on this exact formula.
+        total_per_rank = sum(math.ceil(len(idx) / self.num_replicas) for idx in self.partition_indices.values())
+        if self.drop_last:
+            return total_per_rank // self.batch_size
+        return math.ceil(total_per_rank / self.batch_size)
+
     def __iter__(self):
-        while True:
-            try:
-                batch = []
-                for idx in self.sampler:
-                    batch.append(idx)
-                    if len(batch) == self.batch_size:
-                        yield batch
-                        batch = []
+        order = list(self.partition_indices)
+        if self.shuffle:
+            order = np.random.default_rng(seed=self.seed + self.epoch).permutation(order).tolist()
 
-                if len(batch) > 0:  # flush remainder
-                    yield batch
+        for partition in order:
+            self.data_rep.partition = partition
 
-                self.sampler.partition_idx += 1
+            # Warm the per-partition CSR row-cache (`utils.py::_read_sparse_row`'s
+            # `_heimdall_csr_cache`) here, in this process, before `DataLoader` below forks
+            # `num_workers` worker processes. That cache is built lazily on first `__getitem__`,
+            # so without this warm-up every forked worker independently rereads the whole
+            # partition off disk and builds its own full copy instead of inheriting this one via
+            # copy-on-write -- multiplying resident memory by roughly `num_workers * num_replicas`.
+            # Confirmed live via `ps`: with this warm-up missing, 4 workers under 1 DDP rank sat
+            # at ~26GB RSS each (fit fine); 4 workers x 2 DDP ranks sat at ~47GB RSS each and got
+            # OOM-killed (jobs 54643/54644) even at --mem=400Gb, identically regardless of
+            # NCCL_P2P_DISABLE -- ruling out NCCL and confirming this per-worker duplication.
+            if self.num_workers > 0:
+                self.data_rep.fc[0]
 
-            except AllPartitionsExhausted:
-                if len(batch) > 0:  # flush remainder
-                    yield batch
-                self.sampler.partition_idx = None
-                break
+            sampler = DistributedSampler(
+                Subset(self.full_dataset, self.partition_indices[partition]),
+                num_replicas=self.num_replicas,
+                rank=self.rank,
+                shuffle=self.shuffle,
+                seed=self.seed,
+                drop_last=self.drop_last,
+            )
+            sampler.set_epoch(self.epoch)
+
+            loader = DataLoader(
+                sampler.dataset,
+                batch_size=self.batch_size,
+                sampler=sampler,
+                collate_fn=self.collate_fn,
+                num_workers=self.num_workers,
+                drop_last=self.drop_last,
+            )
+            yield from loader
+
+        self.data_rep.partition = None
+        self.epoch += 1

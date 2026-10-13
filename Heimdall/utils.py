@@ -730,11 +730,6 @@ def conditional_print(msg: str, condition: bool):
         print(msg)
 
 
-class AllPartitionsExhausted(Exception):
-    def __init__(self, message: str = "All partitions exhausted"):
-        super().__init__(message)
-
-
 def project2simplex_(y, dim: int = 0, zero_threshold: float = 1e-10) -> Tensor:
     """(In-place) Projects a matrix such that the columns (or rows) lie on the
     unit simplex.

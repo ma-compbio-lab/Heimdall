@@ -1,5 +1,6 @@
 """The Cell Representation Object for Processing."""
 
+import gc
 import pickle as pkl
 import textwrap
 from collections import defaultdict
@@ -23,10 +24,8 @@ from Heimdall.datasets import Dataset, PartitionedSubset
 from Heimdall.fc import Fc
 from Heimdall.fe import Fe
 from Heimdall.fg import Fg
-from Heimdall.samplers import PartitionedBatchSampler, PartitionedDistributedSampler
+from Heimdall.samplers import PartitionedDataLoader
 from Heimdall.task import Tasklist
-
-# from Heimdall.samplers import PartitionedDistributedSampler
 from Heimdall.utils import (
     conditional_print,
     convert_to_ensembl_ids,
@@ -626,6 +625,16 @@ class PartitionedCellRepresentation(CellRepresentation):
             del self.adata
             self.adata = None
 
+            # `AnnData`'s `obs`/`var`/`obsp` aligned-mapping wrappers keep a strong back-reference
+            # to their parent `AnnData` (anndata's `aligned_mapping.py`), so every `AnnData` is
+            # internally self-referential and `del self.adata` above can't reclaim it via
+            # refcounting alone -- it needs a cyclic GC pass. The multi-GB `csr_matrix` that
+            # `_read_sparse_row` caches per partition (see `Heimdall/utils.py`) rides along in that
+            # same cycle, so without forcing collection here it stays resident across partition
+            # switches (Python's automatic GC isn't triggered promptly by a handful of large array
+            # allocations) until the job gets OOM-killed.
+            gc.collect()
+
     @property
     def partition(self):
         return self._partition
@@ -653,7 +662,7 @@ class PartitionedCellRepresentation(CellRepresentation):
             super().setup(hash_vars=(int(self.partition),), setup_labels=True)
 
     @check_states(adata=True, processed_fcfg=True)
-    def prepare_dataset_loaders(self):
+    def prepare_dataset_loaders(self, num_workers: int = 4):
 
         # Set up dataset splits given the data splits
         overall_splits = defaultdict(lambda: defaultdict(dict))
@@ -662,32 +671,28 @@ class PartitionedCellRepresentation(CellRepresentation):
             for split, split_idx in splits.items():
                 overall_splits[split][partition] = split_idx
 
-        full_dataset = self.datasets["full"]
         for split, partition_splits in overall_splits.items():
             self.datasets[split] = PartitionedSubset(full_dataset, partition_splits)
 
-        self.dataloaders = {}
+        # `datasets["full"]` (the raw `PartitionedDataset`, not a split subset) gets its own
+        # loader too, spanning every cell in every partition, unfiltered by split.
+        overall_splits["full"] = {partition: np.arange(size) for partition, size in self.partition_sizes.items()}
+
         heimdall_collate_fn = get_collation_closure()
         per_device_batch_size = self.tasklist.batchsize // self.accelerator.num_processes
         self.dataloaders = {
-            split: DataLoader(
-                dataset,
-                batch_sampler=PartitionedBatchSampler(
-                    PartitionedDistributedSampler(
-                        dataset,
-                        num_replicas=self.num_replicas,
-                        rank=self.rank,
-                        shuffle=self.tasklist.shuffle if split == "train" else False,
-                    ),
-                    batch_size=per_device_batch_size,
-                    drop_last=False,
-                ),
+            split: PartitionedDataLoader(
+                full_dataset,
+                partition_indices,
+                batch_size=per_device_batch_size,
+                shuffle=self.tasklist.shuffle if split == "train" else False,
                 collate_fn=heimdall_collate_fn,
-                # num_workers=4,  # TODO: currently doesn't work. To fix, will need to create
-                # separate DataLoader for each partition, wrap them all with accelerate,
-                # and return accordingly.
+                num_workers=num_workers,
+                num_replicas=self.num_replicas,
+                rank=self.rank,
+                seed=self._cfg.seed,
             )
-            for split, dataset in self.datasets.items()
+            for split, partition_indices in overall_splits.items()
         }
 
         dataset_str = pformat(self.datasets).replace("\n", "\n\t")
