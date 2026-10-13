@@ -1,0 +1,19 @@
+type: Heimdall.task.SeqMaskedExprTask
+
+args:
+  task_type: mlm
+  metrics: []
+  train_split: 0.95
+  shuffle: true
+  batchsize: 512
+  epochs: 10
+  dataset_config:
+    type: Heimdall.datasets.PartitionedDataset
+  head_config:
+    type: Heimdall.models.LinearSeqPredHead
+    args:
+  loss_config:
+    type: Heimdall.losses.FlattenCrossEntropyLoss
+
+cell_rep_config:
+  type: Heimdall.cell_representations.PartitionedCellRepresentation

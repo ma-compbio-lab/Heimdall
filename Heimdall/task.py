@@ -293,6 +293,49 @@ class SeqMaskedMLMTask(TransformationMixin, MaskedMixin, MLMMixin, SingleInstanc
         return data
 
 
+class ExprMLMMixin:
+    def get_inputs(self, idx, shared_inputs):
+        expression_inputs = shared_inputs["expression_inputs"]
+        return {
+            "identity_inputs": shared_inputs["identity_inputs"],
+            "expression_inputs": expression_inputs.copy(),
+            "labels": expression_inputs.astype(int),
+        }
+
+    def setup_labels(self):
+        self.labels = np.empty(self.data.fe.vocab_size)
+
+
+class SeqMaskedExprTask(TransformationMixin, MaskedMixin, ExprMLMMixin, SingleInstanceTask):
+    """Masked expression modeling: mask fe bins, predict expression bin at masked positions.
+
+    Gene identities are kept visible so the model knows which gene to predict the expression of.
+    Labels and loss are over the fe vocabulary (expression bins), not fg (gene identities).
+    """
+
+    @property
+    def num_tasks(self):
+        if "_num_tasks" not in self.__dict__:
+            self._num_tasks = int(self.data.fe.vocab_size)
+        return self._num_tasks
+
+    @property
+    def mask_token(self):
+        return self.data.fe.mask_value
+
+    def _transform(self, data):
+        size = data["labels"].size
+        mask = np.random.random(size) < self.mask_ratio
+
+        is_padding = data["labels"] == self.data.fe.pad_value
+        mask[is_padding] = False
+
+        data["expression_inputs"][mask] = self.mask_token
+        data["masks"] = mask
+
+        return data
+
+
 class Tasklist:
     """Container for multiple Heimdall tasks.
 
