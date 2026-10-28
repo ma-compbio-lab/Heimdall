@@ -1,0 +1,35 @@
+# @package _global_
+defaults:
+  - /scfm/tasks@scfm.tasks.default: species
+  - override /scfm/model@scfm.model: transformer
+  - override /scfm/dataset@scfm.dataset: species_esm
+  - override /scfm/scheduler@scfm.scheduler: cosine
+  - override /scfm/trainer@scfm.trainer: default
+  - override /scfm/optimizer@scfm.optimizer: AdamW
+  - override /scfm/fc@scfm.fc: geneformer
+  - override /scfm/fg@scfm.fg: identity
+  - override /scfm/loss@scfm.loss: CrossEntropyLoss
+
+project_name: cross_species
+run_name: ${scfm.fg.type}_${scfm.fe.name}_${scfm.fc.type}_${scfm.model.type}_lr${scfm.optimizer.args.lr}_bz${scfm.trainer.args.batchsize}
+
+scfm:
+  trainer:
+    args:
+      epochs: 25
+      batchsize: 32
+      early_stopping: true
+      early_stopping_patience: 3
+    dataset_config:
+      type: Heimdall.datasets.SingleInstanceDataset
+  optimizer:
+    args:
+      lr: 2e-3
+  tasks:
+    default:
+      args:
+        splits:
+          col: split0
+
+seed: 55
+work_dir: ${project_name}_results/${scfm.fg.type}_${scfm.fe.name}_${scfm.fc.type}_${scfm.dataset.dataset_name}_lr${scfm.optimizer.args.lr}_bz${scfm.trainer.args.batchsize}_seed${seed}_ag${scfm.fe.args.drop_zeros}

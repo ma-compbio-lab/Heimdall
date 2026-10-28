@@ -1,0 +1,20 @@
+type: Heimdall.task.SingleInstanceTask
+
+args:
+  task_type: multiclass
+  label_col_name: cell_type
+  metrics: [Accuracy, MatthewsCorrCoef, ConfusionMatrix]
+  track_metric: MatthewsCorrCoef
+  splits:
+    type: predefined
+    col: split0
+    keys_:
+      train: train
+      val: val
+      test: test
+  shuffle: true
+  head_config:
+    type: Heimdall.models.LinearCellPredHead
+    args:
+  loss_config:
+    type: Heimdall.losses.FlattenCrossEntropyLoss
